@@ -26,6 +26,7 @@ def vt(entity_id, name, room, *, state="heat", action="idle", preset="eco", targ
                   "window_manager": {"window_state": "on" if window else "off"},
                   "vtherm_over_switch": {"underlying_entities": list(under)},
                   "preset_temperatures": {"eco_temp": 17.0, "comfort_temp": 19.0, "boost_temp": 21.0, "frost_temp": 7.0},
+                  "preset_modes": ["none", "frost", "eco", "comfort", "boost"],
                   **extra}
     return {"entity_id": entity_id, "state": state, "attributes": attributes, "platform": "versatile_thermostat",
             "name": name, "room": room}
@@ -100,3 +101,25 @@ def snapshot(**changes):
 
 
 TODAY: date = NOW.date()
+
+
+def home_planning(**changes):
+    """The house's own planning: the séjour and the stove set by Hestia, the bureau by Scheduler."""
+    model = {
+        "commande": False,
+        "pieces": {"sejour": {"source": "hestia"}, "poele": {"source": "hestia"}, "atelier": {"source": "hestia"}},
+        "journees": {
+            "semaine": {"nom": "Semaine", "creneaux": {
+                "sejour": [["06:30", "confort"], ["08:30", "hors_gel"], ["17:00", "confort"], ["22:30", "hors_gel"]],
+                "poele": [["06:30", "boost"], ["08:30", "hors_gel"], ["17:00", "boost"], ["22:30", "hors_gel"]],
+                "atelier": [["09:00", "confort"], ["18:00", "eco"]]}},
+            "weekend": {"nom": "Week-end", "creneaux": {"sejour": [["08:00", "confort"], ["23:00", "hors_gel"]]}},
+            "teletravail": {"nom": "Télétravail", "creneaux": {}},
+        },
+        "semaine": ["semaine"] * 5 + ["weekend"] * 2,
+        "feries": "weekend",
+        "jours": {},
+        "anticipation": {"actif": True, "max_min": 60},
+    }
+    model.update(changes)
+    return model

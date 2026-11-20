@@ -2,7 +2,7 @@
 
 Version du 20 novembre 2026. Document vivant : il suit la brique à chaque version.
 
-**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 (planning maison) et la 0.4 (pilote du poêle « à l’ombre ») suivent, décrites plus bas. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
+**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute le planning Hestia (journées types, semaine type, un jour à part, matins froids, conseils), d’après la maquette validée le 20 novembre ; il commence « à l’ombre ». La 0.4 (pilote du poêle « à l’ombre ») suit, décrite plus bas. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
 
 ## Place dans l’écosystème
 
@@ -112,7 +112,7 @@ Aucune commande (ni poêle, ni thermostat, ni clim), pas de planning actif, pas 
 
 1. **0.1** — la brique en lecture seule (ce document).
 2. **0.2** — l’interface vers Énergie, puis Énergie l’affiche à la place de sa devinette par une source « gaz ».
-3. **0.3** — le planning maison et les conseils, avec le froid d’Hestia Weather et les prix d’Énergie. Le planning tourne d’abord à côté de Scheduler, puis à sa place.
+3. **0.3** — le planning maison et les conseils, avec le froid d’Hestia Weather et les prix d’Énergie. Le planning tourne d’abord à côté de Scheduler, puis à sa place. Chaque pièce dit qui la règle (Hestia, Scheduler ou personne) ; par défaut rien ne change. Il commence « à l’ombre » et n’envoie que des préréglages, jamais un allumage ou un arrêt (détail dans [technique.md](technique.md#le-planning-hestia)).
 4. **0.4** — le pilote de poêle « à l’ombre » : il calcule ce qu’il ferait (démarrer, flamme 3, refuser pour surchauffe…) et l’affiche à côté de ce que font les automatisations de la maison, sans rien envoyer.
 5. **0.5** — le pilote actif, profil Micronova : démarrage sûr, flamme selon la demande, arrêt vérifié, quota d’écritures, sécurités, retour arrière en un clic.
 6. Les autres profils (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un, avec des testeurs.

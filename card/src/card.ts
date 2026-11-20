@@ -8,7 +8,7 @@ import {follow,type Connection} from './stream';
    1 · la maison: the house in one sentence, every room, the night's cold (card: maison, by default)
    2 · le poêle: its flame, its day, its smoke, the plug, the pellets (card: poele)
    3 · une pièce: its temperature, its set point, its demand, its day (card: piece, piece: <id>), or one line (court: true)
-   4 · le planning: the day of each room and of the stove, read from Scheduler (card: planning)
+   4 · le planning: the day of each room and of the stove, from the planning Hestia or Scheduler (card: planning)
    Every figure comes from the integration (hestia_heating/subscribe, day): the card only puts it into words. */
 
 type Hass={callWS:<T>(msg:Record<string,unknown>)=>Promise<T>;connection:Connection;themes?:{darkMode?:boolean}};
@@ -18,8 +18,9 @@ type Room={id:string;nom:string;temperature:number|null;consigne:number|null;eta
 type Stove={nom:string;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;fumees:number|null;
  prise:string|null;prise_w:number|null;demande_pct:number|null;ecritures:number|null;ecritures_max:number|null;alarme:boolean|null;alarme_texte:string|null};
 type Pellets={stock_sacs:number|null;stock_kg:number|null;jours:number|null};
-type Lane={id:string;nom:string;segments:{de:number;a:number;ton:string}[]};
-type Planning={source:string|null;jour_nom:string;maintenant_min:number;lignes:Lane[];prochains:{a:string;heure:string;texte:string}[]};
+type Lane={id:string;nom:string;segments:{de:number;a:number;ton:string}[];source?:string|null;bloque?:boolean};
+type Planning={source:string|null;jour_nom:string;jour_type?:{id:string|null;nom:string|null};commande?:boolean;labo?:boolean;maintenant_min:number;lignes:Lane[];
+ prochains:{a:string;heure:string;texte:string}[]};
 type View={pret:boolean;maison:{etat:string;titre:string;temperature:number|null;en_chauffe:number;pieces:number;electrique_w:number};
  pieces:Room[];poele:Stove|null;granules:Pellets|null;dehors:{nuit_min:number|null;demain_max:number|null}|null;planning:Planning};
 type Day={maintenant_min:number;series:Record<string,[number,number|null][]>};
@@ -34,7 +35,7 @@ const DAYS=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
 function when(iso:string){const d=new Date(iso),now=new Date(),t=new Date(now);t.setDate(t.getDate()+1);
  if(d.toDateString()===now.toDateString())return hm(d);if(d.toDateString()===t.toDateString())return `demain ${hm(d)}`;return `${DAYS[d.getDay()]} ${hm(d)}`;}
 const STOVE_WORD:Record<string,string>={eteint:'éteint',allumage:'allumage',chauffe:'chauffe',nettoyage:'nettoyage',extinction:'extinction',alarme:'alarme',inconnu:'inconnu'};
-const LANE_WORD:Record<string,string>={poele:'poêle en chauffe',confort:'confort',eco:'éco',hors_gel:'hors gel',arret:'arrêt'};
+const LANE_WORD:Record<string,string>={poele:'poêle en chauffe',confort:'confort',eco:'éco',hors_gel:'hors gel',boost:'boost',arret:'arrêt'};
 
 /* The day's curves: one line per series, its own scale or the shared one (temperatures). A gap (no value) cuts the
    line; the last run reaches « now » only when the series still has a value at its end. */
@@ -164,15 +165,17 @@ class HestiaHeatingCard extends LitElement {
  /* 4 · Le planning */
  private _planning(v:View){
   const p=v.planning,now=p.maintenant_min/14.4,next=p.prochains;
-  const head=html`<div class="head"><h2 class="nw-title">${this._config.name||'Planning du jour'}</h2><span class="nw-chip calm">${p.jour_nom}</span>${this._info('planning','Ouvrir la page du planning')}</div>`;
-  if(!p.lignes.length)return html`${head}<p class="empty">Aucun planning trouvé.</p>`;
+  const kind=p.jour_type?.nom?` · ${p.jour_type.nom}`:'';
+  const head=html`<div class="head"><h2 class="nw-title">${this._config.name||'Planning du jour'}</h2><span class="nw-chip calm">${p.jour_nom}${kind}</span>${this._info('planning','Ouvrir la page du planning')}</div>`;
+  if(!p.lignes.length)return html`${head}<p class="empty">Aucun créneau pour l’instant : ils se règlent dans l’onglet Chauffage, page Planning.</p>`;
   const tones=[...new Set(p.lignes.flatMap(l=>l.segments.map(s=>s.ton)))];
+  const hestia=p.lignes.some(l=>l.source==='Hestia');
   return html`${head}<div class="lanes"><div class="hours"><span></span><div>${[0,6,12,18,24].map(h=>html`<span style=${`left:${h/24*100}%`}>${h} h</span>`)}</div></div>
-   ${p.lignes.map(l=>html`<div class="lane"><span class="n">${l.nom}</span><div class="track" role="img" aria-label=${l.nom}>${l.segments.map(s=>html`<i class=${'t-'+s.ton} style=${`left:${s.de/14.4}%;width:${(s.a-s.de)/14.4}%`}></i>`)}<span class="now" style=${`left:${now}%`}></span></div></div>`)}</div>
+   ${p.lignes.map(l=>html`<div class="lane"><span class="n">${l.nom}${l.source?html`<small class=${l.bloque?'bad':''}>${l.source}${l.bloque?' · bloqué':''}</small>`:nothing}</span><div class="track" role="img" aria-label=${l.nom}>${l.segments.map(s=>html`<i class=${'t-'+s.ton} style=${`left:${s.de/14.4}%;width:${(s.a-s.de)/14.4}%`}></i>`)}<span class="now" style=${`left:${now}%`}></span></div></div>`)}</div>
    <div class="nw-legend">${tones.map(t=>html`<span><i class=${'sw t-'+t}></i>${LANE_WORD[t]??t}</span>`)}</div>
    <div class="nw-stats"><div><span>Prochain changement</span><b>${next[0]?`${when(next[0].a)} · ${next[0].texte}`:'—'}</b></div>
-    <div><span>Ensuite</span><b>${next[1]?`${when(next[1].a)} · ${next[1].texte}`:'—'}</b></div><div><span>Lu dans</span><b>${p.source??'—'}</b></div></div>
-   <p class="note">En lecture seule en v0.1. Le planning maison viendra dans cette même carte.</p>`;
+    <div><span>Ensuite</span><b>${next[1]?`${when(next[1].a)} · ${next[1].texte}`:'—'}</b></div><div><span>Réglé par</span><b>${p.source??'—'}</b></div></div>
+   ${hestia&&(p.labo||!p.commande)?html`<p class="note">${p.labo?'Thermostats recopiés d’une autre maison : le planning Hestia reste à l’ombre.':'Planning Hestia à l’ombre : il montre ce qu’il ferait, sans rien envoyer.'}</p>`:nothing}`;
  }
 }
 

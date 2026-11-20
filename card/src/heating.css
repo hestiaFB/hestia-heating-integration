@@ -50,6 +50,8 @@ ha-card { padding:18px; display:flex; flex-direction:column; gap:12px; container
 .lanes { display:flex; flex-direction:column; gap:8px; }
 .lane, .hours { display:grid; grid-template-columns:110px 1fr; gap:10px; align-items:center; }
 .lane .n { font-size:var(--nw-fs-small); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.lane .n small { display:block; font-weight:500; font-size:var(--nw-fs-label); color:var(--nw-fg2); }
+.lane .n small.bad { color:color-mix(in oklab, var(--nw-alert) 70%, var(--nw-fg)); }
 .hours > div { position:relative; height:14px; font-size:var(--nw-fs-label); color:var(--nw-fg2); }
 .hours > div span { position:absolute; transform:translateX(-50%); white-space:nowrap; }
 .hours > div span:first-child { transform:none; } .hours > div span:last-child { transform:translateX(-100%); }
@@ -57,7 +59,7 @@ ha-card { padding:18px; display:flex; flex-direction:column; gap:12px; container
 .track i { position:absolute; top:0; bottom:0; }
 .track .now { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--nw-fg); border-radius:1px; }
 .t-poele { background:color-mix(in oklab, var(--hc-stove) 90%, transparent); } .t-confort { background:color-mix(in oklab, var(--nw-heat) 85%, transparent); }
-.t-eco { background:color-mix(in oklab, var(--nw-cold) 70%, transparent); } .t-hors_gel, .t-arret { background:color-mix(in srgb, var(--nw-fg) 12%, transparent); }
+.t-eco { background:color-mix(in oklab, var(--nw-cold) 70%, transparent); } .t-boost { background:color-mix(in oklab, var(--nw-act) 95%, transparent); } .t-hors_gel, .t-arret { background:color-mix(in srgb, var(--nw-fg) 12%, transparent); }
 .note { font-size:var(--nw-fs-small); color:var(--nw-fg2); text-align:center; margin:0; }
 .empty { color:var(--nw-fg2); }
 @container (max-width:420px) { .lane, .hours { grid-template-columns:78px 1fr; } .target { text-align:left; } ha-card { padding:14px; } }

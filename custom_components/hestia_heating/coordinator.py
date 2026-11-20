@@ -13,15 +13,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import CoreState, HomeAssistant, callback
+from homeassistant.core import Context, CoreState, HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event, async_track_time_interval
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from . import reader
-from .const import API_KEY, STORE_KEY, STORE_VERSION, VERSION
-from .engine import house, profiles
+from .const import API_KEY, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
+from .engine import home_planning, house, phrases, profiles
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +33,13 @@ DISCOVER_PAUSE_S = 5.0
 TICK = timedelta(minutes=1)
 # A day's curve read from the recorder is kept this long.
 DAY_CACHE_S = 120
-DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None}
+DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
+            "planning": None}
+# What became of a slot of the planning Hestia, as the journal says it.
+FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "à l’ombre", "bloque": "bloqué par Scheduler",
+        "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
+        "sans_prereglage": "préréglage absent du thermostat"}
+JOURNAL_MAX = 60
 
 
 class HeatingCoordinator:
@@ -41,7 +47,12 @@ class HeatingCoordinator:
         self.hass = hass
         self.entry = entry
         self.store = Store(hass, STORE_VERSION, STORE_KEY)
+        # The last slot of the planning Hestia dealt with, per lane: a slot that starts later is sent (or caught up).
+        self.state_store = Store(hass, 1, PLANNING_STATE_KEY)
+        self.applied: dict[str, dict] = {}
+        self.journal: list[dict] = []
         self.settings: dict = dict(DEFAULTS)
+        self.model: dict = home_planning.default()
         self.profiles: list[profiles.Profile] = []
         self.found = reader.Found()
         self.weather: dict = {"etat": "non"}
@@ -52,6 +63,7 @@ class HeatingCoordinator:
         self._tracked: set[str] = set()
         self._track_unsub = None
         self._weather_unsub = None
+        self._energy_unsub = None
         self._pending = None
         self._discover_pending = None
         self._days: dict[str, tuple[float, dict]] = {}
@@ -85,6 +97,8 @@ class HeatingCoordinator:
     async def async_prepare(self) -> None:
         stored = await self.store.async_load() or {}
         self.settings = {**DEFAULTS, **{k: v for k, v in stored.items() if k in DEFAULTS}}
+        self.model = home_planning.loaded(self.settings.get("planning"), dt_util.now().date())
+        self.applied = (await self.state_store.async_load() or {}).get("pieces") or {}
         folder = Path(__file__).parent / "profiles"
         self.profiles = await self.hass.async_add_executor_job(profiles.load_all, folder)
         self._discover()
@@ -104,10 +118,10 @@ class HeatingCoordinator:
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
-        for handle in (self._track_unsub, self._weather_unsub, self._pending, self._discover_pending):
+        for handle in (self._track_unsub, self._weather_unsub, self._energy_unsub, self._pending, self._discover_pending):
             if handle:
                 handle()
-        self._track_unsub = self._weather_unsub = self._pending = self._discover_pending = None
+        self._track_unsub = self._weather_unsub = self._energy_unsub = self._pending = self._discover_pending = None
         for stopped in list(self._stop_listeners):
             stopped()
         self._stop_listeners.clear()
@@ -149,6 +163,10 @@ class HeatingCoordinator:
         if self._weather_unsub:
             self._weather_unsub()
         self._weather_unsub = reader.weather_listen(self.hass, self.weather.get("lieu"), self._changed_weather)
+        if self._energy_unsub:
+            self._energy_unsub()
+        # Hestia Énergie's price is read at each rebuild (each minute at least): listened to only to say the link.
+        self._energy_unsub = reader.energy_listen(self.hass, lambda: None) if self._energy_used() else None
 
     @callback
     def _changed(self, _event=None) -> None:
@@ -164,11 +182,26 @@ class HeatingCoordinator:
         self._pending = None
         self._build()
 
+    def _energy_used(self) -> bool:
+        return (self.settings.get("extensions") or {}).get("hestia_energy") is not False
+
     def _build(self) -> None:
         started = time.perf_counter()
         hourly = reader.weather_hourly(self.hass, self.weather.get("lieu")) if self.weather.get("etat") == "oui" else None
         try:
-            view = house.build(reader.snapshot(self.hass, self.found, self.settings, hourly))
+            snap = reader.snapshot(self.hass, self.found, self.settings, hourly)
+            today = snap["now"].date().isoformat()
+            self.journal = [j for j in self.journal if j.get("jour") == today]
+            snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
+                        tarif=reader.energy_tariff(self.hass) if self._energy_used() else None)
+            view = house.build(snap)
+            due, waiting = view["planning"].pop("_dus"), view["planning"].pop("_sans_repere")
+            # Orders only once Home Assistant runs: a thermostat that loads after this brick is not yet there.
+            if (due or waiting) and self.hass.state is CoreState.running:
+                self._planning_orders(due, waiting, snap["now"])
+                view = house.build(snap)
+                view["planning"].pop("_dus")
+                view["planning"].pop("_sans_repere")
         except Exception:  # noqa: BLE001 - a strange state never stops the brick: the last good view stays
             _LOGGER.exception("Hestia Chauffage n'a pas pu lire la maison")
             return
@@ -203,7 +236,7 @@ class HeatingCoordinator:
              "usage": "Le stock de granulés et les jours qu’il reste.", "sans": "Pas de stock de granulés.",
              "lien": "https://github.com/Kmaxjojo/suivi_stock_pellet", "trouve": len(found.pellets)},
             {"id": reader.SCHEDULER, "groupe": "Planning", "nom": "Scheduler", "installee": installed.get(reader.SCHEDULER, False),
-             "usage": "Le planning de chaque pièce et du poêle, lu sans rien changer.",
+             "usage": "Le planning des pièces qui le suivent, lu sans rien y changer.",
              "sans": "Pas de prochain changement ni de journée dessinée.",
              "lien": "https://github.com/nielsfaber/scheduler-component", "trouve": len(found.schedules)},
             {"id": "hestia_weather", "groupe": "Briques Hestia-FB", "nom": "Hestia Weather",
@@ -213,10 +246,11 @@ class HeatingCoordinator:
              "lieu_nom": self.weather.get("nom"), "lieux": self.weather.get("lieux") or []},
             {"id": "hestia_energy", "groupe": "Briques Hestia-FB", "nom": "Hestia Énergie",
              "installee": installed.get("hestia_energy", False),
-             "usage": "Lit le chauffage de chaque pièce et le poêle : son énergie et ses granulés, sans rien deviner.",
-             "sans": "Hestia Énergie devine le poêle par une source « gaz ».",
+             "usage": "Lit le chauffage de chaque pièce et le poêle (énergie, granulés) ; donne le prix de l’électricité aux conseils du planning.",
+             "sans": "Hestia Énergie devine le poêle par une source « gaz », et le planning ne dit pas ce que coûte l’électrique.",
              "lien": "https://github.com/hestiaFB/hestia-energy-integration",
-             "trouve": 1 if getattr(self.hass.data.get(API_KEY), "readers", {}).get("hestia_energy") else 0},
+             "trouve": 1 if getattr(self.hass.data.get(API_KEY), "readers", {}).get("hestia_energy")
+             or reader.energy_api(self.hass) is not None else 0},
         ]
         for row in rows:
             row["utilisee"] = off.get(row["id"]) is not False
@@ -224,10 +258,72 @@ class HeatingCoordinator:
             row["installee"] = row["installee"] or row["trouve"] > 0
         return rows
 
+    # --- the planning Hestia: what is sent, and only that ---------------------------------------------------------
+
+    def _planning_orders(self, due: list[dict], waiting: list[str], now: datetime) -> None:
+        """Each lane whose slot started since the last one dealt with: sent when « Le planning commande les
+        thermostats » is on, else written in the journal as what Hestia would have done (« à l'ombre »)."""
+        baseline = now.replace(tzinfo=None, second=0, microsecond=0).isoformat()
+        for lane in waiting:
+            self.applied[lane] = {"a": baseline}
+        for order in due:
+            self.applied[order["piece"]] = {"a": order["a"], "niveau": order["niveau"]}
+            if order["bloque"]:
+                fate = "bloque"
+            elif order["recopie"]:
+                fate = "recopie"
+            elif not self.model.get("commande"):
+                fate = "ombre"
+            else:
+                fates = [self._send(t) for t in order["cibles"]]
+                fate = "envoye" if "envoye" in fates else next((f for f in fates if f != "deja"), "deja")
+            at = datetime.fromisoformat(order["a"])
+            self.journal.append({"jour": now.date().isoformat(), "heure": phrases.hour(at), "piece": order["nom"],
+                                 "niveau": home_planning.WORDS[order["niveau"]], "statut": fate, "texte": FATE[fate]})
+            if fate in ("envoye", "eteint", "sans_prereglage", "recopie"):
+                _LOGGER.info("Planning Hestia, %s %s : %s", order["nom"], order["niveau"], FATE[fate])
+        self.journal = self.journal[-JOURNAL_MAX:]
+        self.state_store.async_delay_save(lambda: {"pieces": self.applied}, 5)
+
+    def _send(self, target: dict) -> str:
+        """One thermostat: its preset (a Versatile Thermostat), else its set point. Never switched on or off, never
+        an entity copied from another Home Assistant (a lab copies the home: an order could reach the real one)."""
+        hass, entity_id = self.hass, target["id"]
+        entry = er.async_get(hass).async_get(entity_id)
+        if entry is not None and entry.platform == reader.REMOTE:
+            return "recopie"
+        state = hass.states.get(entity_id)
+        if state is None or state.state in ("off", "unavailable", "unknown"):
+            return "eteint"
+        attrs = state.attributes
+        if target["vt"]:
+            if target["preset"] not in (attrs.get("preset_modes") or ()):
+                return "sans_prereglage"
+            if attrs.get("preset_mode") == target["preset"]:
+                return "deja"
+            service, data = "set_preset_mode", {"entity_id": entity_id, "preset_mode": target["preset"]}
+        else:
+            try:
+                current = float(attrs.get("temperature"))
+            except (TypeError, ValueError):
+                current = None
+            if current is not None and abs(current - target["consigne"]) < 0.05:
+                return "deja"
+            service, data = "set_temperature", {"entity_id": entity_id, "temperature": target["consigne"]}
+        hass.async_create_task(hass.services.async_call("climate", service, data, blocking=False, context=Context()))
+        return "envoye"
+
     # --- settings ------------------------------------------------------------------------------------------------
 
     async def async_set_settings(self, changes: dict) -> None:
+        """Raises ValueError (in French) when the planning sent is not readable: nothing is saved then."""
         settings = dict(self.settings)
+        if "planning" in changes:
+            model = home_planning.clean(changes["planning"], dt_util.now().date())
+            changes = {**changes, "planning": model}
+            # Saved or switched on: the slot in force is not sent again; the next ones are.
+            self.applied = {}
+            self.model = model
         for key, value in changes.items():
             if key in DEFAULTS:
                 settings[key] = value

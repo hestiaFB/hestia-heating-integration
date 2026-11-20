@@ -26,6 +26,7 @@ SCHEDULER = "scheduler"
 PELLETS = "suivi_stock_pellet"
 PELLET_KEY = "suivi_stock_pellet_key"
 WORKDAY = "workday"
+REMOTE = "remote_homeassistant"
 WEATHER_API = "hestia_weather_api"
 WEATHER_API_VERSION = 1      # the version of Hestia Weather's interface this brick speaks
 BRICK = "hestia_heating"     # said to Hestia Weather when listening, so that its settings show this brick linked
@@ -279,6 +280,8 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
         "pellets": pellets,
         "schedules": schedules,
         "workday": workday,
+        # Copied from another Home Assistant (Remote Home Assistant, a lab): read, never sent anything.
+        "copies": [c["entity_id"] for c in found.climates if c["platform"] == REMOTE],
         "room_names": found.room_names,
         "hourly": hourly,
     }
@@ -332,6 +335,47 @@ def weather_listen(hass: HomeAssistant, place: str | None, update: Callable[[], 
         return api.add_listener(place, update, brick=BRICK)
     except Exception as err:  # noqa: BLE001
         _LOGGER.debug("Hestia Weather not listened to: %s", err)
+        return lambda: None
+
+
+ENERGY_API = "hestia_energy_api"
+ENERGY_API_VERSION = 1
+
+
+def energy_api(hass: HomeAssistant):
+    api = hass.data.get(ENERGY_API)
+    return api if api is not None and getattr(api, "version", None) == ENERGY_API_VERSION else None
+
+
+def energy_tariff(hass: HomeAssistant) -> dict | None:
+    """Hestia Énergie's price of electricity now (€/kWh), its period (hp, hc, base) and the next change, in local
+    time; None without it, or when it has no price to give."""
+    api = energy_api(hass)
+    if api is None:
+        return None
+    try:
+        t = api.tariff()
+    except Exception as err:  # noqa: BLE001 - another brick's trouble never stops this one
+        _LOGGER.debug("Hestia Énergie's price unavailable: %s", err)
+        return None
+    if not isinstance(t, dict) or t.get("price") is None:
+        return None
+    change = t.get("next_change")
+    if isinstance(change, datetime):
+        change = dt_util.as_local(change).replace(tzinfo=None).isoformat()
+    return {"price": t["price"], "period": t.get("period"), "next_change": change if isinstance(change, str) else None,
+            "next_period": t.get("next_period")}
+
+
+def energy_listen(hass: HomeAssistant, update: Callable[[], None]) -> Callable[[], None]:
+    """Says to Hestia Énergie that Chauffage reads it (both sides then show the link)."""
+    api = energy_api(hass)
+    if api is None:
+        return lambda: None
+    try:
+        return api.add_listener(update, brick=BRICK)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("Hestia Énergie not listened to: %s", err)
         return lambda: None
 
 

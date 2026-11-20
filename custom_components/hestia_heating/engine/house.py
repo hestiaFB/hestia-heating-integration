@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 
-from . import phrases, planning, sources, stove as stove_engine
+from . import home_planning, phrases, planning, sources, stove as stove_engine
 from .phrases import degrees, hour, number
 
 # The tone of each room's chip in the panel and the card (the colours of the charte).
@@ -43,16 +43,19 @@ def outside(hourly: list[dict] | None, now: datetime) -> dict | None:
             "demain_max": round(max(afternoon), 1) if afternoon else None}
 
 
+WARM = (planning.CONFORT, planning.ECO, planning.BOOST)
+
+
 def _lane_label(tone: str | None, stove_lane: bool) -> str | None:
     if tone is None:
         return None
     if stove_lane:
-        return "en chauffe" if tone in (planning.CONFORT, planning.ECO) else planning.LABELS[tone]
+        return "en chauffe" if tone in WARM else planning.LABELS[tone]
     return planning.LABELS[tone]
 
 
 def _lane_tone(tone: str, stove_lane: bool) -> str:
-    return planning.POELE if stove_lane and tone in (planning.CONFORT, planning.ECO) else tone
+    return planning.POELE if stove_lane and tone in WARM else tone
 
 
 def build(snap: dict) -> dict:
@@ -86,18 +89,38 @@ def build(snap: dict) -> dict:
     if stove_thermostat:
         stove_thermostat["etat"] = ("chauffe" if burning else "arret" if stove_thermostat["mode"] == "off"
                                     else "inconnu" if stove and stove["etat"] == "inconnu" else "repos")
-    # 3. The planning, per thermostat: today and tomorrow.
+    # 3. The planning of each lane (the stove, each room): the house's own where Hestia sets it, else Scheduler's.
+    for s in srcs:
+        s["piece"] = s["piece"] or "thermostat_" + s["id"].split(".", 1)[1]
+    model = snap.get("home_planning") or home_planning.default()
     schedules: list[planning.Schedule] = list(snap.get("schedules") or [])
     workday = snap.get("workday")
     naive_now = now.replace(tzinfo=None)
-    lines = {s["id"]: planning.timeline(schedules, s["id"], naive_now.date(), 2, workday, s["prereglages"]) for s in srcs}
+    today = naive_now.date()
+    lane_of = {s["id"]: home_planning.STOVE if stove_thermostat is not None and s["id"] == stove_thermostat["id"]
+               else s["piece"] for s in srcs}
+    lane_ids: dict[str, list[str]] = {}
+    for s in srcs:
+        lane_ids.setdefault(lane_of[s["id"]], []).append(s["id"])
+    aimed = {t: sch.name for sch in schedules for t in sch.targets}
+    aimed_on = {t: sch.name for sch in schedules if sch.on for t in sch.targets}
+    owners = {lane: home_planning.owner(model, lane, any(i in aimed for i in ids)) for lane, ids in lane_ids.items()}
+    home_lines = {lane: home_planning.timeline(model, lane, today, 3, workday, snap.get("hourly"), now.tzinfo)
+                  for lane in lane_ids if owners[lane] == home_planning.HESTIA}
+    lines: dict[str, list] = {}
+    for s in srcs:
+        lane = lane_of[s["id"]]
+        if owners[lane] == home_planning.HESTIA:
+            lines[s["id"]] = home_lines[lane]
+        elif owners[lane] == home_planning.EXTENSION:
+            lines[s["id"]] = planning.timeline(schedules, s["id"], today, 2, workday, s["prereglages"])
+        else:
+            lines[s["id"]] = []
     # 4. The rooms.
     names = snap.get("room_names") or {}
     rooms: dict[str, dict] = {}
     for s in srcs:
-        key = s["piece"] or "thermostat_" + s["id"].split(".", 1)[1]
-        s["piece"] = key
-        rooms.setdefault(key, {"id": key, "nom": names.get(key) or s["nom"], "sources": []})["sources"].append(s)
+        rooms.setdefault(s["piece"], {"id": s["piece"], "nom": names.get(s["piece"]) or s["nom"], "sources": []})["sources"].append(s)
     if stove and stove["piece"] and stove["piece"] not in rooms:
         rooms[stove["piece"]] = {"id": stove["piece"], "nom": names.get(stove["piece"]) or stove["nom"], "sources": []}
     window_since = snap.get("window_since") or {}
@@ -126,6 +149,16 @@ def build(snap: dict) -> dict:
         "en_marche": [s["id"] for s in srcs if s["etat"] in ("chauffe", "rafraichit")],
     }
     lanes = _lanes(room_list, srcs, stove_thermostat, lines, naive_now)
+    lane_names = {r["id"]: r["nom"] for r in room_list} | {home_planning.STOVE: "Poêle"}
+    copies = set(snap.get("copies") or ())
+    plan = _home_planning(model, srcs, lane_ids, lane_names, owners, aimed, aimed_on, home_lines, schedules, copies,
+                          snap, naive_now, workday)
+    for lane in lanes:
+        key = home_planning.STOVE if lane["id"] == STOVE_LANE else lane["id"]
+        lane["source"] = {home_planning.HESTIA: "Hestia", home_planning.EXTENSION: "Scheduler"}.get(owners.get(key))
+        lane["bloque"] = bool(owners.get(key) == home_planning.HESTIA and any(i in aimed_on for i in lane_ids.get(key, [])))
+    tips = _tips(plan["ordres_avances"], house, snap.get("tarif"), lane_names, naive_now)
+    used = {owners[lane] for lane in owners if lines.get(lane_ids[lane][0])}
     return {
         "maison": house,
         "pieces": [{k: v for k, v in r.items() if k != "_sources"} for r in room_list],
@@ -134,7 +167,19 @@ def build(snap: dict) -> dict:
         "granules": pellets,
         "dehors": weather,
         "planning": {
-            "source": "Scheduler" if schedules else None,
+            "source": " et ".join(n for o, n in ((home_planning.HESTIA, "Hestia"), (home_planning.EXTENSION, "Scheduler"))
+                                  if o in used) or ("Scheduler" if schedules else None),
+            "commande": model.get("commande", False),
+            "labo": bool(srcs) and all(s["id"] in copies for s in srcs),
+            "jour_type": plan["jour_type"],
+            "jours": plan["jours"],
+            "journees": plan["journees"],
+            "pieces": plan["pieces"],
+            "ordres": plan["ordres"],
+            "journal": list(snap.get("journal") or [])[-12:],
+            "conseils": tips,
+            "_dus": plan["dus"],
+            "_sans_repere": plan["sans_repere"],
             "jour": naive_now.date().isoformat(),
             "jour_nom": phrases.DAYS[naive_now.weekday()],
             "maintenant_min": naive_now.hour * 60 + naive_now.minute,
@@ -143,7 +188,7 @@ def build(snap: dict) -> dict:
             "plannings": [{"id": s.id, "nom": s.name, "actif": s.on, "jours": list(s.days), "partiel": s.partial,
                            "cibles": list(s.targets)} for s in schedules],
         },
-        "a_regler": _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules),
+        "a_regler": _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules) + plan["a_regler"],
     }
 
 
@@ -387,4 +432,133 @@ def _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules) -> list[di
         out.append({"titre": "Un planning n’est pas lu en entier",
                     "texte": "Un créneau commence au lever ou au coucher du soleil : Hestia ne le devine pas.",
                     "page": "planning"})
+    return out
+
+
+# --- The house's own planning (0.3) ---------------------------------------------------------------------------------
+
+LEVEL_OF_TONE = {planning.CONFORT: "confort", planning.ECO: "eco", planning.HORS_GEL: "hors_gel",
+                 planning.BOOST: "boost", planning.ARRET: "hors_gel"}
+# What became of a slot of the planning Hestia: sent, or why not.
+SHADOW, BLOCKED, COPY, PLANNED = "ombre", "bloque", "recopie", "prevu"
+
+
+def _scheduler_slots(schedules, thermostat: dict, day) -> list[list[str]]:
+    """A Scheduler day of one thermostat as the planning Hestia writes it, to start from it (« Reprendre »)."""
+    line = planning.timeline(schedules, thermostat["id"], day, 1, None, thermostat["prereglages"])
+    return [[f"{at.hour:02d}:{at.minute:02d}", LEVEL_OF_TONE.get(t, "eco")] for at, t, _ in line if at.date() == day]
+
+
+def _home_planning(model, srcs, lane_ids, names, owners, aimed, aimed_on, home_lines, schedules, copies, snap,
+                   naive_now, workday) -> dict:
+    by_id = {s["id"]: s for s in srcs}
+    today = naive_now.date()
+    monday = today + timedelta(days=(7 - today.weekday()) % 7)
+    saturday = today + timedelta(days=(5 - today.weekday()) % 7)
+    applied = snap.get("applied") or {}
+    order = sorted(lane_ids, key=lambda k: (k != home_planning.STOVE, _natural(names.get(k, k))))
+    lanes, dus, waiting, todo, ahead, advanced = [], [], [], [], [], []
+    for lane in order:
+        ids = lane_ids[lane]
+        thermostats = [by_id[i] for i in ids]
+        owner = owners[lane]
+        cools = all(t["type"] == "clim" for t in thermostats)
+        vt = all(t["vt"] for t in thermostats)
+        usable = [lv for lv in home_planning.LEVELS
+                  if all(not t["vt"] or home_planning.PRESET[lv] in (t["prereglages_dispo"] or ()) for t in thermostats)]
+        blocked = next((aimed_on[i] for i in ids if i in aimed_on), None) if owner == home_planning.HESTIA else None
+        copied = all(i in copies for i in ids)
+        temps = home_planning.temperatures(model, lane, cools)
+        lanes.append({
+            "id": lane, "nom": names.get(lane, lane), "source": owner,
+            "choisi": (model.get("pieces") or {}).get(lane, {}).get("source") in home_planning.OWNERS,
+            "thermostats": [t["nom"] for t in thermostats], "vt": vt, "froid": cools, "recopie": copied,
+            "niveaux": usable or list(home_planning.LEVELS),
+            "prereglages": {lv: (thermostats[0]["prereglages"] or {}).get(home_planning.PRESET[lv]) for lv in home_planning.LEVELS} if vt else None,
+            "temperatures": None if vt else temps,
+            "scheduler": sorted({aimed[i] for i in ids if i in aimed}),
+            "scheduler_actif": next((aimed_on[i] for i in ids if i in aimed_on), None),
+            "scheduler_creneaux": {"semaine": _scheduler_slots(schedules, thermostats[0], monday),
+                                   "weekend": _scheduler_slots(schedules, thermostats[0], saturday)} if ids else None,
+        })
+        if owner != home_planning.HESTIA:
+            continue
+        if blocked:
+            stove_lane = lane == home_planning.STOVE
+            todo.append({"titre": f"{names.get(lane, lane)} a deux plannings",
+                         "texte": f"{'Il' if stove_lane else 'Elle'} est sur Hestia, mais « {blocked} » est encore allumé : "
+                                  f"Hestia ne {'le' if stove_lane else 'la'} commande pas tant qu’il l’est. Coupez-le dans "
+                                  f"Scheduler, ou remettez {'le poêle' if stove_lane else 'la pièce'} sur Scheduler dans Réglages.",
+                         "page": "reglages"})
+        status = BLOCKED if blocked else COPY if copied else PLANNED if model.get("commande") else SHADOW
+        line = home_lines.get(lane) or []
+        for at, level, info in line:
+            if naive_now < at <= naive_now + timedelta(hours=24):
+                ahead.append((at, lane, level, status))
+                if info.get("avance"):
+                    advanced.append((lane, at, level, info))
+        last = (applied.get(lane) or {}).get("a")
+        if not last:
+            waiting.append(lane)
+            continue
+        try:
+            last_at = datetime.fromisoformat(last)
+        except ValueError:
+            waiting.append(lane)
+            continue
+        slot = home_planning.due(line, naive_now, last_at)
+        if slot:
+            targets = [{"id": t["id"], "vt": t["vt"], "preset": home_planning.PRESET[slot[1]],
+                        "consigne": temps[slot[1]]} for t in thermostats]
+            dus.append({"piece": lane, "nom": names.get(lane, lane), "a": slot[0].isoformat(), "niveau": slot[1],
+                        "bloque": blocked, "recopie": copied, "cibles": targets})
+    # The coming orders, the same moment and fate said once: « 22 h 30 · poêle et salon hors gel ».
+    grouped: dict[tuple, dict[str, list[str]]] = {}
+    for at, lane, level, status in sorted(ahead, key=lambda x: x[0]):
+        who = "poêle" if lane == home_planning.STOVE else _in_sentence(names.get(lane, lane))
+        word = ("en chauffe" if level != "hors_gel" else "hors gel") if lane == home_planning.STOVE else home_planning.WORDS[level]
+        grouped.setdefault((at, status), {}).setdefault(word, []).append(who)
+    orders = [{"a": at.replace(tzinfo=snap["now"].tzinfo).isoformat(), "heure": phrases.when(at, naive_now), "statut": status,
+               "texte": " · ".join(f"{_join(w)} {word}" for word, w in words.items())}
+              for (at, status), words in grouped.items()][:8]
+    kind = home_planning.day_type(model, today, workday)
+    types = model.get("journees") or {}
+    week = home_planning.week_ahead(model, today, workday)
+    day_types = [{"id": k, "nom": t["nom"], "jours": sum(1 for d in week if d["type"] == k),
+                  "pieces": sum(1 for slots in (t.get("creneaux") or {}).values() if slots)} for k, t in types.items()]
+    return {"jour_type": {"id": kind, "nom": (types.get(kind) or {}).get("nom")}, "jours": week, "journees": day_types,
+            "pieces": lanes, "ordres": orders, "ordres_avances": advanced, "dus": dus, "sans_repere": waiting,
+            "a_regler": todo}
+
+
+def _tips(advanced, house, tariff, names, naive_now) -> list[dict]:
+    """A few plain sentences under the planning: a lane started earlier on a cold night, what the electric heating
+    costs right now at Hestia Énergie's price."""
+    out = []
+    by_time: dict[datetime, list] = {}
+    for lane, at, level, info in advanced:
+        by_time.setdefault(at, []).append((lane, level, info))
+    for at in sorted(by_time)[:2]:
+        items = by_time[at]
+        info = items[0][2]
+        who = _join(["poêle" if lane == home_planning.STOVE else _in_sentence(names.get(lane, lane)) for lane, _, _ in items])
+        level = items[0][1]
+        word = "en chauffe" if all(lane == home_planning.STOVE for lane, _, _ in items) else home_planning.WORDS[level]
+        cold = f" ({degrees(info['dehors'])} dehors)" if info.get("dehors") is not None else ""
+        out.append({"texte": f"{who[:1].upper()}{who[1:]} : {word} dès {phrases.when(at, naive_now)} au lieu de "
+                             f"{phrases.hour(info['prevu'])}, la nuit sera froide{cold}.", "ton": COLD})
+    price = (tariff or {}).get("price")
+    watts = house.get("electrique_w") or 0
+    if price is not None and watts > 0:
+        euros = watts / 1000 * price
+        period = {"hp": "heures pleines", "hc": "heures creuses"}.get((tariff or {}).get("period"))
+        text = f"L’électrique tire {phrases.power(watts)} : environ {number(euros, 2)} € de l’heure{f' ({period})' if period else ''}."
+        change, following = (tariff or {}).get("next_change"), (tariff or {}).get("next_period")
+        if (tariff or {}).get("period") == "hp" and following == "hc" and change:
+            try:
+                at = datetime.fromisoformat(change).replace(tzinfo=None)   # local time, as the reader gives it
+                text += f" Les heures creuses commencent {('à ' if at.date() == naive_now.date() else '')}{phrases.when(at, naive_now)}."
+            except ValueError:
+                pass
+        out.append({"texte": text, "ton": HEAT})
     return out

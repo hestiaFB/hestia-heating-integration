@@ -1,5 +1,5 @@
-"""The existing planning, read from Scheduler (one `switch.schedule_*` per schedule): in version 0.1 the brick only
-reads it, to say what comes next in each room and to draw the day.
+"""The planning of the extension, read from Scheduler (one `switch.schedule_*` per schedule): the brick only reads it,
+to say what comes next in the rooms that follow it and to draw the day. The house's own is in home_planning.py.
 
 A schedule has days (`weekdays`: daily, workday, weekend, mon…sun), time slots (« 06:00:00 - 07:30:00 »), the
 thermostats it aims at (`entities`) and one action per slot (« climate.set_preset_mode » with « boost »…). A slot that
@@ -12,8 +12,8 @@ from datetime import date, datetime, time, timedelta
 
 DAY_NAMES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 # The tone of a slot, for each room: what the panel and the card colour.
-CONFORT, ECO, HORS_GEL, ARRET, POELE = "confort", "eco", "hors_gel", "arret", "poele"
-LABELS = {CONFORT: "confort", ECO: "éco", HORS_GEL: "hors gel", ARRET: "arrêt", POELE: "poêle en chauffe"}
+CONFORT, ECO, HORS_GEL, ARRET, POELE, BOOST = "confort", "eco", "hors_gel", "arret", "poele", "boost"
+LABELS = {CONFORT: "confort", ECO: "éco", HORS_GEL: "hors gel", ARRET: "arrêt", POELE: "poêle en chauffe", BOOST: "boost"}
 
 
 @dataclass(frozen=True)
@@ -85,7 +85,9 @@ def tone(action: dict, presets: dict | None = None) -> str | None:
     data = action.get("data") or action.get("service_data") or {}
     if service.endswith("set_preset_mode"):
         preset = str(data.get("preset_mode") or "")
-        if preset in ("comfort", "boost", "activity", "home"):
+        if preset == "boost":
+            return BOOST
+        if preset in ("comfort", "activity", "home"):
             return CONFORT
         if preset in ("eco", "sleep"):
             return ECO

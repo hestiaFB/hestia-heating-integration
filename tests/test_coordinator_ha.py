@@ -4,6 +4,7 @@ entities and its interface, and never calls a service. Skipped without Home Assi
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 from pathlib import Path
 import sys
 import tempfile
@@ -25,6 +26,39 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from custom_components.hestia_heating.const import API_KEY, DOMAIN  # noqa: E402
 from custom_components.hestia_heating.websocket import CARD_KEYS, card_view  # noqa: E402
+from custom_components.hestia_heating.engine import home_planning as hp  # noqa: E402
+from homeassistant.util import dt as dt_util  # noqa: E402
+
+
+class SendsThePlanning:
+    """The planning Hestia with a slot two minutes ago for a lane (éco three hours before), in every day type; the last
+    slot dealt with put half an hour back, so that this slot is due."""
+
+    async def _planning(self, lane, commande=True):
+        hass = self.hass
+        hass.set_state(CoreState.running)
+        self.sent = []
+
+        async def handler(call):
+            self.sent.append((call.service, dict(call.data)))
+        for service in ("set_preset_mode", "set_temperature"):
+            hass.services.async_register("climate", service, handler)
+        entry, c = await self._setup()
+        now = dt_util.now()
+        slot, before = now - timedelta(minutes=2), now - timedelta(hours=3)
+        model = hp.default()
+        model["commande"] = commande
+        model["pieces"] = {lane: {"source": "hestia"}}
+        for day in model["journees"].values():
+            day["creneaux"] = {lane: [[f"{before.hour:02d}:{before.minute:02d}", "eco"],
+                                      [f"{slot.hour:02d}:{slot.minute:02d}", "confort"]]}
+        await c.async_set_settings({"planning": model})
+        await hass.async_block_till_done()
+        self.assertEqual(self.sent, [], "saving the planning sends nothing at once")
+        c.applied[lane] = {"a": (now - timedelta(minutes=30)).replace(tzinfo=None, second=0, microsecond=0).isoformat()}
+        c._build()
+        await hass.async_block_till_done()
+        return entry, c
 
 
 def entry_of(domain, title, unique_id=None):
@@ -116,6 +150,40 @@ class HomeAssistantWithAHouse(unittest.IsolatedAsyncioTestCase):
         return s.state if s else None
 
 
+class PlanningHestia(SendsThePlanning, HomeAssistantWithAHouse):
+    """The planning Hestia in the made-up house: a preset sent at its slot, and only then."""
+
+    async def test_switched_on_it_sends_the_preset_once(self):
+        entry, c = await self._planning("sejour")
+        self.assertEqual(self.sent, [("set_preset_mode", {"entity_id": "climate.vt_sejour", "preset_mode": "comfort"})])
+        self.assertEqual(c.journal[-1]["statut"], "envoye")
+        c._build()
+        await self.hass.async_block_till_done()
+        self.assertEqual(len(self.sent), 1, "a slot is sent once")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_in_the_shade_it_only_says_what_it_would_do(self):
+        entry, c = await self._planning("sejour", commande=False)
+        self.assertEqual(self.sent, [])
+        self.assertEqual((c.journal[-1]["piece"], c.journal[-1]["statut"]), ("Séjour", "ombre"))
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_thermostat_switched_off_stays_off(self):
+        attrs = dict(self.hass.states.get("climate.vt_sejour").attributes)
+        self.hass.states.async_set("climate.vt_sejour", "off", attrs)
+        entry, c = await self._planning("sejour")
+        self.assertEqual(self.sent, [])
+        self.assertEqual(c.journal[-1]["statut"], "eteint")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_lane_scheduler_still_aims_at_is_never_sent(self):
+        entry, c = await self._planning("poele")
+        self.assertEqual(self.sent, [])
+        self.assertEqual(c.journal[-1]["statut"], "bloque")
+        self.assertIn("Poêle a deux plannings", [t["titre"] for t in c.data["a_regler"]])
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+
 class MadeUpHouse(HomeAssistantWithAHouse):
     """The made-up house with its own integrations: rooms, a stove's device, Versatile Thermostat."""
 
@@ -205,7 +273,7 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
 
-class CopiedHouse(HomeAssistantWithAHouse):
+class CopiedHouse(SendsThePlanning, HomeAssistantWithAHouse):
     """The same house copied by Remote Home Assistant, as in the lab: no device, no room, no integration of its own.
     The thermostats say they are Versatile Thermostats by their attributes, the stove by the ids of its entities."""
 
@@ -266,6 +334,14 @@ class CopiedHouse(HomeAssistantWithAHouse):
         await asyncio.sleep(1.5)
         await self.hass.async_block_till_done()
         self.assertEqual(c.data["maison"]["titre"], "Le poêle chauffe, flamme 3.")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_copied_thermostat_is_never_sent_anything(self):
+        """A lab copies the home: an order to a copied thermostat could reach the real one."""
+        entry, c = await self._planning("thermostat_vt_sejour")
+        self.assertEqual(self.sent, [])
+        self.assertEqual(c.journal[-1]["statut"], "recopie")
+        self.assertTrue(c.data["planning"]["labo"])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
 
