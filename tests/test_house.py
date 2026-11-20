@@ -79,6 +79,13 @@ class House(unittest.TestCase):
         view = house.build(m.snapshot(stove_thermostat="climate.vt_sejour"))
         self.assertEqual(view["poele"]["thermostat"], "climate.vt_sejour")
 
+    def test_a_copied_versatile_thermostat_is_still_one(self):
+        # Copied by Remote Home Assistant (a lab), a thermostat's platform is no longer Versatile Thermostat's.
+        copied = [dict(c, platform="remote_homeassistant") for c in m.climates()]
+        view = house.build(m.snapshot(climates=copied))
+        self.assertEqual(view["poele"]["thermostat"], "climate.vt_poele")
+        self.assertEqual(view["maison"]["electrique_w"], 600)
+
     def test_no_stove(self):
         # Without its integration the stove is not guessed: its thermostat is one more thermostat heating.
         view = house.build(m.snapshot(stove=None, pellets=None))

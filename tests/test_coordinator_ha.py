@@ -32,7 +32,9 @@ def entry_of(domain, title, unique_id=None):
                        source="user", discovery_keys={}, subentries_data=None)
 
 
-class MadeUpHouse(unittest.IsolatedAsyncioTestCase):
+class HomeAssistantWithAHouse(unittest.IsolatedAsyncioTestCase):
+    """A Home Assistant core in memory; `_house()` puts a house in it."""
+
     async def asyncSetUp(self):
         self.directory = tempfile.TemporaryDirectory()
         config = Path(self.directory.name)
@@ -109,6 +111,10 @@ class MadeUpHouse(unittest.IsolatedAsyncioTestCase):
         s = self.hass.states.get(entity_id)
         return s.state if s else None
 
+
+class MadeUpHouse(HomeAssistantWithAHouse):
+    """The made-up house with its own integrations: rooms, a stove's device, Versatile Thermostat."""
+
     async def test_it_finds_the_house_and_says_it(self):
         entry, c = await self._setup()
         d = c.data
@@ -180,6 +186,65 @@ class MadeUpHouse(unittest.IsolatedAsyncioTestCase):
         await c.async_set_settings({"poele_prise": None, "extensions": {"suivi_stock_pellet": False}})
         await self.hass.async_block_till_done()
         self.assertIsNone(c.data["granules"])
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+
+class CopiedHouse(HomeAssistantWithAHouse):
+    """The same house copied by Remote Home Assistant, as in the lab: no device, no room, no integration of its own.
+    The thermostats say they are Versatile Thermostats by their attributes, the stove by the ids of its entities."""
+
+    def _house(self):
+        hass = self.hass
+        entities = er.async_get(hass)
+        hass.config.components.add("remote_homeassistant")
+
+        def copy(entity_id, state, attrs):
+            domain, object_id = entity_id.split(".")
+            entities.async_get_or_create(domain, "remote_homeassistant", entity_id, suggested_object_id=object_id)
+            hass.states.async_set(entity_id, state, attrs)
+
+        for c in m.climates()[:3]:
+            copy(c["entity_id"], c["state"], c["attributes"])
+        stems = {"etat": "sensor.essai_status", "alarme": "sensor.essai_alarm", "fumees": "sensor.essai_smoke_temperature",
+                 "flamme": "number.essai_power", "flamme_reelle": "sensor.essai_real_power",
+                 "ecritures": "sensor.sejour_essai_eeprom_writes_today", "eco_stop": "switch.essai_essai_eco_stop"}
+        for role, r in m.stove()["roles"].items():
+            copy(stems[role], r["state"], {})
+        for climate in ("climate.essai", "climate.essai_vent_front"):
+            copy(climate, "off", {"current_temperature": 19.5, "hvac_modes": ["off", "heat"]})
+        # Not the stove: a washing machine with a status but no flame.
+        copy("sensor.lave_linge_status", "Arrêt", {})
+        copy("sensor.prise_du_poele_puissance", "42", {"device_class": "power", "friendly_name": "Prise poêle"})
+        for key, r in m.pellets().items():
+            copy(r["entity_id"], r["state"], {**r["attributes"], "suivi_stock_pellet_key": key})
+
+    async def test_it_finds_the_house_and_says_it(self):
+        entry, c = await self._setup()
+        d = c.data
+        self.assertEqual(d["poele"]["etat"], "chauffe")
+        self.assertEqual(d["poele"]["flamme"], 3)
+        self.assertEqual(d["poele"]["ecritures"], 4)
+        self.assertEqual(d["poele"]["thermostat"], "climate.vt_poele")
+        self.assertEqual(d["poele"]["prise"], "sensor.prise_du_poele_puissance")
+        # The stove's own climates are not thermostats of the house; each thermostat without a room is its own.
+        ids = {s["id"] for s in d["sources"]}
+        self.assertEqual(ids, {"climate.vt_poele", "climate.vt_sejour", "climate.vt_bureau"})
+        self.assertEqual({s["id"]: s["type"] for s in d["sources"]}["climate.vt_poele"], "poele")
+        self.assertEqual(len(d["pieces"]), 3)
+        self.assertTrue(d["maison"]["titre"].startswith("Le poêle chauffe, flamme 3."), d["maison"]["titre"])
+        vt = next(e for e in d["extensions"] if e["id"] == "versatile_thermostat")
+        self.assertEqual((vt["trouve"], vt["installee"]), (3, True))
+        self.assertEqual(d["granules"]["jours"], 50)
+        self.assertEqual(self.calls, [], "Hestia Chauffage 0.1 never calls a service")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_change_of_a_thermostat_is_followed(self):
+        entry, c = await self._setup()
+        attrs = dict(self.hass.states.get("climate.vt_bureau").attributes, hvac_action="idle", power_percent=0)
+        self.hass.states.async_set("climate.vt_bureau", "heat", attrs)
+        await asyncio.sleep(1.5)
+        await self.hass.async_block_till_done()
+        self.assertEqual(c.data["maison"]["titre"], "Le poêle chauffe, flamme 3.")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
 

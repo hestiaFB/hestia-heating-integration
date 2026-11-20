@@ -34,7 +34,7 @@ BRICK = "hestia_heating"     # said to Hestia Weather when listening, so that it
 @dataclass
 class Found:
     """What `discover()` found: entity ids only, read again by `snapshot()` on every change."""
-    climates: list[dict] = field(default_factory=list)      # {entity_id, platform, room}
+    climates: list[dict] = field(default_factory=list)      # {entity_id, platform, room, vt}
     stove: dict | None = None                                # {profile, device, roles: {role: entity_id}, entities}
     plug: str | None = None
     plugs: list[dict] = field(default_factory=list)          # every power sensor that could be the stove's plug
@@ -94,6 +94,14 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
             break
         if found.stove:
             break
+    if not found.stove:
+        for profile in profiles:
+            if profile.id in off_ext or profile.integration in off_ext:
+                continue
+            found.stove = _stove_by_ids(hass, profile)
+            if found.stove:
+                break
+    stove_ids = set((found.stove or {}).get("entities") or ())
     # 2. The thermostats: every climate with a room temperature, but the stove's own and those a Versatile Thermostat
     # drives (counted once, through it).
     driven: set[str] = set()
@@ -102,15 +110,17 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
     for state in hass.states.async_all("climate"):
         entry = entities.async_get(state.entity_id)
         platform = entry.platform if entry else None
-        if state.entity_id in driven or platform in stove_platforms:
+        vt = sources.is_vt(platform, state.attributes)
+        if state.entity_id in driven or platform in stove_platforms or state.entity_id in stove_ids:
             continue
-        if entry is not None and (entry.disabled_by or entry.hidden_by and platform != VT):
+        if entry is not None and (entry.disabled_by or entry.hidden_by and not vt):
             continue
-        if platform == VT and VT in off_ext:
+        if vt and VT in off_ext:
             continue
-        if platform != VT and state.attributes.get("current_temperature") is None:
+        if not vt and state.attributes.get("current_temperature") is None:
             continue
-        found.climates.append({"entity_id": state.entity_id, "platform": platform, "room": _area(entities, devices, entry)})
+        found.climates.append({"entity_id": state.entity_id, "platform": platform, "room": _area(entities, devices, entry),
+                               "vt": vt})
     # 3. The stove's plug: chosen in Réglages, else a power sensor named after the stove, off the stove's device.
     stove_device = (found.stove or {}).get("device_id")
     for state in hass.states.async_all("sensor"):
@@ -120,7 +130,7 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
         if a.get("device_class") != "power" or not found.stove:
             continue
         entry = entities.async_get(state.entity_id)
-        if entry is not None and entry.device_id == stove_device:
+        if state.entity_id in stove_ids or stove_device and entry is not None and entry.device_id == stove_device:
             continue
         device = devices.async_get(entry.device_id) if entry and entry.device_id else None
         label = " ".join(x for x in (state.entity_id, a.get("friendly_name"), device and (device.name_by_user or device.name)) if x)
@@ -141,6 +151,45 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
     found.workday = next((e.entity_id for e in entities.entities.values()
                           if e.platform == WORKDAY and e.domain == "binary_sensor" and not e.disabled_by), None)
     return found
+
+
+def _stove_by_ids(hass: HomeAssistant, profile: Profile) -> dict | None:
+    """A stove copied without its device (Remote Home Assistant, as in a lab that copies a home): found by the ids of
+    its entities alone, when one stem carries the profile's state and flame, and its smoke or its alarm
+    (« sensor.poele_status », « number.poele_power », « sensor.poele_smoke_temperature »). Its other roles are the
+    entities of the same domains whose id holds that stem; its climates are those whose id starts with it."""
+    roles = profile.roles
+
+    def spec(role: str) -> tuple[str | None, str | None]:
+        r = roles.get(role) or {}
+        return r.get("domaine"), r.get("fin")
+
+    status_domain, status_end = spec("etat")
+    flame_domain, flame_end = spec("flamme")
+    if not (status_domain and status_end and flame_domain and flame_end):
+        return None
+    domains = {r.get("domaine") for r in roles.values()} | {"climate"}
+    ids = sorted(s.entity_id for s in hass.states.async_all() if s.domain in domains)
+    known = set(ids)
+    for status in ids:
+        if not (status.startswith(status_domain + ".") and status.endswith(status_end)):
+            continue
+        stem = status.split(".", 1)[1][: -len(status_end)]
+        if len(stem) < 3 or f"{flame_domain}.{stem}{flame_end}" not in known:
+            continue
+        if not any(d and e and f"{d}.{stem}{e}" in known for d, e in (spec("fumees"), spec("alarme"))):
+            continue
+        mine = [{"entity_id": i} for i in ids if stem in i.split(".", 1)[1]]
+        from .engine.profiles import match
+        found_roles = match(profile, [e for e in mine if not e["entity_id"].startswith("climate.")
+                                      or e["entity_id"].split(".", 1)[1].startswith(stem)])
+        climates = [i for i in ids if i.startswith("climate.") and i.split(".", 1)[1].startswith(stem)]
+        principal = hass.states.get(found_roles["thermostat"]) if found_roles.get("thermostat") else None
+        return {"profile": profile, "roles": found_roles, "device_id": None,
+                "entities": sorted(set(found_roles.values()) | set(climates)),
+                "device": {"name": (principal.attributes.get("friendly_name") if principal else None) or "Poêle",
+                           "maker": None, "model": None, "room": None}}
+    return None
 
 
 def _state(hass: HomeAssistant, entity_id: str | None) -> dict | None:

@@ -191,7 +191,7 @@ class HeatingCoordinator:
              "usage": "Chaque pièce : consigne, demande, puissance, fenêtre, délestage.",
              "sans": "Les autres thermostats sont lus quand même, avec moins de détails.",
              "lien": "https://github.com/jmcollin78/versatile_thermostat",
-             "trouve": sum(1 for c in found.climates if c["platform"] == reader.VT)},
+             "trouve": sum(1 for c in found.climates if c.get("vt"))},
         ]
         for p in self.profiles:
             rows.append({"id": p.integration, "groupe": "Poêle", "nom": p.name, "installee": installed.get(p.integration, False),
@@ -214,6 +214,8 @@ class HeatingCoordinator:
         ]
         for row in rows:
             row["utilisee"] = off.get(row["id"]) is not False
+            # Copied from another Home Assistant (a lab), an integration is not installed here but its entities are read.
+            row["installee"] = row["installee"] or row["trouve"] > 0
         return rows
 
     # --- settings ------------------------------------------------------------------------------------------------

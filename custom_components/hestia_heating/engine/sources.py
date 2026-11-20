@@ -30,6 +30,16 @@ def _vt_part(attrs: dict, key: str) -> dict:
     return part if isinstance(part, dict) else {}
 
 
+# A Versatile Thermostat seen without its platform (copied by Remote Home Assistant, as in a lab) still says what it is.
+VT_ATTRIBUTES = ("vtherm_over_switch", "vtherm_over_climate", "vtherm_over_valve")
+
+
+def is_vt(platform: str | None, attrs: dict) -> bool:
+    """A Versatile Thermostat, by its platform or, when the platform is another one (a copy), by its own attributes."""
+    return platform == VT or any(k in attrs for k in VT_ATTRIBUTES) or (
+        isinstance(attrs.get("specific_states"), dict) and isinstance(attrs.get("preset_temperatures"), dict))
+
+
 def kind(platform: str | None, attrs: dict) -> str:
     """« radiateur », « clim », « pac » (heats and cools), « vanne » or « autre »."""
     modes = [str(m) for m in attrs.get("hvac_modes") or []]
@@ -38,7 +48,7 @@ def kind(platform: str | None, attrs: dict) -> str:
         return "pac"
     if cools:
         return "clim"
-    if platform == VT:
+    if is_vt(platform, attrs):
         vt_type = _vt_part(attrs, "configuration").get("type")
         if vt_type == "over_valve" or attrs.get("is_over_valve"):
             return "vanne"
@@ -78,7 +88,7 @@ def read(climate: dict) -> dict:
     """One source from one thermostat as the reader hands it ({entity_id, state, attributes, platform, name, room…})."""
     attrs = climate.get("attributes") or {}
     platform = climate.get("platform")
-    vt = platform == VT
+    vt = is_vt(platform, attrs)
     power = _vt_part(attrs, "power_manager")
     window = _vt_part(attrs, "window_manager")
     safety = _vt_part(attrs, "safety_manager")
