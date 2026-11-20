@@ -211,9 +211,12 @@ class CopiedHouse(HomeAssistantWithAHouse):
         for role, r in m.stove()["roles"].items():
             copy(stems[role], r["state"], {})
         for climate in ("climate.essai", "climate.essai_vent_front"):
-            copy(climate, "off", {"current_temperature": 19.5, "hvac_modes": ["off", "heat"]})
+            copy(climate, "off", {"current_temperature": 19.5, "hvac_modes": ["off", "heat"], "friendly_name": climate[8:]})
         # Not the stove: a washing machine with a status but no flame.
         copy("sensor.lave_linge_status", "Arrêt", {})
+        # Not the stove's plug: the power its thermostat reckons, and a power named after the stove that is no plug.
+        copy("sensor.vt_poele_mean_power_cycle", "0", {"device_class": "power", "friendly_name": "Thermostat poêle"})
+        copy("sensor.poele_conso_estimee", "0", {"device_class": "power", "friendly_name": "Poêle estimé"})
         copy("sensor.prise_du_poele_puissance", "42", {"device_class": "power", "friendly_name": "Prise poêle"})
         for key, r in m.pellets().items():
             copy(r["entity_id"], r["state"], {**r["attributes"], "suivi_stock_pellet_key": key})
@@ -226,6 +229,8 @@ class CopiedHouse(HomeAssistantWithAHouse):
         self.assertEqual(d["poele"]["ecritures"], 4)
         self.assertEqual(d["poele"]["thermostat"], "climate.vt_poele")
         self.assertEqual(d["poele"]["prise"], "sensor.prise_du_poele_puissance")
+        self.assertNotIn("sensor.vt_poele_mean_power_cycle", {p["entity_id"] for p in c.found.plugs})
+        self.assertEqual(d["poele"]["nom"], "Essai")
         # The stove's own climates are not thermostats of the house; each thermostat without a room is its own.
         ids = {s["id"] for s in d["sources"]}
         self.assertEqual(ids, {"climate.vt_poele", "climate.vt_sejour", "climate.vt_bureau"})

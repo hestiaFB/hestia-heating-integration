@@ -121,8 +121,10 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
             continue
         found.climates.append({"entity_id": state.entity_id, "platform": platform, "room": _area(entities, devices, entry),
                                "vt": vt})
-    # 3. The stove's plug: chosen in Réglages, else a power sensor named after the stove, off the stove's device.
+    # 3. The stove's plug: chosen in Réglages, else a power sensor named after the stove (a plug first), off the
+    # stove's device and not one of a thermostat's own sensors (« sensor.thermostat_poele_mean_power_cycle »).
     stove_device = (found.stove or {}).get("device_id")
+    climate_stems = tuple(s.entity_id.split(".", 1)[1] + "_" for s in hass.states.async_all("climate"))
     for state in hass.states.async_all("sensor"):
         a = state.attributes
         if PELLET_KEY in a and PELLETS not in off_ext and a[PELLET_KEY] not in found.pellets:
@@ -132,14 +134,17 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
         entry = entities.async_get(state.entity_id)
         if state.entity_id in stove_ids or stove_device and entry is not None and entry.device_id == stove_device:
             continue
+        if entry is not None and entry.platform == VT or state.entity_id.split(".", 1)[1].startswith(climate_stems):
+            continue
         device = devices.async_get(entry.device_id) if entry and entry.device_id else None
         label = " ".join(x for x in (state.entity_id, a.get("friendly_name"), device and (device.name_by_user or device.name)) if x)
         found.plugs.append({"entity_id": state.entity_id, "nom": a.get("friendly_name") or state.entity_id,
-                            "poele": bool(sources.STOVE_NAME.search(label))})
+                            "poele": bool(sources.STOVE_NAME.search(label)), "prise": bool(sources.PLUG_NAME.search(label))})
     chosen = settings.get("poele_prise")
     if found.stove:
+        named = [p for p in found.plugs if p["poele"]]
         found.plug = chosen if chosen and hass.states.get(chosen) else next(
-            (p["entity_id"] for p in found.plugs if p["poele"]), None)
+            (p["entity_id"] for p in sorted(named, key=lambda p: not p["prise"])), None)
     # 4. The schedules (Scheduler) and the Workday sensor.
     if SCHEDULER not in off_ext:
         for entry in entities.entities.values():
@@ -185,9 +190,10 @@ def _stove_by_ids(hass: HomeAssistant, profile: Profile) -> dict | None:
                                       or e["entity_id"].split(".", 1)[1].startswith(stem)])
         climates = [i for i in ids if i.startswith("climate.") and i.split(".", 1)[1].startswith(stem)]
         principal = hass.states.get(found_roles["thermostat"]) if found_roles.get("thermostat") else None
+        name = (principal.attributes.get("friendly_name") if principal else None) or "Poêle"
         return {"profile": profile, "roles": found_roles, "device_id": None,
                 "entities": sorted(set(found_roles.values()) | set(climates)),
-                "device": {"name": (principal.attributes.get("friendly_name") if principal else None) or "Poêle",
+                "device": {"name": name[:1].upper() + name[1:],
                            "maker": None, "model": None, "room": None}}
     return None
 

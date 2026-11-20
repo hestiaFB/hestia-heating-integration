@@ -11,6 +11,7 @@ import re
 VT = "versatile_thermostat"
 # A stove named in an entity, a device or a thermostat (« thermostat_poele », « Poêle du salon », « Pellet stove »).
 STOVE_NAME = re.compile(r"po[eê]le|pellet|granul|stove|kachel|ofen", re.I)
+PLUG_NAME = re.compile(r"prise|plug|socket|outlet|steckdose", re.I)
 # The states of a source (the `etat` of `sources()` in the interface for the other bricks).
 STATES = ("chauffe", "rafraichit", "repos", "arret", "inconnu")
 # Presets as Versatile Thermostat names them, and the brick's words for them.
