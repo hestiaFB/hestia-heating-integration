@@ -104,22 +104,17 @@ TODAY: date = NOW.date()
 
 
 def home_planning(**changes):
-    """The house's own planning: the séjour and the stove set by Hestia, the bureau by Scheduler."""
-    model = {
-        "commande": False,
-        "pieces": {"sejour": {"source": "hestia"}, "poele": {"source": "hestia"}, "atelier": {"source": "hestia"}},
-        "journees": {
-            "semaine": {"nom": "Semaine", "creneaux": {
-                "sejour": [["06:30", "confort"], ["08:30", "hors_gel"], ["17:00", "confort"], ["22:30", "hors_gel"]],
-                "poele": [["06:30", "boost"], ["08:30", "hors_gel"], ["17:00", "boost"], ["22:30", "hors_gel"]],
-                "atelier": [["09:00", "confort"], ["18:00", "eco"]]}},
-            "weekend": {"nom": "Week-end", "creneaux": {"sejour": [["08:00", "confort"], ["23:00", "hors_gel"]]}},
-            "teletravail": {"nom": "Télétravail", "creneaux": {}},
-        },
-        "semaine": ["semaine"] * 5 + ["weekend"] * 2,
-        "feries": "weekend",
-        "jours": {},
-        "anticipation": {"actif": True, "max_min": 60},
+    """The house's own plannings: the stove and the séjour in trial, the workshop's air conditioner active. The bureau
+    and the guest room stay on Scheduler."""
+    plannings = {
+        "poele": {"nom": "Poêle", "actif": False, "jours": "semaine", "reste": "hors_gel",
+                  "plages": [[["06:30", "08:30", "boost"], ["17:00", "22:30", "boost"]], [["09:00", "21:00", "boost"]]],
+                  "thermostats": ["climate.vt_poele"]},
+        "sejour": {"nom": "Séjour", "actif": False, "jours": "semaine", "reste": "hors_gel",
+                   "plages": [[["06:30", "08:30", "confort"], ["17:00", "22:30", "confort"]], [["08:00", "23:00", "confort"]]],
+                   "thermostats": ["climate.vt_sejour"]},
+        "atelier": {"nom": "Atelier", "actif": True, "jours": "tous", "reste": "eco",
+                    "plages": [[["09:00", "18:00", "confort"]]], "thermostats": ["climate.clim_atelier"]},
     }
-    model.update(changes)
-    return model
+    plannings.update(changes)
+    return {"plannings": plannings}
