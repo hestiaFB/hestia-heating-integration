@@ -2,7 +2,7 @@
 
 Version du 20 novembre 2026. Document vivant : il suit la brique à chaque version.
 
-**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute le planning Hestia (journées types, semaine type, un jour à part, matins froids, conseils), d’après la maquette validée le 20 novembre ; il commence « à l’ombre ». La 0.4 ajoute le pilote du poêle « à l’ombre » : il dit ce qu’il ferait, à côté de ce que font les automatisations de la maison, sans rien envoyer. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
+**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute les plannings Hestia, simples, d’après la maquette « planning simple » validée le 20 novembre : une liste de plannings, chacun une semaine en couleurs et les thermostats qu’il règle, « En essai » d’abord. La 0.4 ajoute le pilote du poêle « à l’ombre » : il dit ce qu’il ferait, à côté de ce que font les automatisations de la maison, sans rien envoyer. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
 
 ## Place dans l’écosystème
 
@@ -44,7 +44,7 @@ Un onglet **Chauffage** dans le panneau Hestia-FB (adresse `/hestia/chauffage`) 
 | Accueil | La maison en une phrase (« Le poêle chauffe, flamme 3. 2 radiateurs en appoint. »), puis une ligne par pièce : température, consigne, en chauffe ou non, fenêtre ouverte, prochain changement du planning |
 | Poêle | État traduit, flamme demandée par le thermostat face à la flamme réelle, sa journée (flamme et température de la pièce), fumées, alarme, ordres reçus dans la journée, stock et jours restants, ce que dit la prise. Le nettoyage à venir viendra plus tard |
 | Une pièce | Son thermostat, sa journée (courbe température et consigne), pourquoi elle chauffe ou non (préréglage, fenêtre, délestage, sécurité) |
-| Planning | La journée lue dans Scheduler, pièce par pièce et pour le poêle, les prochains changements et les plannings lus. En lecture seule en v0.1 : c’est là que viendra le planning maison |
+| Planning | En v0.1, la journée lue dans Scheduler. Depuis la 0.3, la liste des plannings Hestia (une semaine en couleurs, ses thermostats, En essai ou Actif), un éditeur par planning, et les plannings de Scheduler, lus et repris en un clic |
 | Réglages et Extensions | Les sources trouvées et leurs interrupteurs, le lien poêle ↔ thermostat, le lieu d’Hestia Weather |
 
 La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce (longue ou courte) et le planning du jour. Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire pour la première bêta publique.
@@ -112,7 +112,7 @@ Aucune commande (ni poêle, ni thermostat, ni clim), pas de planning actif, pas 
 
 1. **0.1** — la brique en lecture seule (ce document).
 2. **0.2** — l’interface vers Énergie, puis Énergie l’affiche à la place de sa devinette par une source « gaz ».
-3. **0.3** — le planning maison et les conseils, avec le froid d’Hestia Weather et les prix d’Énergie. Le planning tourne d’abord à côté de Scheduler, puis à sa place. Chaque pièce dit qui la règle (Hestia, Scheduler ou personne) ; par défaut rien ne change. Il commence « à l’ombre » et n’envoie que des préréglages, jamais un allumage ou un arrêt (détail dans [technique.md](technique.md#le-planning-hestia)).
+3. **0.3** — les plannings maison, simples : une semaine en couleurs (tous les jours pareils, semaine et week-end, ou jour par jour), des plages, le niveau du reste du temps, et les thermostats cochés. Un thermostat suit un seul planning. Scheduler reste lu, et un de ses plannings se reprend dans Hestia en un clic. Chaque planning commence « En essai » et n’envoie, une fois « Actif », que des préréglages, jamais un allumage ou un arrêt (détail dans [technique.md](technique.md#le-planning-hestia)). Les matins froids et le prix de l’électricité, prévus d’abord, sont laissés de côté pour rester simple.
 4. **0.4** — le pilote de poêle « à l’ombre » : il calcule ce qu’il ferait (démarrer, flamme 3, refuser pour surchauffe…) et l’affiche à côté de ce que font les automatisations de la maison, sans rien envoyer.
 5. **0.5** — le pilote actif, profil Micronova : démarrage sûr, flamme selon la demande, arrêt vérifié, quota d’écritures, sécurités, retour arrière en un clic.
 6. Les autres profils (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un, avec des testeurs.

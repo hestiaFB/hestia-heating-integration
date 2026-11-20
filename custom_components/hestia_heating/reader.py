@@ -338,47 +338,6 @@ def weather_listen(hass: HomeAssistant, place: str | None, update: Callable[[], 
         return lambda: None
 
 
-ENERGY_API = "hestia_energy_api"
-ENERGY_API_VERSION = 1
-
-
-def energy_api(hass: HomeAssistant):
-    api = hass.data.get(ENERGY_API)
-    return api if api is not None and getattr(api, "version", None) == ENERGY_API_VERSION else None
-
-
-def energy_tariff(hass: HomeAssistant) -> dict | None:
-    """Hestia Énergie's price of electricity now (€/kWh), its period (hp, hc, base) and the next change, in local
-    time; None without it, or when it has no price to give."""
-    api = energy_api(hass)
-    if api is None:
-        return None
-    try:
-        t = api.tariff()
-    except Exception as err:  # noqa: BLE001 - another brick's trouble never stops this one
-        _LOGGER.debug("Hestia Énergie's price unavailable: %s", err)
-        return None
-    if not isinstance(t, dict) or t.get("price") is None:
-        return None
-    change = t.get("next_change")
-    if isinstance(change, datetime):
-        change = dt_util.as_local(change).replace(tzinfo=None).isoformat()
-    return {"price": t["price"], "period": t.get("period"), "next_change": change if isinstance(change, str) else None,
-            "next_period": t.get("next_period")}
-
-
-def energy_listen(hass: HomeAssistant, update: Callable[[], None]) -> Callable[[], None]:
-    """Says to Hestia Énergie that Chauffage reads it (both sides then show the link)."""
-    api = energy_api(hass)
-    if api is None:
-        return lambda: None
-    try:
-        return api.add_listener(update, brick=BRICK)
-    except Exception as err:  # noqa: BLE001
-        _LOGGER.debug("Hestia Énergie not listened to: %s", err)
-        return lambda: None
-
-
 async def day_history(hass: HomeAssistant, start: datetime, end: datetime, wanted: list[tuple[str, str, str | None]]) -> dict:
     """{name: [(datetime, value)]} for each (name, entity_id, attribute) since `start`: read in the recorder's executor,
     compacted by the socle's recorder_history (one day of one entity at a time)."""

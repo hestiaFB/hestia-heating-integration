@@ -4,7 +4,7 @@
 
 Elle ne remplace pas votre thermostat : elle s’appuie sur les intégrations que vous avez déjà.
 
-> **Bêta 0.4, en préparation.** Elle lit et explique, et elle a son propre planning. Le planning commence « à l’ombre » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas allumé. Le poêle lui-même n’est jamais commandé : son pilote, à l’ombre, dit seulement ce qu’il ferait. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
+> **Bêta 0.4, en préparation.** Elle lit et explique, et elle a ses propres plannings. Un planning commence « En essai » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Le poêle lui-même n’est jamais commandé. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
 
 ## Ce que montre la version 0.4
 
@@ -13,8 +13,8 @@ Un onglet **Chauffage** dans le panneau Hestia-FB :
 - **Accueil** : la maison en une phrase (« Le poêle chauffe, flamme 3. Un radiateur en appoint. »), le froid de la nuit, puis chaque pièce avec sa température, sa consigne, ce qu’elle fait et pourquoi.
 - **Poêle** : son état traduit dans vos mots, la flamme demandée et la flamme réelle, sa journée, les fumées, l’alarme, la prise mesurée, les granulés qu’il reste. Et son pilote « à l’ombre » : ce que Hestia ferait (démarrer, quelle flamme, arrêter), à côté de ce que font vos automatisations.
 - **Une pièce** : son thermostat, sa journée (température et consigne), ce qui vient ensuite.
-- **Planning** : la journée de chaque pièce et du poêle, et qui la règle (Hestia ou Scheduler). Le planning Hestia se règle ici : des journées types (Semaine, Week-end, Télétravail…), une semaine type, un jour changé à part. Il démarre plus tôt les matins froids (avec Hestia Weather) et dit ce que coûte l’électrique en ce moment (avec Hestia Énergie).
-- **Réglages** et **Extensions** : le planning (qui règle chaque pièce, la semaine type, « Le planning commande les thermostats »), ce que la brique a trouvé, le thermostat et la prise du poêle, les thermostats à ne pas lire.
+- **Planning** : la liste de vos plannings. Un planning, c’est une semaine en couleurs (tous les jours pareils, semaine et week-end, ou jour par jour) et les thermostats qu’il règle, « En essai » ou « Actif ». Les plannings de Scheduler sont lus, et se reprennent dans Hestia en un clic.
+- **Réglages** et **Extensions** : ce que la brique a trouvé, le thermostat et la prise du poêle, les thermostats à ne pas lire.
 
 Et une **carte** pour vos tableaux de bord, sous quatre formes :
 

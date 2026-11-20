@@ -15,21 +15,20 @@ Le pilote du poêle, « à l’ombre » : Hestia dit ce qu’elle ferait du poê
 
 ## 0.3.0b1
 
-Le planning Hestia : Hestia Chauffage a son propre planning, réglé dans l’onglet, et continue de lire Scheduler pour les pièces qui le suivent. Il commence « à l’ombre » : il montre ce qu’il ferait, sans rien envoyer.
+Les plannings Hestia : des plannings simples, réglés dans l’onglet, et Scheduler toujours lu pour les thermostats qui le suivent. Chaque planning commence « En essai » : il montre ce qu’il ferait, sans rien envoyer.
 
 ### Nouveautés
-- **Le planning Hestia** : des journées types (Semaine, Week-end, Télétravail, et les vôtres), une semaine type, et un jour changé à part (« lundi 23 en Télétravail ») sans toucher à la semaine. Un jour férié suit la journée choisie (capteur Jours ouvrés).
-- **Une journée type se règle pièce par pièce** : des créneaux (une heure, un niveau), repris de Scheduler en un clic, ou copiés d’une pièce à l’autre.
-- **Qui règle chaque pièce**, dans Réglages : Hestia, Scheduler ou personne. Par défaut, une pièce visée par un planning Scheduler reste sur Scheduler : installer la 0.3 ne change rien à ce qui marche déjà.
-- **À l’ombre par défaut** : la page Planning dit ce que ferait Hestia, et le journal du jour ce qu’elle aurait fait. Elle n’envoie rien tant que « Le planning commande les thermostats » n’est pas allumé.
-- **Plus tôt les matins froids**, avec Hestia Weather : le premier créneau plus chaud du matin commence 5 minutes plus tôt par degré sous 10 °C dehors, une heure au plus (réglable).
-- **Bon à savoir** : le matin avancé et pourquoi, et ce que coûte l’électrique en ce moment au prix d’Hestia Énergie, avec l’heure des heures creuses.
-- La carte « planning » dit qui règle chaque ligne.
+- **La page Planning** : la liste de vos plannings, chacun avec sa semaine en couleurs, ses thermostats, ce qu’il fait maintenant et son prochain changement.
+- **Créer un planning** : un nom, la semaine (tous les jours pareils, semaine et week-end, ou jour par jour), des plages (de 6 h 30 à 8 h 30 en confort…) et le niveau du reste du temps. On touche une plage pour changer ses heures ou son niveau.
+- **Les thermostats de ce planning**, à cocher : un thermostat suit un seul planning. Le thermostat du poêle aussi : Boost l’allume, Hors gel l’éteint, et l’éditeur dit combien de fois par semaine il s’allumerait.
+- **En essai ou Actif**, pour chaque planning. En essai, rien n’est envoyé : la page dit ce que ferait Hestia, et « Ce qu’a fait Hestia aujourd’hui » ce qu’elle aurait fait.
+- **Reprendre dans Hestia** : un planning de Scheduler recopié en planning Hestia, en un clic.
+- La carte « planning » dit qui règle chaque ligne (Hestia ou Scheduler), et quand un planning est en essai.
 
 ### Ce qu’il envoie, et seulement ça
-- Au début de chaque créneau, un préréglage (confort, éco, hors gel, boost), à un Versatile Thermostat, ou une consigne à un autre thermostat.
-- Il n’allume ni n’éteint jamais un thermostat, ne change aucun réglage de Versatile Thermostat ni de Scheduler, et ne commande jamais une pièce qu’un planning Scheduler allumé vise encore (« deux plannings », dans À régler). Le poêle lui-même n’est jamais commandé : seulement le préréglage de son thermostat.
-- Rien n’est envoyé à l’enregistrement : la journée compte dès le prochain créneau. Un créneau manqué pendant un arrêt de Home Assistant est rattrapé au démarrage, une fois.
+- Quand une plage commence ou finit, un préréglage (confort, éco, hors gel, boost) à chaque Versatile Thermostat d’un planning actif, ou une consigne à un autre thermostat.
+- Il n’allume ni n’éteint jamais un thermostat, ne change aucun réglage de Versatile Thermostat ni de Scheduler, et ne commande jamais un thermostat qu’un planning Scheduler allumé vise encore (« suit deux plannings », dans À régler). Le poêle lui-même n’est jamais commandé : seulement le préréglage de son thermostat.
+- Rien n’est envoyé à l’enregistrement : le planning compte dès le prochain changement. Un changement manqué pendant un arrêt de Home Assistant est rattrapé au démarrage, une fois.
 - Rien n’est jamais envoyé à un thermostat recopié d’une autre maison (Remote Home Assistant, comme au labo).
 
 ## 0.2.0b1

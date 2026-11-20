@@ -19,7 +19,7 @@ type Stove={nom:string;etat:string;en_feu:boolean;depuis:string|null;flamme:numb
  prise:string|null;prise_w:number|null;demande_pct:number|null;ecritures:number|null;ecritures_max:number|null;alarme:boolean|null;alarme_texte:string|null};
 type Pellets={stock_sacs:number|null;stock_kg:number|null;jours:number|null};
 type Lane={id:string;nom:string;segments:{de:number;a:number;ton:string}[];source?:string|null;bloque?:boolean};
-type Planning={source:string|null;jour_nom:string;jour_type?:{id:string|null;nom:string|null};commande?:boolean;labo?:boolean;maintenant_min:number;lignes:Lane[];
+type Planning={source:string|null;jour_nom:string;labo?:boolean;essai?:boolean;maintenant_min:number;lignes:Lane[];
  prochains:{a:string;heure:string;texte:string}[]};
 type View={pret:boolean;maison:{etat:string;titre:string;temperature:number|null;en_chauffe:number;pieces:number;electrique_w:number};
  pieces:Room[];poele:Stove|null;granules:Pellets|null;dehors:{nuit_min:number|null;demain_max:number|null}|null;planning:Planning};
@@ -165,17 +165,15 @@ class HestiaHeatingCard extends LitElement {
  /* 4 · Le planning */
  private _planning(v:View){
   const p=v.planning,now=p.maintenant_min/14.4,next=p.prochains;
-  const kind=p.jour_type?.nom?` · ${p.jour_type.nom}`:'';
-  const head=html`<div class="head"><h2 class="nw-title">${this._config.name||'Planning du jour'}</h2><span class="nw-chip calm">${p.jour_nom}${kind}</span>${this._info('planning','Ouvrir la page du planning')}</div>`;
+  const head=html`<div class="head"><h2 class="nw-title">${this._config.name||'Planning du jour'}</h2><span class="nw-chip calm">${p.jour_nom}</span>${this._info('planning','Ouvrir la page du planning')}</div>`;
   if(!p.lignes.length)return html`${head}<p class="empty">Aucun créneau pour l’instant : ils se règlent dans l’onglet Chauffage, page Planning.</p>`;
   const tones=[...new Set(p.lignes.flatMap(l=>l.segments.map(s=>s.ton)))];
-  const hestia=p.lignes.some(l=>l.source==='Hestia');
   return html`${head}<div class="lanes"><div class="hours"><span></span><div>${[0,6,12,18,24].map(h=>html`<span style=${`left:${h/24*100}%`}>${h} h</span>`)}</div></div>
-   ${p.lignes.map(l=>html`<div class="lane"><span class="n">${l.nom}${l.source?html`<small class=${l.bloque?'bad':''}>${l.source}${l.bloque?' · bloqué':''}</small>`:nothing}</span><div class="track" role="img" aria-label=${l.nom}>${l.segments.map(s=>html`<i class=${'t-'+s.ton} style=${`left:${s.de/14.4}%;width:${(s.a-s.de)/14.4}%`}></i>`)}<span class="now" style=${`left:${now}%`}></span></div></div>`)}</div>
+   ${p.lignes.map(l=>html`<div class="lane"><span class="n">${l.nom}${l.source?html`<small class=${l.bloque?'bad':''}>${l.source}${l.bloque?' · deux plannings':''}</small>`:nothing}</span><div class="track" role="img" aria-label=${l.nom}>${l.segments.map(s=>html`<i class=${'t-'+s.ton} style=${`left:${s.de/14.4}%;width:${(s.a-s.de)/14.4}%`}></i>`)}<span class="now" style=${`left:${now}%`}></span></div></div>`)}</div>
    <div class="nw-legend">${tones.map(t=>html`<span><i class=${'sw t-'+t}></i>${LANE_WORD[t]??t}</span>`)}</div>
    <div class="nw-stats"><div><span>Prochain changement</span><b>${next[0]?`${when(next[0].a)} · ${next[0].texte}`:'—'}</b></div>
     <div><span>Ensuite</span><b>${next[1]?`${when(next[1].a)} · ${next[1].texte}`:'—'}</b></div><div><span>Réglé par</span><b>${p.source??'—'}</b></div></div>
-   ${hestia&&(p.labo||!p.commande)?html`<p class="note">${p.labo?'Thermostats recopiés d’une autre maison : le planning Hestia reste à l’ombre.':'Planning Hestia à l’ombre : il montre ce qu’il ferait, sans rien envoyer.'}</p>`:nothing}`;
+   ${p.labo||p.essai?html`<p class="note">${p.labo?'Thermostats recopiés d’une autre maison : les plannings Hestia ne leur envoient rien.':'Un planning Hestia est en essai : il montre ce qu’il ferait, sans rien envoyer.'}</p>`:nothing}`;
  }
 }
 
