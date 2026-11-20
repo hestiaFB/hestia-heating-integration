@@ -2,6 +2,8 @@
 
 Version du 20 novembre 2026. Document vivant : il suit la brique à chaque version.
 
+**Où en est la v0.1** : codée le 20 novembre 2026 (version `0.1.0b1`), en lecture seule, testée sur une maison inventée dans un vrai Home Assistant. Pas encore essayée au labo. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
+
 ## Place dans l’écosystème
 
 Hestia Chauffage dit, pour toute la maison, qui chauffe ou rafraîchit, pourquoi, et ce qui vient ensuite. En v0.1 elle ne commande rien : elle lit et elle explique. Elle est prévue dans `ECOSYSTEME.md` de `hestia-ecosysteme` (« Pilote la chaleur, seul propriétaire des commandes thermiques ») ; le pilote du poêle arrive en 0.4.
@@ -24,7 +26,7 @@ Tout est trouvé seul, rangé par pièce (les pièces de Home Assistant), et cha
 | Versatile Thermostat | sa plateforme `versatile_thermostat` | mode, préréglage, consigne, température, demande (%), puissance, fenêtre, délestage, sécurité, type (radiateur, clim, vanne) |
 | Autres thermostats et clims | tout `climate` qui a une température | mode (chaud, froid, auto), consigne, ce qu’il fait ; la clim par ses modes « froid » |
 | Le poêle | son intégration + un profil (voir plus bas), ex. `aguaiot` | état traduit (éteint, allumage, chauffe, extinction, nettoyage, alarme), flamme, fumées, alarme |
-| Le lien poêle ↔ son thermostat | le Versatile Thermostat dont l’interrupteur piloté est celui du poêle, sinon choisi une fois dans Réglages | demande du thermostat face à la flamme réelle |
+| Le lien poêle ↔ son thermostat | celui choisi dans Réglages, sinon le Versatile Thermostat qui pilote une entité du poêle, sinon celui dont le nom dit « poêle » | demande du thermostat face à la flamme réelle |
 | Les granulés | Suivi Stock Pellet (rôles `suivi_stock_pellet_key`, comme Hestia Énergie) | stock, jours restants, kilos de la saison |
 | Le planning existant | Scheduler (entités `switch.schedule_*` qui visent un thermostat) et l’assistant Planning de Home Assistant | prochain changement de chaque pièce et du poêle |
 | Le temps | `hestia_weather_api` v1 (`hourly`, `degree_days`) | froid de la nuit et du lendemain |
@@ -40,12 +42,12 @@ Un onglet **Chauffage** dans le panneau Hestia-FB (adresse `/hestia/chauffage`) 
 | Page | Ce qu’on y voit |
 | --- | --- |
 | Accueil | La maison en une phrase (« Le poêle chauffe, flamme 3. 2 radiateurs en appoint. »), puis une ligne par pièce : température, consigne, en chauffe ou non, fenêtre ouverte, prochain changement du planning |
-| Poêle | État traduit, flamme demandée par le thermostat face à la flamme réelle, fumées, alarme, stock et jours restants, nettoyage à venir, ce que dit la prise |
+| Poêle | État traduit, flamme demandée par le thermostat face à la flamme réelle, sa journée (flamme et température de la pièce), fumées, alarme, ordres reçus dans la journée, stock et jours restants, ce que dit la prise. Le nettoyage à venir viendra plus tard |
 | Une pièce | Son thermostat, sa journée (courbe température et consigne), pourquoi elle chauffe ou non (préréglage, fenêtre, délestage, sécurité) |
-| Planning | La semaine lue dans Scheduler, pièce par pièce et pour le poêle. En lecture seule en v0.1 : c’est là que viendra le planning maison |
+| Planning | La journée lue dans Scheduler, pièce par pièce et pour le poêle, les prochains changements et les plannings lus. En lecture seule en v0.1 : c’est là que viendra le planning maison |
 | Réglages et Extensions | Les sources trouvées et leurs interrupteurs, le lien poêle ↔ thermostat, le lieu d’Hestia Weather |
 
-La carte reprend l’Accueil (la maison, ou une pièce, ou le poêle). Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire pour la première bêta publique.
+La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce (longue ou courte) et le planning du jour. Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire pour la première bêta publique.
 
 ## Ce qu’elle publie
 
@@ -70,33 +72,39 @@ Dans la version 1, une méthode s’ajoute, ne se renomme ni ne se retire. Le co
 
 ## Le profil de poêle
 
-Un profil est un fichier de données par intégration, sans code : il dit où trouver chaque rôle sur l’appareil du poêle et comment traduire ses mots. En v0.1 seuls les rôles de lecture servent ; ceux d’écriture (allumer, flamme, quota) sont déjà décrits pour le pilote de la 0.4. Les textes ci-dessous ont été relevés sur un poêle Micronova par Agua IOT, en français.
+Un profil est un fichier de données par intégration, sans code : il dit où trouver chaque rôle sur l’appareil du poêle et comment traduire ses mots. En v0.1 seuls les rôles de lecture servent ; le pilote de la 0.4 utilisera aussi `thermostat`, `flamme` et la limite d’ordres par jour. Les textes ci-dessous ont été relevés sur un poêle Micronova par Agua IOT, en français (« Éteindre » est le poêle éteint), avec les mots anglais du même poêle.
 
 ```json
 {
   "profil": "micronova_agua_iot",
+  "nom": "Micronova Agua IOT",
   "integration": "aguaiot",
+  "lien": "https://github.com/vincentwolsink/home_assistant_micronova_agua_iot",
   "roles": {
     "thermostat": {"domaine": "climate", "principal": true},
     "etat": {"domaine": "sensor", "fin": "_status"},
     "alarme": {"domaine": "sensor", "fin": "_alarm"},
     "fumees": {"domaine": "sensor", "fin": "_smoke_temperature"},
+    "air": {"domaine": "sensor", "fin": "_air_temperature"},
     "flamme": {"domaine": "number", "fin": "_power", "min": 1, "max": 5},
+    "flamme_reelle": {"domaine": "sensor", "fin": "_real_power"},
+    "ecritures": {"domaine": "sensor", "fin": "_eeprom_writes_today"},
     "eco_stop": {"domaine": "switch", "fin": "_eco_stop"}
   },
   "etats": {
-    "eteint": ["Off", "Stand-by"],
-    "allumage": ["Allumage", "Commencez", "En attente de flamme"],
-    "chauffe": ["On"],
-    "nettoyage": ["Nettoyage"],
-    "extinction": ["Extinction", "Éteindre"],
-    "alarme": ["ALARM", "MEM. ALARM"]
+    "eteint": ["Off", "Éteindre", "Stand-by", "Standby"],
+    "allumage": ["Allumage", "Commencez", "En attente de flamme", "Starting", "Ignition", "Waiting for flame"],
+    "chauffe": ["On", "Work", "Working"],
+    "nettoyage": ["Nettoyage", "Cleaning"],
+    "extinction": ["Extinction", "Final cleaning", "Shutdown"],
+    "alarme": ["ALARM", "MEM. ALARM", "Alarm"]
   },
+  "alarme_ok": ["OK", "0", "None", "Aucune"],
   "limites": {"ecritures_par_jour": 25, "cloud": true}
 }
 ```
 
-Un texte inconnu reste affiché tel quel et marqué « à traduire », jamais deviné. Les mots anglais du même poêle (Starting, Cleaning…) s’ajoutent aux listes.
+Un texte inconnu reste affiché tel quel et marqué « à traduire », jamais deviné.
 
 ## Hors v0.1
 
@@ -113,8 +121,8 @@ Aucune commande (ni poêle, ni thermostat, ni clim), pas de planning actif, pas 
 
 **Le dépôt**, sur le modèle d’Énergie :
 
-- `custom_components/hestia_heating/` : `__init__.py`, `config_flow.py`, `coordinator.py`, `reader.py` (tout ce qui touche Home Assistant), `engine/` (Python pur, testé sans Home Assistant), `profiles/*.json`, `api.py`, `websocket.py`, `sensor.py`, `binary_sensor.py`, les copies du socle ; `frontend/` compilé.
-- `frontend/` (le panneau), `card/` (la carte), `tests/`, `docs/` (ce cahier, `technique.md`), `CLAUDE.md`, `README.md`, `hacs.json`, la CI (tests, hassfest, HACS, fichiers compilés à jour).
+- `custom_components/hestia_heating/` : `__init__.py`, `config_flow.py`, `coordinator.py`, `reader.py` (tout ce qui touche Home Assistant), `engine/` (Python pur, testé sans Home Assistant), `profiles/*.json`, `api.py`, `websocket.py`, `sensor.py`, `binary_sensor.py`, `panel.py`, les copies du socle ; `frontend/` compilé.
+- `frontend/` (le panneau), `card/` (la carte), `tests/` (avec une maison inventée, `maison_fictive.py`), `docs/` (ce cahier, `technique.md`), `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `hacs.json`, la CI (tests, hassfest, HACS, fichiers compilés à jour).
 - Version `0.1.0b1`. Commits au nom de hestiaFB.
 
 **Vitesse** : la brique écoute seulement les entités qu’elle a trouvées, recalcule la pièce qui a changé, et répond au panneau en moins de 0,25 s au labo. Aucun calcul sur l’historique en v0.1, sauf la courbe d’une pièce à la demande.

@@ -1,0 +1,27 @@
+{
+  "profil": "micronova_agua_iot",
+  "nom": "Micronova Agua IOT",
+  "integration": "aguaiot",
+  "lien": "https://github.com/vincentwolsink/home_assistant_micronova_agua_iot",
+  "roles": {
+    "thermostat": {"domaine": "climate", "principal": true},
+    "etat": {"domaine": "sensor", "fin": "_status"},
+    "alarme": {"domaine": "sensor", "fin": "_alarm"},
+    "fumees": {"domaine": "sensor", "fin": "_smoke_temperature"},
+    "air": {"domaine": "sensor", "fin": "_air_temperature"},
+    "flamme": {"domaine": "number", "fin": "_power", "min": 1, "max": 5},
+    "flamme_reelle": {"domaine": "sensor", "fin": "_real_power"},
+    "ecritures": {"domaine": "sensor", "fin": "_eeprom_writes_today"},
+    "eco_stop": {"domaine": "switch", "fin": "_eco_stop"}
+  },
+  "etats": {
+    "eteint": ["Off", "Éteindre", "Stand-by", "Standby"],
+    "allumage": ["Allumage", "Commencez", "En attente de flamme", "Starting", "Ignition", "Waiting for flame"],
+    "chauffe": ["On", "Work", "Working"],
+    "nettoyage": ["Nettoyage", "Cleaning"],
+    "extinction": ["Extinction", "Final cleaning", "Shutdown"],
+    "alarme": ["ALARM", "MEM. ALARM", "Alarm"]
+  },
+  "alarme_ok": ["OK", "0", "None", "Aucune"],
+  "limites": {"ecritures_par_jour": 25, "cloud": true}
+}

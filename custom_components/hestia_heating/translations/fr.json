@@ -1,0 +1,63 @@
+{
+  "title": "Hestia Heating",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Activer Hestia Chauffage",
+        "description": "Hestia Chauffage lit vos thermostats (Versatile Thermostat d’abord), votre poêle à granulés et votre planning, et dit qui chauffe, pourquoi et ce qui vient ensuite. **Elle ne commande rien.**\n\nTout se règle ensuite dans l’onglet Chauffage du panneau Hestia-FB."
+      }
+    },
+    "abort": {
+      "already_configured": "Hestia Chauffage est déjà activée. Tout se règle dans l’onglet Chauffage du panneau Hestia-FB."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hestia Chauffage",
+        "description": "Tout se règle dans l’onglet Chauffage du panneau Hestia-FB.\n\n[Ouvrir l’onglet Chauffage]({link})",
+        "submit": "Fermer"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "maison_etat": {
+        "name": "État du chauffage",
+        "state": {
+          "chauffe": "Chauffe",
+          "rafraichit": "Rafraîchit",
+          "repos": "Au repos",
+          "arret": "Arrêt",
+          "inconnu": "Inconnu"
+        }
+      },
+      "poele_etat": {
+        "name": "État du poêle",
+        "state": {
+          "eteint": "Éteint",
+          "allumage": "Allumage",
+          "chauffe": "Chauffe",
+          "nettoyage": "Nettoyage",
+          "extinction": "Extinction",
+          "alarme": "Alarme",
+          "inconnu": "Inconnu"
+        }
+      },
+      "poele_flamme": {
+        "name": "Flamme du poêle"
+      },
+      "poele_granules_jours": {
+        "name": "Granulés restants"
+      }
+    },
+    "binary_sensor": {
+      "poele_alarme": {
+        "name": "Alarme du poêle"
+      },
+      "piece_en_chauffe": {
+        "name": "{piece} en chauffe"
+      }
+    }
+  }
+}

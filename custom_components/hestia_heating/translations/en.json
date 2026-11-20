@@ -1,0 +1,63 @@
+{
+  "title": "Hestia Heating",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Hestia Heating",
+        "description": "Hestia Heating reads your thermostats (Versatile Thermostat first), your pellet stove and your schedules, and says what heats, why and what comes next. **It controls nothing.**\n\nEverything else is set in the Heating tab of the Hestia-FB panel."
+      }
+    },
+    "abort": {
+      "already_configured": "Hestia Heating is already set up. Everything is set in the Heating tab of the Hestia-FB panel."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hestia Heating",
+        "description": "Everything is set in the Heating tab of the Hestia-FB panel.\n\n[Open the Heating tab]({link})",
+        "submit": "Close"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "maison_etat": {
+        "name": "Heating state",
+        "state": {
+          "chauffe": "Heating",
+          "rafraichit": "Cooling",
+          "repos": "Idle",
+          "arret": "Off",
+          "inconnu": "Unknown"
+        }
+      },
+      "poele_etat": {
+        "name": "Stove state",
+        "state": {
+          "eteint": "Off",
+          "allumage": "Igniting",
+          "chauffe": "Heating",
+          "nettoyage": "Cleaning",
+          "extinction": "Shutting down",
+          "alarme": "Alarm",
+          "inconnu": "Unknown"
+        }
+      },
+      "poele_flamme": {
+        "name": "Stove flame"
+      },
+      "poele_granules_jours": {
+        "name": "Pellets left"
+      }
+    },
+    "binary_sensor": {
+      "poele_alarme": {
+        "name": "Stove alarm"
+      },
+      "piece_en_chauffe": {
+        "name": "{piece} heating"
+      }
+    }
+  }
+}

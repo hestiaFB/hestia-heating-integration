@@ -1,0 +1,63 @@
+/* Hestia Chauffage's own pieces, on top of the shared charter (ui/hestia-charte.css): the stove's colour, the house
+   band, the rooms' list, the flame gauge, the day's curves and the planning's lanes (cards' mock-up of 20 Nov. 2026). */
+:host { display:block; --hc-stove: var(--hestia-stove-color, oklch(.86 .1 80)); --hc-off: color-mix(in srgb, var(--nw-fg) 30%, transparent); }
+ha-card { padding:18px; display:flex; flex-direction:column; gap:12px; container-type:inline-size; min-width:0; box-sizing:border-box; }
+.head { display:flex; align-items:center; gap:10px; min-width:0; }
+.head .nw-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nw-chip.stove { --c:var(--hc-stove); } .nw-chip.heat { --c:var(--nw-heat); } .nw-chip.cold { --c:var(--nw-cold); } .nw-chip.calm { --c:var(--nw-calm); }
+.nw-chip.act { --c:var(--nw-act); } .nw-chip.alert { --c:var(--nw-alert); } .nw-chip.off { --c:var(--hc-off); }
+.band { --c:var(--nw-calm); padding:16px; border-radius:16px; border:1px solid var(--nw-line); background:color-mix(in oklab, var(--c) 16%, var(--nw-bg)); }
+.band.chauffe { --c:var(--hc-stove); } .band.rafraichit { --c:var(--nw-cold); }
+.band .kicker { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:4px; font-size:var(--nw-fs-label); line-height:14px; font-weight:650; letter-spacing:.08em; text-transform:uppercase; }
+.band .kicker i { font-style:normal; text-transform:none; letter-spacing:0; font-weight:600; color:var(--nw-fg2); }
+.band .title { font-size:min(var(--nw-fs-value), 8cqi); font-weight:650; letter-spacing:-.03em; line-height:1.1; text-wrap:balance; }
+.band .line { margin-top:6px; color:var(--nw-fg2); }
+.band .line b { color:var(--nw-fg); font-weight:650; }
+.rooms { display:flex; flex-direction:column; }
+.room { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:8px 2px; border-top:1px solid color-mix(in srgb, var(--nw-fg) 6%, transparent);
+  background:none; border-left:0; border-right:0; border-bottom:0; text-align:left; cursor:pointer; width:100%; box-sizing:border-box; }
+.room:first-child { border-top:0; }
+.room .n { font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.room .t { font-variant-numeric:tabular-nums; font-weight:650; text-align:right; white-space:nowrap; }
+.room .t small { font-weight:500; color:var(--nw-fg2); }
+.demand { width:56px; height:6px; border-radius:3px; background:color-mix(in srgb, var(--nw-fg) 8%, transparent); overflow:hidden; }
+.demand i, .bar i { display:block; height:100%; border-radius:3px; background:color-mix(in oklab, var(--nw-heat) 80%, var(--nw-fg) 10%); }
+.bar { height:8px; border-radius:4px; background:color-mix(in srgb, var(--nw-fg) 8%, transparent); overflow:hidden; margin:8px 0; }
+.reading { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.temp { font-size:min(var(--nw-fs-temp), 15cqi); font-weight:300; letter-spacing:-.05em; line-height:1; position:relative; padding-right:24px; width:fit-content; }
+.temp sup { position:absolute; right:0; top:.3em; font-size:var(--nw-fs-text); font-weight:500; letter-spacing:0; color:var(--nw-fg2); }
+.target { text-align:right; }
+.target b { display:block; font-size:var(--nw-fs-case); font-weight:600; letter-spacing:-.015em; }
+.slope { font-size:var(--nw-fs-small); color:var(--nw-fg2); margin-top:4px; }
+.flame-row { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.flames { display:flex; gap:5px; align-items:flex-end; height:46px; }
+.flames i { display:block; width:13px; border-radius:4px; background:color-mix(in oklab, var(--hc-stove) 30%, transparent); }
+.flames i.on { background:color-mix(in oklab, var(--hc-stove) 92%, var(--nw-fg) 8%); }
+.flames i.ask { outline:2px dashed var(--nw-fg2); outline-offset:2px; }
+.chart { width:100%; height:auto; display:block; overflow:visible; }
+.chart text { font-size:9px; fill:var(--nw-fg2); font-family:inherit; }
+.chart .grid { stroke:color-mix(in srgb, var(--nw-fg) 10%, transparent); stroke-width:1; }
+.chart .now { stroke:var(--nw-fg2); stroke-width:1; }
+.chart path { fill:none; stroke-width:2; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+.chart .flame { stroke:var(--hc-stove); } .chart .flame.area { fill:color-mix(in oklab, var(--hc-stove) 22%, transparent); stroke:none; }
+.chart .temp { stroke:var(--nw-heat); } .chart .salon { stroke:var(--nw-cold); stroke-dasharray:4 4; }
+.chart .target { stroke:var(--nw-fg2); stroke-dasharray:3 3; stroke-width:1.5; }
+.sw { width:12px; height:8px; border-radius:2px; display:inline-block; }
+.sw.flame { background:var(--hc-stove); } .sw.temp { background:var(--nw-heat); } .sw.salon { background:var(--nw-cold); } .sw.target { background:var(--nw-fg2); }
+.short { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; }
+.short .temp { font-size:40px; padding-right:20px; }
+.short b { display:block; font-size:var(--nw-fs-text); font-weight:650; }
+.lanes { display:flex; flex-direction:column; gap:8px; }
+.lane, .hours { display:grid; grid-template-columns:110px 1fr; gap:10px; align-items:center; }
+.lane .n { font-size:var(--nw-fs-small); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hours > div { position:relative; height:14px; font-size:var(--nw-fs-label); color:var(--nw-fg2); }
+.hours > div span { position:absolute; transform:translateX(-50%); white-space:nowrap; }
+.hours > div span:first-child { transform:none; } .hours > div span:last-child { transform:translateX(-100%); }
+.track { position:relative; height:12px; border-radius:6px; background:color-mix(in srgb, var(--nw-fg) 8%, transparent); overflow:hidden; }
+.track i { position:absolute; top:0; bottom:0; }
+.track .now { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--nw-fg); border-radius:1px; }
+.t-poele { background:color-mix(in oklab, var(--hc-stove) 90%, transparent); } .t-confort { background:color-mix(in oklab, var(--nw-heat) 85%, transparent); }
+.t-eco { background:color-mix(in oklab, var(--nw-cold) 70%, transparent); } .t-hors_gel, .t-arret { background:color-mix(in srgb, var(--nw-fg) 12%, transparent); }
+.note { font-size:var(--nw-fs-small); color:var(--nw-fg2); text-align:center; margin:0; }
+.empty { color:var(--nw-fg2); }
+@container (max-width:420px) { .lane, .hours { grid-template-columns:78px 1fr; } .target { text-align:left; } ha-card { padding:14px; } }
