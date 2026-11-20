@@ -1,6 +1,19 @@
 # Changements
 
-## À venir — 0.3.0b1
+## À venir — 0.4.0b1
+
+Le pilote du poêle, « à l’ombre » : Hestia dit ce qu’elle ferait du poêle, à côté de ce que font vos automatisations. Elle ne le commande pas.
+
+### Nouveautés
+- **Le pilote, à l’ombre**, sur la page Poêle : « Hestia ferait » (démarrer, flamme 3, arrêter, couper, ou rien) et pourquoi, face à « La maison fait », avec « d’accord » ou « autrement ».
+- **Le journal du pilote**, chaque jour : ce que Hestia aurait fait, ce que la maison a fait, et combien de fois elles étaient d’accord.
+- **Ses règles**, en clair : démarrage au passage du thermostat en boost (jamais de lui-même, une fois par jour), flamme selon la demande du thermostat avec une marge, flamme 1 avant que la pièce dépasse sa consigne, 4 ordres du jour gardés pour pouvoir éteindre, arrêt vérifié, sécurités.
+- Dans Réglages, « Le pilote de Hestia » : à l’ombre (par défaut) ou éteint.
+
+### Ce qui ne change pas
+- Le pilote n’envoie rien au poêle ni à son thermostat. Un pilote qui commande viendra ensuite, en option, éteint par défaut, et jamais au labo.
+
+## 0.3.0b1
 
 Le planning Hestia : Hestia Chauffage a son propre planning, réglé dans l’onglet, et continue de lire Scheduler pour les pièces qui le suivent. Il commence « à l’ombre » : il montre ce qu’il ferait, sans rien envoyer.
 

@@ -21,7 +21,7 @@ from homeassistant.util import dt as dt_util
 
 from . import reader
 from .const import API_KEY, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
-from .engine import home_planning, house, phrases, profiles
+from .engine import home_planning, house, phrases, pilot, profiles
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,12 +34,14 @@ TICK = timedelta(minutes=1)
 # A day's curve read from the recorder is kept this long.
 DAY_CACHE_S = 120
 DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
-            "planning": None}
+            "planning": None, "pilote": "ombre"}
 # What became of a slot of the planning Hestia, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "à l’ombre", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
         "sans_prereglage": "préréglage absent du thermostat"}
 JOURNAL_MAX = 60
+# The stove's pilot « à l'ombre »: its journal says what Hestia would have done and what the house did.
+PILOT_SHOWN = 20
 
 
 class HeatingCoordinator:
@@ -51,6 +53,9 @@ class HeatingCoordinator:
         self.state_store = Store(hass, 1, PLANNING_STATE_KEY)
         self.applied: dict[str, dict] = {}
         self.journal: list[dict] = []
+        # The stove's pilot: its memory (kept with the planning's state) and today's journal.
+        self.pilot_memory: dict = {}
+        self.pilot_journal: list[dict] = []
         self.settings: dict = dict(DEFAULTS)
         self.model: dict = home_planning.default()
         self.profiles: list[profiles.Profile] = []
@@ -98,7 +103,9 @@ class HeatingCoordinator:
         stored = await self.store.async_load() or {}
         self.settings = {**DEFAULTS, **{k: v for k, v in stored.items() if k in DEFAULTS}}
         self.model = home_planning.loaded(self.settings.get("planning"), dt_util.now().date())
-        self.applied = (await self.state_store.async_load() or {}).get("pieces") or {}
+        state = await self.state_store.async_load() or {}
+        self.applied = state.get("pieces") or {}
+        self.pilot_memory = state.get("pilote") or {}
         folder = Path(__file__).parent / "profiles"
         self.profiles = await self.hass.async_add_executor_job(profiles.load_all, folder)
         self._discover()
@@ -193,7 +200,8 @@ class HeatingCoordinator:
             today = snap["now"].date().isoformat()
             self.journal = [j for j in self.journal if j.get("jour") == today]
             snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
-                        tarif=reader.energy_tariff(self.hass) if self._energy_used() else None)
+                        tarif=reader.energy_tariff(self.hass) if self._energy_used() else None,
+                        pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory)
             view = house.build(snap)
             due, waiting = view["planning"].pop("_dus"), view["planning"].pop("_sans_repere")
             # Orders only once Home Assistant runs: a thermostat that loads after this brick is not yet there.
@@ -202,6 +210,7 @@ class HeatingCoordinator:
                 view = house.build(snap)
                 view["planning"].pop("_dus")
                 view["planning"].pop("_sans_repere")
+            self._pilot(view.pop("_pilote", None), view.get("poele"), today)
         except Exception:  # noqa: BLE001 - a strange state never stops the brick: the last good view stays
             _LOGGER.exception("Hestia Chauffage n'a pas pu lire la maison")
             return
@@ -213,6 +222,23 @@ class HeatingCoordinator:
         self.data = view
         self.last_build_ms = round((time.perf_counter() - started) * 1000, 2)
         self._notify()
+
+    def _pilot(self, state: dict | None, stove: dict | None, today: str) -> None:
+        """Keep the pilot's memory and journal, and put today's journal in the stove's view. Nothing is sent."""
+        if state is not None:
+            if state["memoire"] != self.pilot_memory:
+                self.pilot_memory = state["memoire"]
+                self._save_state()
+            self.pilot_journal = [j for j in self.pilot_journal if j.get("jour") == today]
+            self.pilot_journal += [{"jour": today, **e} for e in state["evenements"]]
+            self.pilot_journal = self.pilot_journal[-JOURNAL_MAX:]
+        if stove and stove.get("pilote", {}).get("mode") == "ombre":
+            house = [j for j in self.pilot_journal if j["qui"] == "maison" and j.get("accord") is not None]
+            stove["pilote"]["journal"] = self.pilot_journal[-PILOT_SHOWN:]
+            stove["pilote"]["accord_jour"] = {"oui": sum(1 for j in house if j["accord"]), "sur": len(house)}
+
+    def _save_state(self) -> None:
+        self.state_store.async_delay_save(lambda: {"pieces": self.applied, "pilote": self.pilot_memory}, 5)
 
     def _extensions(self) -> list[dict]:
         """What the brick reads, installed or not, and switched on or off in Extensions."""
@@ -283,7 +309,7 @@ class HeatingCoordinator:
             if fate in ("envoye", "eteint", "sans_prereglage", "recopie"):
                 _LOGGER.info("Planning Hestia, %s %s : %s", order["nom"], order["niveau"], FATE[fate])
         self.journal = self.journal[-JOURNAL_MAX:]
-        self.state_store.async_delay_save(lambda: {"pieces": self.applied}, 5)
+        self._save_state()
 
     def _send(self, target: dict) -> str:
         """One thermostat: its preset (a Versatile Thermostat), else its set point. Never switched on or off, never
@@ -318,6 +344,8 @@ class HeatingCoordinator:
     async def async_set_settings(self, changes: dict) -> None:
         """Raises ValueError (in French) when the planning sent is not readable: nothing is saved then."""
         settings = dict(self.settings)
+        if "pilote" in changes and changes["pilote"] not in pilot.MODES:
+            raise ValueError("mode du pilote inconnu")
         if "planning" in changes:
             model = home_planning.clean(changes["planning"], dt_util.now().date())
             changes = {**changes, "planning": model}

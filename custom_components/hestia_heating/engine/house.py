@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 
-from . import home_planning, phrases, planning, sources, stove as stove_engine
+from . import home_planning, phrases, pilot, planning, sources, stove as stove_engine
 from .phrases import degrees, hour, number
 
 # The tone of each room's chip in the panel and the card (the colours of the charte).
@@ -89,6 +89,15 @@ def build(snap: dict) -> dict:
     if stove_thermostat:
         stove_thermostat["etat"] = ("chauffe" if burning else "arret" if stove_thermostat["mode"] == "off"
                                     else "inconnu" if stove and stove["etat"] == "inconnu" else "repos")
+    # The stove's pilot, « à l'ombre » (0.4): what Hestia would do, next to what the house does. It sends nothing.
+    pilot_state = None
+    if stove:
+        mode = snap.get("pilote") if snap.get("pilote") in pilot.MODES else "ombre"
+        stove["pilote"] = {"mode": mode}
+        if mode == "ombre":
+            decision, memory, events = pilot.decide(stove, stove_thermostat, snap.get("pilote_memoire"), now)
+            stove["pilote"].update(decision)
+            pilot_state = {"memoire": memory, "evenements": events}
     # 3. The planning of each lane (the stove, each room): the house's own where Hestia sets it, else Scheduler's.
     for s in srcs:
         s["piece"] = s["piece"] or "thermostat_" + s["id"].split(".", 1)[1]
@@ -189,6 +198,7 @@ def build(snap: dict) -> dict:
                            "cibles": list(s.targets)} for s in schedules],
         },
         "a_regler": _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules) + plan["a_regler"],
+        "_pilote": pilot_state,
     }
 
 

@@ -11,7 +11,7 @@ from .const import DOMAIN
 VIEW_VERSION = 1
 # What the cards read: the extensions, the schedules' details and the « à régler » stay out of their view.
 CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning")
-SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning")
+SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote")
 # The planning's parts only the tab needs (the editor, the journal).
 PLANNING_TAB_ONLY = ("plannings", "pieces", "journal", "journees", "jours")
 
@@ -30,6 +30,9 @@ def card_view(data: dict) -> dict:
     view = {k: data[k] for k in CARD_KEYS if k in data}
     if view.get("planning"):
         view["planning"] = {k: v for k, v in view["planning"].items() if k not in PLANNING_TAB_ONLY}
+    if (view.get("poele") or {}).get("pilote"):
+        # The pilot's journal is the tab's: the cards say only what Hestia would do now.
+        view["poele"] = {**view["poele"], "pilote": {k: v for k, v in view["poele"]["pilote"].items() if k != "journal"}}
     return view
 
 

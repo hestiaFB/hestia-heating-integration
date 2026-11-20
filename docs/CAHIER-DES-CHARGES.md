@@ -2,7 +2,7 @@
 
 Version du 20 novembre 2026. Document vivant : il suit la brique à chaque version.
 
-**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute le planning Hestia (journées types, semaine type, un jour à part, matins froids, conseils), d’après la maquette validée le 20 novembre ; il commence « à l’ombre ». La 0.4 (pilote du poêle « à l’ombre ») suit, décrite plus bas. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
+**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute le planning Hestia (journées types, semaine type, un jour à part, matins froids, conseils), d’après la maquette validée le 20 novembre ; il commence « à l’ombre ». La 0.4 ajoute le pilote du poêle « à l’ombre » : il dit ce qu’il ferait, à côté de ce que font les automatisations de la maison, sans rien envoyer. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
 
 ## Place dans l’écosystème
 
