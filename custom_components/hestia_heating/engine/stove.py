@@ -30,6 +30,9 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
     state, known = profile.translate(text)
     alarm_text = _role(roles, "alarme").get("state")
     alarm = profile.alarm(alarm_text)
+    # Since when the stove is in alarm: its state's change, or its alarm text's (the pilot waits 2 minutes).
+    alarm_since = [r.get("last_changed") for r, on in ((status, state == "alarme"), (_role(roles, "alarme"), alarm))
+                   if on and isinstance(r.get("last_changed"), datetime)]
     if state == "alarme":
         alarm = True
     flame_spec = profile.roles.get("flamme") or {}
@@ -39,6 +42,7 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
     eco = _role(roles, "eco_stop").get("state")
     plug_w = (plug or {}).get("w")
     since = status.get("last_changed")
+    flame_since = _role(roles, "flamme").get("last_changed")
     return {
         "nom": device.get("name") or profile.name,
         "fabricant": device.get("maker"),
@@ -54,12 +58,14 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "depuis": since.isoformat() if isinstance(since, datetime) else None,
         "flamme": int(real_flame) if real_flame is not None else (int(set_flame) if set_flame is not None else None),
         "flamme_reglee": None if set_flame is None else int(set_flame),
+        "flamme_depuis": flame_since.isoformat() if isinstance(flame_since, datetime) else None,
         "flamme_min": int(flame_spec.get("min", 1)),
         "flamme_max": int(flame_spec.get("max", 5)),
         "fumees": _number(_role(roles, "fumees").get("state")),
         "air": _number(_role(roles, "air").get("state")),
         "alarme": alarm,
         "alarme_texte": None if alarm_text in (None, "unknown", "unavailable") else alarm_text,
+        "alarme_depuis": min(alarm_since).isoformat() if alarm_since else None,
         "eco_stop": None if eco in (None, "unknown", "unavailable") else eco == "on",
         "ecritures": None if writes is None else int(writes),
         "ecritures_max": profile.limits.get("ecritures_par_jour"),

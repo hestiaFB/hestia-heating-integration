@@ -276,12 +276,13 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         self.assertEqual(c.data["poele"]["pilote"]["action"], "arreter")
         await change("sensor.poele_status", "Éteindre")
         await change("climate.vt_poele", "heat", preset_mode="boost")
-        self.assertEqual(c.data["poele"]["pilote"]["action"], "demarrer")
+        # The house is at 20 °C, the mild season: Hestia would ask before starting the stove.
+        self.assertEqual(c.data["poele"]["pilote"]["action"], "demander")
         said = [(j["qui"], j["texte"], j["accord"]) for j in c.data["poele"]["pilote"]["journal"]]
         self.assertEqual(said, [("hestia", "Hestia arrêterait le poêle.", None), ("maison", "La maison a éteint le poêle.", True),
-                                ("hestia", "Hestia démarrerait le poêle.", None)])
+                                ("hestia", "Hestia demanderait votre accord pour démarrer le poêle (saison douce).", None)])
         self.assertEqual(c.data["poele"]["pilote"]["accord_jour"], {"oui": 1, "sur": 1})
-        self.assertEqual(c.pilot_memory["demarrages"], 1)
+        self.assertTrue(c.pilot_memory["saison_douce"])
         self.assertNotIn("journal", card_view(c.data)["poele"]["pilote"])
         self.assertEqual(self.calls, [], "the pilot in the shade never calls a service")
         with self.assertRaises(ValueError):

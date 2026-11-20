@@ -398,11 +398,11 @@ export class HestiaHeatingSetup extends LitElement {
   const agree=(ok:boolean|null|undefined,yes:string,no:string)=>ok==null?nothing:html`<span class=${'chip '+(ok?'calm':'act')}>${ok?yes:no}</span>`;
   const day=p.accord_jour;
   const rules:[string,string][]=[
-   ['Démarrage','Au passage du thermostat en boost, le poêle éteint. Jamais de lui-même, une fois par jour au plus. Pas si la pièce est déjà à sa consigne + 0,5 °C, le poêle en alarme ou le thermostat éteint.'],
-   ['Flamme','La demande du thermostat : 85 % donne 5, 65 % donne 4, 45 % donne 3, sinon 2, avec 7 points de marge. Flamme 1 si la pièce va dépasser sa consigne de 0,5 °C dans 15 min. Baisse tout de suite, hausse au plus toutes les 30 min.'],
-   ['Ordres du jour',`Il en garde 4 pour pouvoir éteindre${s.ecritures_max?` (la mémoire du poêle en accepte ${s.ecritures_max} par jour)`:''}.`],
-   ['Arrêt','Thermostat hors gel ou éteint. Confirmé par l’état du poêle, ses fumées sous 60 °C et sa prise sous 70 W.'],
-   ['Sécurités','Alarme, poêle muet 15 min, thermostat en sécurité, pièce 2 °C au-dessus de sa consigne : il coupe.']];
+   ['Démarrage','Au passage du thermostat en boost (ou en chauffe, déjà en boost), le poêle éteint. Jamais de lui-même. Pas si le thermostat est éteint, le poêle en alarme ou muet, sa pièce au-dessus de 28 °C, ou la maison déjà à la consigne. En saison douce (la maison à 18 °C ou plus), il vous demande d’abord.'],
+   ['Flamme','La demande du thermostat : 85 % donne 5, 65 % donne 4, 45 % donne 3, sinon 2. La flamme du poêle tient tant qu’elle reste dans les paliers de la demande ± 7 points. Flamme 1 si la pièce va dépasser sa consigne de 0,5 °C dans 15 min, et tant qu’elle y reste. Baisse tout de suite, hausse 30 min après le dernier changement de flamme, sauf deux paliers d’écart.'],
+   ['Ordres du jour',`Il en garde 4 pour pouvoir éteindre (la mémoire du poêle en accepte ${s.ecritures_max??20} par jour).`],
+   ['Arrêt','Thermostat hors gel, éteint 30 s, ou la maison assez chaude 2 min (à 1 °C ou moins de la consigne, ou à la consigne en boost). Confirmé par l’état du poêle, ses fumées sous 60 °C ou sa prise sous 70 W.'],
+   ['Sécurités','Une alarme qui dure 2 min, la pièce du poêle au-dessus de 28 °C : il coupe. Le poêle muet 15 min : il vous prévient.']];
   return html`${listSection('Le pilote, à l’ombre',[
     listRow({label:html`<b>Hestia ferait</b>`,sub:p.texte,value:html`<span class=${'chip '+(p.ton??'off')}>${p.titre}</span>`}),
     listRow({label:html`<b>La maison fait</b>`,sub:day?.sur?`Aujourd’hui, la maison a fait comme Hestia ${day.oui} fois sur ${day.sur}.`:'Ce que font vos automatisations, vu de dehors : l’état du poêle et sa flamme.',
