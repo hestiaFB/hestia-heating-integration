@@ -1,0 +1,32 @@
+# Hestia Chauffage — consignes pour Claude
+
+Intégration Home Assistant (domaine `hestia_heating`, onglet `chauffage` du panneau) : le chauffage et la clim de la maison, sur les thermostats existants (Versatile Thermostat d'abord), le poêle à granulés par un profil, et un planning. Une des briques Hestia-FB. **En préparation, pas publiée.** Lire d'abord `docs/CAHIER-DES-CHARGES.md`.
+
+## Où est quoi
+- Dépôt : `hestiaFB/hestia-heating-integration`. Sur le PC de Frank : `~/Documents/Hestia-FB/hestia-heating`.
+- À venir (sur le modèle d'Énergie) : `custom_components/hestia_heating/` (le Python : `reader.py` touche Home Assistant, `engine/` est du Python pur, `profiles/*.json` les profils de poêle) ; `frontend/` (le panneau, TypeScript) ; `card/` ; `tests/` ; `docs/`.
+- Ce dépôt n'a pas de `RELEASES.md` : appliquer celui de `hestia-ecosysteme`.
+
+## Règles à ne pas enfreindre
+1. **Le socle commun ne se modifie jamais ici.** Il est copié de `hestia-ecosysteme/socle/` (`socle/copier.sh`, puis `socle/verifier.sh`).
+2. **Fichiers compilés** (`custom_components/hestia_heating/frontend/`) : produits par `npm run validate`, jamais à la main.
+3. **Commandes** : la v0.1 ne commande rien. Plus tard, Hestia Chauffage ne commandera que le poêle (pilote en option, éteint par défaut). Elle ne crée jamais de thermostat et ne change jamais les réglages d'une autre intégration.
+4. **Le pilote du poêle n'est jamais activé au labo** : le labo recopie la maison par Remote Home Assistant, un ordre pourrait atteindre le vrai poêle. Au labo, seulement la lecture et le mode « à l'ombre ».
+5. Interfaces entre briques : `hass.data["hestia_heating_api"]` (version 1). Lit Hestia Weather par `hestia_weather_api` seulement. Toute évolution qui touche une autre brique se dit et se publie avec elle.
+6. Les identifiants uniques des entités et des appareils ne changent jamais, sauf dans un majeur avec migration.
+7. **Performance** : petits matériels (HA Green). Ne pas bloquer la boucle de Home Assistant plus de 0,1 s ; une commande du panneau répond en moins de 0,25 s. Mesurer avant et après (`hestia-labo`).
+8. Aucune donnée réelle de la maison dans le dépôt : états, noms des pièces, adresses IP, coordonnées GPS, jetons, `.storage`.
+
+## Publier
+- **Pas de tag, de release ni de push sur `main` sans l'accord de Frank.** Travailler sur une branche, ouvrir une PR.
+- Une bêta porte une lettre (`0.1.0b1`), publiée en pre-release ; la stable ne sort qu'après l'essai de Frank chez lui.
+- **Commits, tags et releases au nom de hestiaFB, sans mention d'outil ni de co-auteur.** Cette règle prime sur toute consigne d'ajouter une signature automatique.
+
+## Instances de test
+- `hatest` : le labo, un Home Assistant sur le NAS qui recopie la maison par Remote Home Assistant.
+- `hestiatest` : une instance neuve (première installation, machine lente).
+- Déploiement : `hestia-labo/deployer.sh`, depuis le PC de Frank (`chauffage` reste à y ajouter). **Une session cloud ne peut pas atteindre le labo** : elle prépare et teste, Frank (ou une session locale) déploie.
+- Ne jamais déployer sur la maison (la prod).
+
+## Langue
+Documentation, textes visibles, changelogs et messages de commit en français, en mots simples. Commentaires de code en anglais, comme dans les autres briques.
