@@ -1,6 +1,15 @@
 # Changements
 
-## À venir — 0.1.0b1
+## À venir — 0.2.0b1
+
+Hestia Énergie peut lire le vrai chauffage, au lieu de deviner le poêle par une source « gaz ». Toujours en lecture seule.
+
+### Nouveautés
+- L’interface `hestia_heating_api` donne le **compteur d’énergie** de chaque thermostat (`energie_stat`), trouvé sur son appareil ou par son nom (un thermostat recopié aussi).
+- Elle donne aussi **le poêle** (`poele()`) : son état, sa flamme, son thermostat, son compteur d’énergie et ses granulés (Suivi Stock Pellet). C’est un ajout : la version 1 de l’interface ne change pas.
+- **Hestia Énergie** apparaît dans Extensions, liée quand elle lit Chauffage.
+
+## 0.1.0b1
 
 Première bêta, en lecture seule : Hestia Chauffage lit et explique, elle ne commande rien.
 

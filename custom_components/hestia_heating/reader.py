@@ -34,7 +34,7 @@ BRICK = "hestia_heating"     # said to Hestia Weather when listening, so that it
 @dataclass
 class Found:
     """What `discover()` found: entity ids only, read again by `snapshot()` on every change."""
-    climates: list[dict] = field(default_factory=list)      # {entity_id, platform, room, vt}
+    climates: list[dict] = field(default_factory=list)      # {entity_id, platform, room, vt, energie}
     stove: dict | None = None                                # {profile, device, roles: {role: entity_id}, entities}
     plug: str | None = None
     plugs: list[dict] = field(default_factory=list)          # every power sensor that could be the stove's plug
@@ -121,6 +121,9 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
             continue
         found.climates.append({"entity_id": state.entity_id, "platform": platform, "room": _area(entities, devices, entry),
                                "vt": vt})
+    # 2b. Each thermostat's energy counter (kWh, kept as a statistic, read by Hestia Énergie): an energy sensor of
+    # the thermostat's device, else one whose id starts with the thermostat's (« sensor.vt_bureau_energy », a copy).
+    _energy_counters(hass, entities, found.climates)
     # 3. The stove's plug: chosen in Réglages, else a power sensor named after the stove (a plug first), off the
     # stove's device and not one of a thermostat's own sensors (« sensor.thermostat_poele_mean_power_cycle »).
     stove_device = (found.stove or {}).get("device_id")
@@ -156,6 +159,29 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
     found.workday = next((e.entity_id for e in entities.entities.values()
                           if e.platform == WORKDAY and e.domain == "binary_sensor" and not e.disabled_by), None)
     return found
+
+
+def _energy_counters(hass: HomeAssistant, entities, climates: list[dict]) -> None:
+    on_device: dict[str, list[str]] = {}
+    counters: list[str] = []
+    for state in hass.states.async_all("sensor"):
+        a = state.attributes
+        if a.get("device_class") != "energy" or a.get("state_class") not in ("total", "total_increasing"):
+            continue
+        entry = entities.async_get(state.entity_id)
+        if entry is not None and entry.disabled_by:
+            continue
+        counters.append(state.entity_id)
+        if entry is not None and entry.device_id:
+            on_device.setdefault(entry.device_id, []).append(state.entity_id)
+    for c in climates:
+        stem = c["entity_id"].split(".", 1)[1] + "_"
+        entry = entities.async_get(c["entity_id"])
+        mine = on_device.get(entry.device_id, []) if entry is not None and entry.device_id else []
+        named = [e for e in counters if e.split(".", 1)[1].startswith(stem)]
+        pick = [e for e in mine if e in named] or (mine if len(mine) == 1 else []) or named
+        # « sensor.salon_energy » before « sensor.salon_test_energy »: the shortest id is the thermostat's own.
+        c["energie"] = min(pick, key=len) if pick else None
 
 
 def _stove_by_ids(hass: HomeAssistant, profile: Profile) -> dict | None:
@@ -215,7 +241,7 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
             continue
         attrs = state.attributes
         climates.append({"entity_id": c["entity_id"], "state": state.state, "attributes": attrs, "platform": c["platform"],
-                         "room": c["room"], "name": attrs.get("friendly_name") or c["entity_id"]})
+                         "room": c["room"], "name": attrs.get("friendly_name") or c["entity_id"], "energie": c.get("energie")})
         window = attrs.get("window_manager")
         sensor = window.get("window_sensor_entity_id") if isinstance(window, dict) else None
         if sensor and (ws := hass.states.get(sensor)) is not None:

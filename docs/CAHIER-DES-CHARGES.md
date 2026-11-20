@@ -2,7 +2,7 @@
 
 Version du 20 novembre 2026. Document vivant : il suit la brique à chaque version.
 
-**Où en est la v0.1** : codée le 20 novembre 2026 (version `0.1.0b1`), en lecture seule, testée sur une maison inventée dans un vrai Home Assistant. Pas encore essayée au labo. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
+**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 (planning maison) et la 0.4 (pilote du poêle « à l’ombre ») suivent, décrites plus bas. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
 
 ## Place dans l’écosystème
 
