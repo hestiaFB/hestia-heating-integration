@@ -127,7 +127,11 @@ class TheHouseView(unittest.TestCase):
         due = {d["planning"]: d for d in view["planning"]["_dus"]}
         self.assertEqual((due["sejour"]["niveau"], due["sejour"]["actif"]), ("hors_gel", False))
         self.assertEqual(due["sejour"]["cibles"], [{"id": "climate.vt_sejour", "nom": "Radiateur séjour", "vt": True,
-                                                    "preset": "frost", "consigne": 7.0, "bloque": None, "recopie": False}])
+                                                    "preset": "frost", "consigne": 7.0, "bloque": None, "recopie": False,
+                                                    "autorise": False}])
+        # Allowed in Réglages (« Ce que Hestia peut régler »): the order may be sent.
+        view = self.build(now=m.NOW.replace(hour=22, minute=31), applied=applied, autorises=["climate.vt_sejour"])
+        self.assertTrue(next(d for d in view["planning"]["_dus"] if d["planning"] == "sejour")["cibles"][0]["autorise"])
         self.assertEqual(due["poele"]["cibles"][0]["bloque"], "Planning poêle")
         self.assertIn("climate.clim_atelier", view["planning"]["_sans_repere"])   # no baseline yet: none sent
 

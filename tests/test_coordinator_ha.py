@@ -46,7 +46,7 @@ class SendsThePlanning:
     """A planning Hestia whose thermostat went to confort two minutes ago (éco for three hours before); the last change
     dealt with put half an hour back, so that this one is due."""
 
-    async def _planning(self, thermostat, actif=True):
+    async def _planning(self, thermostat, actif=True, allowed=True):
         hass = self.hass
         hass.set_state(CoreState.running)
         self.sent = []
@@ -60,7 +60,7 @@ class SendsThePlanning:
         week = eco_between(now - timedelta(hours=3), now - timedelta(minutes=2))
         model = {"plannings": {"essai": {"nom": "Essai", "actif": actif, "jours": "chaque", "reste": "confort",
                                          "plages": week, "thermostats": [thermostat]}}}
-        await c.async_set_settings({"planning": model})
+        await c.async_set_settings({"planning": model, "planning_autorises": [thermostat] if allowed else []})
         await hass.async_block_till_done()
         self.assertEqual(self.sent, [], "saving the planning sends nothing at once")
         c.applied[thermostat] = {"a": (now - timedelta(minutes=30)).isoformat()}
@@ -176,6 +176,19 @@ class PlanningHestia(SendsThePlanning, HomeAssistantWithAHouse):
         self.assertEqual(self.sent, [])
         self.assertEqual(c.journal[-1]["statut"], "ombre")
         self.assertEqual(c.data["planning"]["journal"][-1]["texte"], "en essai, rien envoyé")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_active_it_sends_nothing_to_a_thermostat_not_allowed(self):
+        """The lock of Réglages, « Ce que Hestia peut régler »: none at first, so an « Actif » planning sends nothing."""
+        entry, c = await self._planning("climate.vt_sejour", allowed=False)
+        self.assertEqual(self.sent, [])
+        self.assertEqual(c.journal[-1]["statut"], "verrou")
+        self.assertEqual(c.data["planning"]["journal"][-1]["texte"], "pas autorisé dans Réglages, rien envoyé")
+        self.assertIn("Hestia n’a pas le droit de régler Radiateur séjour", [t["titre"] for t in c.data["a_regler"]])
+        self.assertEqual(c.data["planning"]["hestia"][0]["verrouilles"], [{"id": "climate.vt_sejour", "nom": "Radiateur séjour"}])
+        self.assertEqual(c.settings["planning_autorises"], [])
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"planning_autorises": ["switch.radiateur"]})
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_a_thermostat_switched_off_stays_off(self):

@@ -34,11 +34,12 @@ TICK = timedelta(minutes=1)
 # A day's curve read from the recorder is kept this long.
 DAY_CACHE_S = 120
 DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
-            "planning": None, "pilote": "ombre", "pilote_thermometre": None}
+            "planning": None, "pilote": "ombre", "pilote_thermometre": None,
+            "planning_autorises": []}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en essai, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
-        "sans_prereglage": "préréglage absent du thermostat"}
+        "sans_prereglage": "préréglage absent du thermostat", "verrou": "pas autorisé dans Réglages, rien envoyé"}
 JOURNAL_MAX = 60
 # The stove's pilot « à l'ombre »: its journal says what Hestia would have done and what the house did. Kept a week,
 # through a restart, so that several days can be weighed (« d'accord 46 fois sur 48 »).
@@ -198,7 +199,8 @@ class HeatingCoordinator:
             today = snap["now"].date().isoformat()
             self.journal = [j for j in self.journal if j.get("jour") == today]
             snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
-                        pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory)
+                        pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory,
+                        autorises=self.settings.get("planning_autorises") or [])
             view = house.build(snap)
             due, waiting = view["planning"].pop("_dus"), view["planning"].pop("_sans_repere")
             # Orders only once Home Assistant runs: a thermostat that loads after this brick is not yet there.
@@ -304,6 +306,8 @@ class HeatingCoordinator:
                     fate = "recopie"
                 elif not order["actif"]:
                     fate = "ombre"
+                elif not target["autorise"]:
+                    fate = "verrou"
                 else:
                     fate = self._send(target)
                 fates.setdefault(fate, []).append(target["nom"])
@@ -353,6 +357,9 @@ class HeatingCoordinator:
         settings = dict(self.settings)
         if "pilote" in changes and changes["pilote"] not in pilot.MODES:
             raise ValueError("mode du pilote inconnu")
+        allowed = changes.get("planning_autorises", [])
+        if not isinstance(allowed, list) or not all(isinstance(t, str) and t.startswith("climate.") for t in allowed):
+            raise ValueError("thermostats autorisés illisibles")
         sensor = changes.get("pilote_thermometre")
         if sensor is not None and not (isinstance(sensor, str) and sensor.startswith("sensor.")):
             raise ValueError("thermomètre de la maison illisible")

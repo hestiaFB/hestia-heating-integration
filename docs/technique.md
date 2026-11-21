@@ -32,7 +32,7 @@ Version 0.4.0b1. Ce document décrit ce que la brique lit, ce qu’elle publie e
 - **Le planning** : les interrupteurs de Scheduler (sinon les `switch.schedule_*` qui ont des `timeslots`) qui visent un thermostat. Le premier planning allumé qui s’applique au jour et vise le thermostat donne la journée. « Jours ouvrés » suit le capteur Workday quand il existe, sinon du lundi au vendredi.
 - **Le temps** : `hestia_weather_api` version 1 (`places()`, `hourly(lieu)`, `add_listener(lieu, update, brick="hestia_heating")`). Le lieu est celui choisi dans Extensions, sinon le premier. Sans Hestia Weather, le froid à venir n’est pas dit.
 
-La brique n’écrit qu’une chose : le préréglage (ou la consigne) des thermostats d’un planning Hestia « Actif » (voir plus bas). Aucun autre appel de service, aucun réglage d’une autre intégration. Des tests le vérifient (`tests/test_coordinator_ha.py`).
+La brique n’écrit qu’une chose : le préréglage (ou la consigne) des thermostats d’un planning Hestia « Actif », cochés dans Réglages, « Ce que Hestia peut régler » (`planning_autorises`, vide par défaut ; voir plus bas). Aucun autre appel de service, aucun réglage d’une autre intégration. Des tests le vérifient (`tests/test_coordinator_ha.py`).
 
 ## Ce qui est publié
 
@@ -103,12 +103,13 @@ Ce que devient un changement dû, pour chaque thermostat (le journal du jour, 60
 | `bloque` | un planning Scheduler allumé vise encore le thermostat (« suit deux plannings », dans À régler, quand le planning est actif) |
 | `recopie` | le thermostat est une copie d’une autre maison (`remote_homeassistant`) : jamais rien envoyé |
 | `ombre` | le planning est « En essai » |
+| `verrou` | le thermostat n’est pas coché dans Réglages, « Ce que Hestia peut régler » (`planning_autorises`, aucun par défaut depuis la 0.4) : rien n’est envoyé, et À régler le dit quand le planning est actif |
 | `eteint` | le thermostat est éteint ou absent : il reste éteint |
 | `sans_prereglage` | le préréglage n’existe pas sur ce Versatile Thermostat |
 | `deja` | il est déjà sur ce préréglage (ou cette consigne) |
 | `envoye` | `climate.set_preset_mode` pour un Versatile Thermostat, `climate.set_temperature` pour un autre (confort 20 °C, éco 17, hors gel 7, boost 21 ; une clim : 25, 27, 30, 24), sans attendre la réponse |
 
-**La vue** (`planning` dans `hestia_heating/view`) : `source` (« Hestia », « Scheduler » ou les deux), `labo` (tous les thermostats sont recopiés), `essai` (un dessin vient d’un planning en essai), `lignes` (la journée de chaque pièce et du poêle, avec sa `source` et `bloque` quand deux plannings la visent), `prochains`, puis pour l’onglet seulement : `hestia` (chaque planning : maintenant, prochain changement, thermostats bloqués par Scheduler, allumages du poêle par semaine), `thermostats` (chacun : sa pièce, son planning, Scheduler, ses niveaux possibles, ses consignes s’il n’est pas un Versatile Thermostat), `scheduler` (chaque planning Scheduler, et `reprise` : le même en planning Hestia, pour « Reprendre dans Hestia ») et `journal`. Les cartes ne reçoivent pas ces quatre-là.
+**La vue** (`planning` dans `hestia_heating/view`) : `source` (« Hestia », « Scheduler » ou les deux), `labo` (tous les thermostats sont recopiés), `essai` (un dessin vient d’un planning en essai), `lignes` (la journée de chaque pièce et du poêle, avec sa `source` et `bloque` quand deux plannings la visent), `prochains`, puis pour l’onglet seulement : `hestia` (chaque planning : maintenant, prochain changement, thermostats bloqués par Scheduler, `verrouilles` : ceux qui ne sont pas cochés dans « Ce que Hestia peut régler », allumages du poêle par semaine), `thermostats` (chacun : sa pièce, son planning, Scheduler, `autorise`, ses niveaux possibles, ses consignes s’il n’est pas un Versatile Thermostat), `scheduler` (chaque planning Scheduler, et `reprise` : le même en planning Hestia, pour « Reprendre dans Hestia ») et `journal`. Les cartes ne reçoivent pas ces quatre-là.
 
 ## Le pilote du poêle, à l’ombre
 

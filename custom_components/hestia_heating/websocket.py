@@ -12,7 +12,7 @@ VIEW_VERSION = 1
 # What the cards read: the extensions, the schedules' details and the « à régler » stay out of their view.
 CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning")
 SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote",
-                "pilote_thermometre")
+                "pilote_thermometre", "planning_autorises")
 # The planning's parts only the tab needs (the plannings, the editor, Scheduler, the journal).
 PLANNING_TAB_ONLY = ("hestia", "thermostats", "scheduler", "journal")
 

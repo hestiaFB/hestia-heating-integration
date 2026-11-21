@@ -4,7 +4,7 @@
 
 Elle ne remplace pas votre thermostat : elle s’appuie sur les intégrations que vous avez déjà.
 
-> **Bêta 0.4, en préparation.** Elle lit et explique, et elle a ses propres plannings. Un planning commence « En essai » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Le poêle lui-même n’est jamais commandé. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
+> **Bêta 0.4, en préparation.** Elle lit et explique, et elle a ses propres plannings. Un planning commence « En essai » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Même actif, il ne règle que les thermostats que vous avez cochés dans Réglages, « Ce que Hestia peut régler » : aucun au départ. Le poêle lui-même n’est jamais commandé. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
 
 ## Ce que montre la version 0.4
 

@@ -36,8 +36,8 @@ type Week='tous'|'semaine'|'chaque';
 type Plan={nom:string;actif:boolean;jours:Week;reste:string;plages:Range[][];thermostats:string[]};
 type Model={plannings:Record<string,Plan>};
 type HPlan={id:string;nom:string;actif:boolean;poele:boolean;thermostats:{id:string;nom:string;lu:boolean}[];maintenant:string|null;
- prochain:{a:string;texte:string}|null;allumages:number|null;bloques:{id:string;nom:string;scheduler:string}[];recopie:boolean};
-type Therm={id:string;nom:string;piece:string|null;poele:boolean;vt:boolean;froid:boolean;recopie:boolean;planning:string|null;
+ prochain:{a:string;texte:string}|null;allumages:number|null;bloques:{id:string;nom:string;scheduler:string}[];recopie:boolean;verrouilles?:{id:string;nom:string}[]};
+type Therm={id:string;nom:string;piece:string|null;poele:boolean;vt:boolean;froid:boolean;recopie:boolean;autorise?:boolean;planning:string|null;
  scheduler:string[];scheduler_actif:string|null;niveaux:string[];consignes:Record<string,number>|null};
 type Sched={id:string;nom:string;actif:boolean;jours:string[];partiel:boolean;cibles:string[];reprise:Plan|null};
 type Journal={jour:string;heure:string;planning:string;thermostats:string[];niveau:string;statut:string;texte:string};
@@ -51,7 +51,7 @@ type View={pret:boolean;version:string;maison:House;pieces:Room[];sources:Source
  dehors:{nuit_min:number|null;demain_max:number|null}|null;planning:Planning;a_regler:Todo[];extensions:Ext[];meteo:{etat:string;nom:string|null};
  mis_a_jour:string;calcul_ms:number|null};
 type Day={debut:string;maintenant_min:number;series:Record<string,[number,number|null][]>};
-type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null;planning:Model;pilote:string;pilote_thermometre:string|null};
+type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null;planning:Model;pilote:string;pilote_thermometre:string|null;planning_autorises:string[]};
  trouve:{thermostats:{id:string;nom:string;piece:string}[];coupes:{id:string;nom:string}[];poele:boolean;poele_thermostat:string|null;
   prises:{id:string;nom:string;poele:boolean}[];prise:string|null;thermometres:{id:string;nom:string;maison:boolean}[];meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null}}};
 
@@ -79,7 +79,7 @@ const PRESET:Record<string,string>={comfort:'confort',boost:'boost',eco:'éco',f
 const LEVELS=['confort','eco','boost','hors_gel'];
 const LEVEL_LABEL:Record<string,string>={confort:'Confort',eco:'Éco',boost:'Boost',hors_gel:'Hors gel'};
 // What became of a change, for each thermostat, in the journal.
-const FATE_TONE:Record<string,string>={envoye:'calm',deja:'off',ombre:'off',bloque:'alert',recopie:'off',eteint:'act',sans_prereglage:'act'};
+const FATE_TONE:Record<string,string>={envoye:'calm',deja:'off',ombre:'off',bloque:'alert',recopie:'off',eteint:'act',sans_prereglage:'act',verrou:'act'};
 const WEEK_LONG=['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
 const ROWS:Record<Week,[string,string][]>={tous:[['Tous les jours','7 jours']],semaine:[['Lundi → vendredi','5 jours'],['Samedi, dimanche','2 jours']],
  chaque:WEEK_LONG.map(d=>[d[0].toUpperCase()+d.slice(1),''] as [string,string])};
@@ -506,7 +506,8 @@ export class HestiaHeatingSetup extends LitElement {
   const foot=changed?html`<p class="plan-now">Pas encore enregistré.</p>`
    :!p.thermostats.length?html`<p class="plan-now">Aucun thermostat : ce planning ne règle rien pour l’instant.</p>`
    :html`<p class="plan-now">Maintenant : <b>${h?.maintenant??'—'}</b>.${h?.prochain?` ${h.prochain.texte}.`:''}</p>
-    ${h?.bloques.length?html`<p class="plan-now bad">${h.bloques.map(b=>`${b.nom} suit encore « ${b.scheduler} » dans Scheduler : Hestia ne le règle pas.`).join(' ')}</p>`:nothing}`;
+    ${h?.bloques.length?html`<p class="plan-now bad">${h.bloques.map(b=>`${b.nom} suit encore « ${b.scheduler} » dans Scheduler : Hestia ne le règle pas.`).join(' ')}</p>`:nothing}
+    ${p.actif&&h?.verrouilles?.length?html`<p class="plan-now bad">${h.verrouilles.map(b=>b.nom).join(', ')} : pas coché${h.verrouilles.length>1?'s':''} dans Réglages, « Ce que Hestia peut régler ». Hestia ne ${h.verrouilles.length>1?'leur':'lui'} envoie rien.</p>`:nothing}`;
   return html`<article class="plan"><div class="plan-h"><h2>${p.nom}</h2><span class=${'st '+(p.actif?'actif':'essai')}>${p.actif?'Actif':'En essai'}</span><span class="grow"></span>
     <button type="button" @click=${()=>this.go('planning/'+id)}>Modifier</button></div>
    ${this.miniWeek(p,v)}
@@ -543,6 +544,7 @@ export class HestiaHeatingSetup extends LitElement {
     const was=ownerIn(saved,t.id);
     if(was&&was!==id){parts.push(`quitte « ${m.plannings[was]?.nom??saved[was].nom} »`);warn=true;}
     if(t.scheduler_actif){parts.push(`coupez « ${t.scheduler_actif} » dans Scheduler pour que Hestia le règle`);warn=true;}
+    else if(!t.recopie&&t.autorise===false){parts.push(p.actif?'pas coché dans Réglages : Hestia ne lui enverra rien':'à cocher dans Réglages avant de passer en Actif');warn=p.actif;}
     const missing=levels.filter(l=>!t.niveaux.includes(l));
     if(missing.length){parts.push(`il n’a pas le préréglage ${missing.map(l=>LEVEL_LABEL[l].toLowerCase()).join(', ')}`);warn=true;}
     if(t.consignes)parts.push(`pas un Versatile Thermostat : il recevra ${LEVELS.map(l=>`${num(t.consignes![l])} °C en ${LEVEL_LABEL[l].toLowerCase()}`).join(', ')}`);
@@ -602,6 +604,7 @@ export class HestiaHeatingSetup extends LitElement {
   if(!s)return html`${this.head('Réglages',{lead:'Lecture…'})}`;
   const f=s.trouve,off=this.val<Record<string,boolean>>('sources')??{};
   const thermo=this.val<string|null>('poele_thermostat'),plug=this.val<string|null>('poele_prise'),house=this.val<string|null>('pilote_thermometre');
+  const allowed=this.val<string[]>('planning_autorises')??[];
   const setSource=(id:string,on:boolean)=>{const next={...off};if(on)delete next[id];else next[id]=false;this.set('sources',next);};
   const all=[...f.thermostats,...f.coupes.filter(c=>!f.thermostats.some(t=>t.id===c.id)).map(c=>({...c,piece:''}))];
   return html`${this.head('Réglages',{lead:'Ce que Hestia Chauffage lit. Laissé tel quel, elle prend ce qu’elle a trouvé.'})}
@@ -623,6 +626,9 @@ export class HestiaHeatingSetup extends LitElement {
    ],{help:'Le thermostat du poêle donne la demande (en %) face à la flamme réelle. La prise sert de témoin hors cloud.'}):nothing}
    ${listSection('Les thermostats lus',all.map(t=>listRow({label:t.nom,control:true,sub:html`<span class="eid">${t.id}</span>`,
      value:toggle('Lire '+t.nom,off[t.id]!==false,on=>setSource(t.id,on))})),{help:'Un thermostat coupé ici n’est plus lu ni compté, sans rien changer dans Home Assistant.'})}
+   ${listSection('Ce que Hestia peut régler',f.thermostats.map(t=>listRow({label:t.nom,control:true,sub:t.piece||undefined,
+     value:toggle('Hestia peut régler '+t.nom,allowed.includes(t.id),on=>this.set('planning_autorises',on?[...allowed,t.id]:allowed.filter(x=>x!==t.id)))})),
+     {help:'Un planning Actif n’envoie qu’aux thermostats cochés ici, et à aucun autre. Aucun au départ : pour un essai, cochez seulement vos thermostats d’essai.'})}
    ${listSection('',[listRow({label:'Les pièces',sub:'Elles viennent de Home Assistant : la pièce du thermostat, sinon celle de son appareil.',go:()=>this.openHa('/config/areas/dashboard')})])}`;
  }
 
