@@ -312,6 +312,66 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         self.assertEqual(c.data["poele"]["pilote"], {"mode": "eteint"})
         self.assertTrue(await hass.config_entries.async_unload(entry.entry_id))
 
+    async def test_the_pilot_reads_the_house_on_the_thermometer_chosen(self):
+        """The pilot weighs the house on the automations' own sensor once chosen, else on the rooms' average."""
+        hass = self.hass
+        hass.states.async_set("sensor.temperature_moyenne_maison", "17.2", {"device_class": "temperature",
+                              "unit_of_measurement": "°C", "friendly_name": "Température moyenne maison"})
+        hass.states.async_set("sensor.cave", "12", {"device_class": "temperature", "unit_of_measurement": "°C",
+                                                    "friendly_name": "Cave"})
+        # The stove's own temperatures are never offered.
+        hass.states.async_set("sensor.poele_smoke_temperature", "140", {"device_class": "temperature"})
+        entry, c = await self._setup()
+        offered = [t["entity_id"] for t in c.found.thermometers]
+        self.assertEqual(offered[:2], ["sensor.temperature_moyenne_maison", "sensor.cave"])
+        self.assertNotIn("sensor.poele_smoke_temperature", offered)
+        average = c.data["poele"]["pilote"]["maison_c"]
+        self.assertEqual(average, c.data["maison"]["temperature"])
+        self.assertIsNone(c.data["poele"]["pilote"]["thermometre"])
+        await c.async_set_settings({"pilote_thermometre": "sensor.temperature_moyenne_maison"})
+        await hass.async_block_till_done()
+        p = c.data["poele"]["pilote"]
+        self.assertEqual((p["maison_c"], p["thermometre"], p["thermometre_lu"]), (17.2, "Température moyenne maison", True))
+        # Listened to: a change of the sensor is weighed at once.
+        hass.states.async_set("sensor.temperature_moyenne_maison", "unavailable", {"device_class": "temperature",
+                              "friendly_name": "Température moyenne maison"})
+        await asyncio.sleep(1.5)
+        await hass.async_block_till_done()
+        p = c.data["poele"]["pilote"]
+        self.assertEqual((p["maison_c"], p["thermometre_lu"]), (None, False))
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"pilote_thermometre": "climate.vt_poele"})
+        await c.async_set_settings({"pilote_thermometre": None})
+        await hass.async_block_till_done()
+        self.assertEqual(c.data["poele"]["pilote"]["maison_c"], average)
+        self.assertEqual(self.calls, [])
+        self.assertTrue(await hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_pilot_keeps_its_journal_a_week_through_a_restart(self):
+        """The pilot's journal of the last 7 days is kept in the planning's state: a restart loses nothing."""
+        from homeassistant.helpers.storage import Store
+        from custom_components.hestia_heating.const import PLANNING_STATE_KEY
+        today = dt_util.now().date()
+        day = lambda n: (today - timedelta(days=n)).isoformat()  # noqa: E731
+        old = [
+            {"jour": day(8), "heure": "07:00", "qui": "maison", "texte": "La maison a démarré le poêle.", "accord": False},
+            {"jour": day(2), "heure": "07:00", "qui": "hestia", "texte": "Hestia démarrerait le poêle.", "accord": None},
+            {"jour": day(2), "heure": "07:01", "qui": "maison", "texte": "La maison a démarré le poêle.", "accord": True},
+            {"jour": day(1), "heure": "21:00", "qui": "hestia", "texte": "Hestia garderait la flamme 3.", "accord": None},
+            {"jour": day(1), "heure": "21:05", "qui": "maison", "texte": "La maison a mis la flamme 2.", "accord": False},
+        ]
+        await Store(self.hass, 1, PLANNING_STATE_KEY).async_save({"thermostats": {}, "pilote": {}, "journal_pilote": old})
+        entry, c = await self._setup()
+        week = c.data["poele"]["pilote"]["accord_semaine"]
+        self.assertEqual((week["oui"], week["sur"], week["depuis"]), (1, 2, day(2)), "the 8-day-old gesture is dropped")
+        self.assertEqual(week["ecarts"], [{"jour": day(1), "heure": "21:05", "texte": "La maison a mis la flamme 2.",
+                                           "hestia": "Hestia garderait la flamme 3."}])
+        self.assertEqual(c.data["poele"]["pilote"]["accord_jour"], {"oui": 0, "sur": 0})
+        self.assertTrue(all(j["jour"] == today.isoformat() for j in c.data["poele"]["pilote"]["journal"]))
+        self.assertEqual(len(c.pilot_journal), 4 + sum(1 for j in c.pilot_journal if j["jour"] == today.isoformat()))
+        self.assertNotIn("accord_semaine", card_view(c.data)["poele"]["pilote"])
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
     async def test_a_setting_changes_what_is_read(self):
         entry, c = await self._setup()
         await c.async_set_settings({"sources": {"climate.vt_bureau": False}})

@@ -151,9 +151,13 @@ def build(snap: dict) -> dict:
         mode = snap.get("pilote") if snap.get("pilote") in pilot.MODES else "ombre"
         stove["pilote"] = {"mode": mode}
         if mode == "ombre":
-            decision, memory, events = pilot.decide(stove, stove_thermostat, snap.get("pilote_memoire"), now,
-                                                    house["temperature"])
+            # The house's temperature: the sensor chosen in Réglages (the automations' own), else the rooms' average.
+            sensor = snap.get("house_sensor")
+            house_c = sensor["c"] if sensor else house["temperature"]
+            decision, memory, events = pilot.decide(stove, stove_thermostat, snap.get("pilote_memoire"), now, house_c)
             stove["pilote"].update(decision)
+            stove["pilote"].update(maison_c=house_c, thermometre=sensor["nom"] if sensor else None,
+                                   thermometre_lu=sensor is None or sensor["c"] is not None)
             pilot_state = {"memoire": memory, "evenements": events}
     lanes = _lanes(room_list, srcs, stove_thermostat, lines, naive_now)
     copies = set(snap.get("copies") or ())
