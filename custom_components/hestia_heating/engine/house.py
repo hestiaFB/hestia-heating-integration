@@ -145,20 +145,27 @@ def build(snap: dict) -> dict:
         "electrique_w": round(sum(s["puissance_w"] or 0 for s in electric)) if electric else 0,
         "en_marche": [s["id"] for s in srcs if s["etat"] in ("chauffe", "rafraichit")],
     }
-    # The stove's pilot, « à l'ombre » (0.4): what Hestia would do, next to what the house does. It sends nothing.
+    # The stove's pilot: « à l'ombre » (0.4) it only says what Hestia would do, next to what the house does; « flamme »
+    # (0.5, switched on by the user) it also gives the flame's order to send.
     pilot_state = None
     if stove:
         mode = snap.get("pilote") if snap.get("pilote") in pilot.MODES else "ombre"
         stove["pilote"] = {"mode": mode}
-        if mode == "ombre":
+        if mode in ("ombre", "flamme"):
             # The house's temperature: the sensor chosen in Réglages (the automations' own), else the rooms' average.
-            sensor = snap.get("house_sensor")
+            sensor, low = snap.get("house_sensor"), snap.get("flamme_basse")
             house_c = sensor["c"] if sensor else house["temperature"]
-            decision, memory, events = pilot.decide(stove, stove_thermostat, snap.get("pilote_memoire"), now, house_c)
+            decision, memory, events = pilot.decide(stove, stove_thermostat, snap.get("pilote_memoire"), now, house_c,
+                                                    low["nom"] if low and low["on"] else None)
             stove["pilote"].update(decision)
             stove["pilote"].update(maison_c=house_c, thermometre=sensor["nom"] if sensor else None,
-                                   thermometre_lu=sensor is None or sensor["c"] is not None)
-            pilot_state = {"memoire": memory, "evenements": events}
+                                   thermometre_lu=sensor is None or sensor["c"] is not None,
+                                   flamme_basse=low["nom"] if low else None)
+            order = None
+            if mode == "flamme":
+                order, stove["pilote"]["commande"] = pilot.steer(decision, stove, memory, events, now,
+                                                                bool(raw_stove.get("copie")))
+            pilot_state = {"memoire": memory, "evenements": events, "ordre": order}
     lanes = _lanes(room_list, srcs, stove_thermostat, lines, naive_now)
     copies = set(snap.get("copies") or ())
     room_names = {r["id"]: r["nom"] for r in room_list}

@@ -1,4 +1,5 @@
-"""The stove's pilot « à l'ombre » (engine/pilot.py and its part of the house view), without Home Assistant."""
+"""The stove's pilot (engine/pilot.py and its part of the house view), without Home Assistant: « à l'ombre », and the
+« flamme » mode of the 0.5 (Hestia sets the flame, and only that)."""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -222,6 +223,108 @@ class Safety(unittest.TestCase):
         self.assertIn("La pièce du poêle est à 28,2 °C, au-dessus de 28 °C.", decision["texte"])
 
 
+class LowFlameSwitch(unittest.TestCase):
+    def test_the_switch_asks_for_the_lowest_flame(self):
+        s, t = stove("chauffe", 3), thermostat("boost", demand=70)
+        decision, _, _ = pilot.decide(s, t, seen(s, t), NOW, HOUSE_C, "Flamme minimum")
+        self.assertEqual((decision["action"], decision["flamme"]), ("flamme", 1))
+        self.assertIn("« Flamme minimum » demande la flamme au plus bas.", decision["texte"])
+
+
+FLAME = "number.poele_power"
+
+
+def burning(flamme, **more):
+    return stove("chauffe", flamme, entites={"flamme": FLAME}, **more)
+
+
+def steer(s, t, mem, now=NOW, copy=False):
+    decision, mem, events = decide(s, t, mem, now)
+    order, status = pilot.steer(decision, s, mem, events, now, copy)
+    return order, status, mem, events, decision
+
+
+class FlameMode(unittest.TestCase):
+    """« Flamme » (0.5): Hestia sets the flame itself, one order at a time, and lets go when someone else sets it."""
+
+    def test_it_sends_the_flame_once_then_checks_it(self):
+        s, t = burning(4), thermostat("boost", demand=50)
+        order, status, mem, events, _ = steer(s, t, seen(s, t))
+        self.assertEqual(order, {"entity_id": FLAME, "valeur": 3})
+        self.assertEqual((status["envois"], status["attente"]), (1, 3))
+        self.assertEqual([e["texte"] for e in events], ["Hestia met la flamme à 3."])
+        # A minute later the stove has not answered yet: nothing is sent again.
+        order, status, mem, events, _ = steer(s, t, mem, NOW + timedelta(minutes=1))
+        self.assertIsNone(order)
+        self.assertEqual(status["attente"], 3)
+        # Two minutes later the flame followed: Hestia's own change is not the house's.
+        s = burning(3)
+        order, status, mem, events, _ = steer(s, t, mem, NOW + timedelta(minutes=2))
+        self.assertIsNone(order)
+        self.assertEqual([(e["qui"], e["texte"]) for e in events],
+                         [("hestia", "La flamme est passée à 3, comme Hestia l’a demandé.")])
+        self.assertIsNone(status["attente"])
+        self.assertIsNone(mem["lache"])
+
+    def test_an_order_not_followed_is_sent_again_after_ten_minutes(self):
+        s, t = burning(4), thermostat("boost", demand=50)
+        _, _, mem, _, _ = steer(s, t, seen(s, t))
+        order, _, mem, events, _ = steer(s, t, mem, NOW + timedelta(minutes=5))
+        self.assertIsNone(order)
+        self.assertEqual(events[-1]["texte"], "Le poêle n’a pas suivi : sa flamme est à 4, pas à 3.")
+        self.assertEqual(mem["echecs"], 1)
+        self.assertIsNone(steer(s, t, mem, NOW + timedelta(minutes=9))[0])
+        order, status, mem, _, _ = steer(s, t, mem, NOW + timedelta(minutes=10))
+        self.assertEqual(order["valeur"], 3)
+        self.assertEqual(status["envois"], 2)
+
+    def test_three_orders_not_followed_and_it_lets_go_for_the_day(self):
+        s, t = burning(4), thermostat("boost", demand=50)
+        mem = seen(s, t)
+        for minutes in (0, 10, 20):
+            order, _, mem, _, _ = steer(s, t, mem, NOW + timedelta(minutes=minutes))
+            self.assertIsNotNone(order)
+            _, _, mem, _, _ = steer(s, t, mem, NOW + timedelta(minutes=minutes + 5))
+        self.assertIn("n’a pas suivi 3 ordres", mem["lache"])
+        self.assertIsNone(steer(s, t, mem, NOW + timedelta(minutes=40))[0])
+        # The next day, it starts again.
+        order, status, mem, _, _ = steer(s, t, mem, NOW + timedelta(hours=3))
+        self.assertEqual(order["valeur"], 3)
+        self.assertIsNone(status["lache"])
+
+    def test_a_flame_changed_without_hestia_and_it_lets_go(self):
+        s, t = burning(3), thermostat("boost", demand=50)
+        mem = seen(s, t)
+        s = burning(4)                                  # another automation still sets the flame
+        order, status, mem, events, _ = steer(s, t, mem)
+        self.assertIsNone(order, "the demand asks for 3, but Hestia lets go")
+        self.assertIn("sans Hestia : une autre automatisation la règle encore", status["lache"])
+        self.assertEqual([(e["qui"], e["accord"]) for e in events], [("maison", False)])
+        self.assertIsNone(steer(s, t, mem, NOW + timedelta(minutes=15))[0])
+
+    def test_never_a_copied_stove_nor_more_than_twelve_orders(self):
+        s, t = burning(4), thermostat("boost", demand=50)
+        order, status, _, _, _ = steer(s, t, seen(s, t), copy=True)
+        self.assertIsNone(order)
+        self.assertTrue(status["copie"])
+        mem = seen(s, t, envois_jour=NOW.date().isoformat(), envois=12, echecs=0)
+        order, status, _, _, _ = steer(s, t, mem)
+        self.assertIsNone(order)
+        self.assertIn("12 ordres de Hestia aujourd’hui", status["texte"])
+
+    def test_only_the_flame_never_start_nor_stop(self):
+        s, t = stove("eteint", entites={"flamme": FLAME}), thermostat("eco")
+        mem = seen(s, t)
+        t = thermostat("boost")
+        order, _, _, _, decision = steer(s, t, mem)
+        self.assertEqual(decision["action"], "demarrer")
+        self.assertIsNone(order, "starting stays with the house")
+        s, t = burning(3), thermostat("frost")
+        order, _, _, _, decision = steer(s, t, seen(s, thermostat("boost")))
+        self.assertEqual(decision["action"], "arreter")
+        self.assertIsNone(order, "stopping stays with the house")
+
+
 class TheHouseView(unittest.TestCase):
     def test_the_stove_says_what_hestia_would_do(self):
         view = house.build(m.snapshot())
@@ -229,6 +332,16 @@ class TheHouseView(unittest.TestCase):
         self.assertEqual((p["mode"], p["action"], p["flamme"], p["maison"]), ("ombre", "garder", 3, "flamme 3"))
         self.assertTrue(p["accord"])
         self.assertEqual(view["_pilote"]["evenements"], [])
+
+    def test_in_flame_mode_the_view_gives_the_order(self):
+        cl = m.climates(); cl[0]["attributes"]["power_percent"] = 50
+        snap = m.snapshot(climates=cl, pilote="flamme",
+                          pilote_memoire={"etat": "chauffe", "reglee": 3, "preset": "boost", "mode": "heat"})
+        snap["stove"]["copie"] = False
+        view = house.build(snap)
+        self.assertEqual(view["poele"]["pilote"]["mode"], "flamme")
+        self.assertEqual(view["poele"]["pilote"]["commande"]["envois"], 0)
+        self.assertIn("ordre", view["_pilote"])
 
     def test_switched_off_it_says_nothing(self):
         view = house.build(m.snapshot(pilote="eteint"))

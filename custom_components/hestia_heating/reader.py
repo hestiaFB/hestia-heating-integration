@@ -30,6 +30,8 @@ WORKDAY = "workday"
 REMOTE = "remote_homeassistant"
 # A sensor that gives the temperature of the whole house (the stove's automations often have one).
 HOUSE_NAME = re.compile(r"maison|moyenne|logement|house|home|average|mean", re.I)
+# A switch that asks for the lowest flame.
+LOW_NAME = re.compile(r"flamme|flame|po[eê]le|stove|eco|silence", re.I)
 WEATHER_API = "hestia_weather_api"
 WEATHER_API_VERSION = 1      # the version of Hestia Weather's interface this brick speaks
 BRICK = "hestia_heating"     # said to Hestia Weather when listening, so that its settings show this brick linked
@@ -44,6 +46,8 @@ class Found:
     plugs: list[dict] = field(default_factory=list)          # every power sensor that could be the stove's plug
     thermometers: list[dict] = field(default_factory=list)   # every temperature sensor the pilot could read the house on
     house_sensor: str | None = None                          # the one chosen in Réglages (else: the average of the rooms)
+    switches: list[dict] = field(default_factory=list)       # every input_boolean that could ask for the lowest flame
+    low_switch: str | None = None                            # the one chosen in Réglages
     pellets: dict[str, str] = field(default_factory=dict)    # {role: entity_id}
     schedules: list[str] = field(default_factory=list)
     workday: str | None = None
@@ -56,7 +60,7 @@ class Found:
         if self.stove:
             out |= set(self.stove["roles"].values())
         out |= set(self.pellets.values()) | set(self.schedules)
-        out |= {e for e in (self.plug, self.workday, self.house_sensor) if e}
+        out |= {e for e in (self.plug, self.workday, self.house_sensor, self.low_switch) if e}
         return out | set(extra or [])
 
 
@@ -162,6 +166,17 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
     found.thermometers.sort(key=lambda t: (not t["maison"], t["nom"].casefold()))
     # The house's temperature for the pilot: the sensor chosen in Réglages (the one the stove's automations read).
     found.house_sensor = settings.get("pilote_thermometre") if found.stove else None
+    # The switch that asks for the lowest flame (the house's « force flamme 1 »), and the stove copied from another
+    # house (a lab), which is never sent anything.
+    if found.stove:
+        found.switches = sorted(({"entity_id": s.entity_id, "nom": s.attributes.get("friendly_name") or s.entity_id,
+                                  "flamme": bool(LOW_NAME.search(f"{s.entity_id} {s.attributes.get('friendly_name') or ''}"))}
+                                 for s in hass.states.async_all("input_boolean")),
+                                key=lambda x: (not x["flamme"], x["nom"].casefold()))
+        found.low_switch = settings.get("pilote_flamme_basse")
+        platforms = {(entities.async_get(e).platform if entities.async_get(e) else None)
+                     for e in found.stove["roles"].values()}
+        found.stove["copie"] = not found.stove.get("device_id") or REMOTE in platforms
     chosen = settings.get("poele_prise")
     if found.stove:
         named = [p for p in found.plugs if p["poele"]]
@@ -286,6 +301,11 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
             plug = {"entity_id": found.plug, "w": float(p.state)}
         except (TypeError, ValueError):
             plug = {"entity_id": found.plug, "w": None}
+    low = None
+    if found.low_switch:
+        t = hass.states.get(found.low_switch)
+        low = {"entity_id": found.low_switch, "nom": (t.attributes.get("friendly_name") if t else None)
+               or found.low_switch, "on": bool(t and t.state == "on")}
     house_sensor = None
     if found.house_sensor:
         t = hass.states.get(found.house_sensor)
@@ -312,6 +332,7 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
         "disabled": [k for k, v in (settings.get("sources") or {}).items() if v is False],
         "plug": plug,
         "house_sensor": house_sensor,
+        "flamme_basse": low,
         "pellets": pellets,
         "schedules": schedules,
         "workday": workday,

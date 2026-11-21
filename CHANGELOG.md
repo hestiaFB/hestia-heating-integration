@@ -1,6 +1,24 @@
 # Changements
 
-## À venir — 0.4.0b1
+## À venir — 0.5.0b1
+
+Le pilote du poêle peut régler la flamme, en option. Il reste « à l’ombre » tant que vous ne l’avez pas choisi.
+
+### Nouveautés
+- **Dans Réglages, « Le pilote de Hestia » a un troisième choix : « Flamme »**. Hestia règle alors la flamme du poêle selon la demande de son thermostat, avec les mêmes règles qu’à l’ombre. Seulement la flamme : le démarrage, l’arrêt et les sécurités restent à vos automatisations.
+- Sur la page Poêle, « Hestia fait » et « Ordres de Hestia aujourd’hui » (par exemple 4 sur 12), avec la flamme demandée en attente de vérification. Le journal dit chaque ordre et s’il a été suivi.
+- **Hestia est prudente** : un ordre à la fois, vérifié 5 minutes après, la même flamme renvoyée au plus toutes les 10 minutes, 12 ordres par jour au plus. Si la flamme change sans elle (une autre automatisation la règle encore), ou si le poêle ne suit pas 3 fois, elle laisse la flamme jusqu’au lendemain et le dit en haut de la page Poêle.
+- Dans Réglages, « Flamme au plus bas » : un interrupteur (`input_boolean`) qui, allumé, demande la flamme 1, comme le font déjà certaines automatisations. Le pilote en tient compte, à l’ombre aussi.
+
+### Ce qui change
+- Le profil Micronova compte 20 ordres par jour pour la mémoire du poêle (25 avant), comme le quota que suivent les automatisations de la maison.
+
+### Ce qui ne change pas
+- Par défaut, le pilote est « à l’ombre » : il n’envoie rien. Revenir « À l’ombre » arrête les ordres tout de suite.
+- Jamais d’ordre à un poêle recopié d’une autre maison (le labo), même réglé sur « Flamme ».
+- Avant de choisir « Flamme », éteignez votre automatisation qui règle déjà la flamme : sinon Hestia la voit faire et s’arrête pour la journée.
+
+## 0.4.0b1
 
 Le pilote du poêle, « à l’ombre » : Hestia dit ce qu’elle ferait du poêle, à côté de ce que font vos automatisations. Elle ne le commande pas.
 

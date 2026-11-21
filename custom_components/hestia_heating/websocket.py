@@ -12,7 +12,7 @@ VIEW_VERSION = 1
 # What the cards read: the extensions, the schedules' details and the « à régler » stay out of their view.
 CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning")
 SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote",
-                "pilote_thermometre", "planning_autorises")
+                "pilote_thermometre", "planning_autorises", "pilote_flamme_basse")
 # The planning's parts only the tab needs (the plannings, the editor, Scheduler, the journal).
 PLANNING_TAB_ONLY = ("hestia", "thermostats", "scheduler", "journal")
 
@@ -126,6 +126,8 @@ def ws_settings(hass, connection, msg):
             "prises": [{"id": p["entity_id"], "nom": p["nom"], "poele": p["poele"]} for p in found.plugs],
             "prise": found.plug,
             "thermometres": [{"id": t["entity_id"], "nom": t["nom"], "maison": t["maison"]} for t in found.thermometers],
+            "interrupteurs": [{"id": t["entity_id"], "nom": t["nom"]} for t in found.switches],
+            "poele_copie": bool((found.stove or {}).get("copie")),
             "meteo": {k: c.weather.get(k) for k in ("etat", "lieu", "nom", "lieux")},
         },
     })

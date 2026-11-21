@@ -35,7 +35,7 @@ TICK = timedelta(minutes=1)
 DAY_CACHE_S = 120
 DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
             "planning": None, "pilote": "ombre", "pilote_thermometre": None,
-            "planning_autorises": []}
+            "planning_autorises": [], "pilote_flamme_basse": None}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en essai, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
@@ -234,12 +234,24 @@ class HeatingCoordinator:
             self.pilot_journal = (kept + new)[-PILOT_KEEP:]
             if changed:
                 self._save_state()
-        if stove and stove.get("pilote", {}).get("mode") == "ombre":
+            if state.get("ordre"):
+                self._flame_order(state["ordre"])
+        if stove and stove.get("pilote", {}).get("mode") in ("ombre", "flamme"):
             day = [j for j in self.pilot_journal if j["jour"] == today]
             stove["pilote"]["journal"] = day[-PILOT_SHOWN:]
             stove["pilote"]["accord_jour"] = _tally(day)
             stove["pilote"]["accord_semaine"] = {**_tally(self.pilot_journal), "depuis": min(
                 (j["jour"] for j in self.pilot_journal), default=today), "ecarts": _gaps(self.pilot_journal)}
+
+    def _flame_order(self, order: dict) -> None:
+        """« Flamme » mode: the stove's flame, as the house's modulation sets it (number.set_value), without waiting
+        for the answer; the pilot checks 5 minutes later that the flame followed. Only once Home Assistant runs."""
+        if self.hass.state is not CoreState.running:
+            return
+        _LOGGER.info("Pilote du poêle : flamme %s (%s)", order["valeur"], order["entity_id"])
+        self.hass.async_create_task(self.hass.services.async_call(
+            "number", "set_value", {"entity_id": order["entity_id"], "value": order["valeur"]}, blocking=False,
+            context=Context()))
 
     def _save_state(self) -> None:
         self.state_store.async_delay_save(lambda: {"thermostats": self.applied, "pilote": self.pilot_memory,
@@ -360,6 +372,9 @@ class HeatingCoordinator:
         allowed = changes.get("planning_autorises", [])
         if not isinstance(allowed, list) or not all(isinstance(t, str) and t.startswith("climate.") for t in allowed):
             raise ValueError("thermostats autorisés illisibles")
+        low = changes.get("pilote_flamme_basse")
+        if low is not None and not (isinstance(low, str) and low.startswith("input_boolean.")):
+            raise ValueError("interrupteur « flamme au plus bas » illisible")
         sensor = changes.get("pilote_thermometre")
         if sensor is not None and not (isinstance(sensor, str) and sensor.startswith("sensor.")):
             raise ValueError("thermomètre de la maison illisible")

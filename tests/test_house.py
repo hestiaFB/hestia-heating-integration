@@ -48,7 +48,7 @@ class House(unittest.TestCase):
         self.assertEqual(s["demande_pct"], 60)
         self.assertTrue(s["prise_tourne"])
         self.assertEqual(s["ecritures"], 4)
-        self.assertEqual(s["ecritures_max"], 25)
+        self.assertEqual(s["ecritures_max"], 20)   # the house's own quota of orders a day (20 by default)
         g = self.view["granules"]
         # 90 kg in 30 days of use: 3 kg a day, 150 kg left.
         self.assertEqual((g["kg_par_jour"], g["jours"], g["stock_sacs"]), (3.0, 50, 10.0))

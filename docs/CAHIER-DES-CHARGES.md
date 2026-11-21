@@ -2,7 +2,7 @@
 
 Version du 20 novembre 2026. Document vivant : il suit la brique à chaque version.
 
-**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute les plannings Hestia, simples, d’après la maquette « planning simple » validée le 20 novembre : une liste de plannings, chacun une semaine en couleurs et les thermostats qu’il règle, « En essai » d’abord. La 0.4 ajoute le pilote du poêle « à l’ombre » : il dit ce qu’il ferait, à côté de ce que font les automatisations de la maison, sans rien envoyer. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
+**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute les plannings Hestia, simples, d’après la maquette « planning simple » validée le 20 novembre : une liste de plannings, chacun une semaine en couleurs et les thermostats qu’il règle, « En essai » d’abord. La 0.4 ajoute le pilote du poêle « à l’ombre » : il dit ce qu’il ferait, à côté de ce que font les automatisations de la maison, sans rien envoyer. La 0.5 lui permet, en option, de régler la flamme, et seulement elle. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
 
 ## Place dans l’écosystème
 
@@ -100,7 +100,7 @@ Un profil est un fichier de données par intégration, sans code : il dit où tr
     "alarme": ["ALARM", "MEM. ALARM", "Alarm"]
   },
   "alarme_ok": ["OK", "0", "None", "Aucune"],
-  "limites": {"ecritures_par_jour": 25, "cloud": true}
+  "limites": {"ecritures_par_jour": 20, "cloud": true}
 }
 ```
 
@@ -114,8 +114,9 @@ Aucune commande (ni poêle, ni thermostat, ni clim), pas de planning actif, pas 
 2. **0.2** — l’interface vers Énergie, puis Énergie l’affiche à la place de sa devinette par une source « gaz ».
 3. **0.3** — les plannings maison, simples : une semaine en couleurs (tous les jours pareils, semaine et week-end, ou jour par jour), des plages, le niveau du reste du temps, et les thermostats cochés. Un thermostat suit un seul planning. Scheduler reste lu, et un de ses plannings se reprend dans Hestia en un clic. Chaque planning commence « En essai » et n’envoie, une fois « Actif », que des préréglages, jamais un allumage ou un arrêt (détail dans [technique.md](technique.md#le-planning-hestia)). Les matins froids et le prix de l’électricité, prévus d’abord, sont laissés de côté pour rester simple.
 4. **0.4** — le pilote de poêle « à l’ombre » : il calcule ce qu’il ferait (démarrer, flamme 3, refuser pour surchauffe…) et l’affiche à côté de ce que font les automatisations de la maison, sans rien envoyer.
-5. **0.5** — le pilote actif, profil Micronova : démarrage sûr, flamme selon la demande, arrêt vérifié, quota d’écritures, sécurités, retour arrière en un clic.
-6. Les autres profils (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un, avec des testeurs.
+5. **0.5** — le pilote règle la flamme, en option (Réglages, « Flamme ») : la flamme selon la demande du thermostat, un ordre à la fois, vérifié 5 min après, 12 ordres par jour au plus. Le démarrage, l’arrêt et les sécurités restent aux automatisations de la maison. Si la flamme change sans Hestia, ou si le poêle ne suit pas trois fois, Hestia la laisse jusqu’au lendemain. Revenir « À l’ombre » est le retour arrière en un clic. Jamais au labo.
+6. **Ensuite** — le pilote entier, profil Micronova : démarrage sûr, arrêt vérifié, sécurités, toujours en option.
+7. Les autres profils (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un, avec des testeurs.
 
 ## Le dépôt, les tests, le labo
 
