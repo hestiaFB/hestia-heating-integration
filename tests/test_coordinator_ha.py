@@ -292,7 +292,13 @@ class MadeUpHouse(SetsTheFlame, HomeAssistantWithAHouse):
         self.assertIsNone(counters["climate.vt_sejour"])
         stove = api.poele()
         self.assertEqual((stove["etat"], stove["flamme"], stove["thermostat"]), ("chauffe", 3, "climate.vt_poele"))
-        self.assertEqual(stove["energie_stat"], "sensor.vt_poele_energy")
+        # 0.6: the stove's energy is Hestia's count of its pellets, never its thermostat's counter.
+        self.assertEqual(stove["energie_stat"], "sensor.hestia_heating_poele_energie")
+        self.assertEqual(counters["climate.vt_poele"], "sensor.hestia_heating_poele_energie")
+        pellets = {s["id"]: s["granules_stat"] for s in api.sources()}
+        self.assertEqual(pellets["climate.vt_poele"], "sensor.hestia_heating_poele_granules_brules")
+        self.assertEqual(stove["conso"]["debit_kg_h"], 1.07)
+        self.assertEqual(set(stove["conso"]["brasier"]), {"kg", "seuil_kg", "a_nettoyer"})
         self.assertEqual(stove["granules"]["stat"], "sensor.granules_saison")
         self.assertEqual(stove["granules"]["jours"], 50)
         heard = []
@@ -450,6 +456,45 @@ class MadeUpHouse(SetsTheFlame, HomeAssistantWithAHouse):
         self.assertTrue(all(j["jour"] == today.isoformat() for j in c.data["poele"]["pilote"]["journal"]))
         self.assertEqual(len(c.pilot_journal), 4 + sum(1 for j in c.pilot_journal if j["jour"] == today.isoformat()))
         self.assertNotIn("accord_semaine", card_view(c.data)["poele"]["pilote"])
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_pellets_are_counted_kept_and_the_fire_pot_cleaned(self):
+        """0.6: the kilos and the energy of the stove, kept through a restart (the time stopped counts nothing), the
+        fire pot's count started by « J'ai nettoyé », the settings checked."""
+        from homeassistant.helpers.storage import Store
+        from custom_components.hestia_heating.const import PLANNING_STATE_KEY
+        before = (dt_util.now() - timedelta(minutes=3)).isoformat()
+        await Store(self.hass, 1, PLANNING_STATE_KEY).async_save({"thermostats": {}, "granules": {
+            "total_kg": 20.0, "total_brut": 20.0, "kg_jour": 0.0, "kg_saison": 20.0, "correction": 1.0,
+            "debit": 1.6, "a": before, "jour": dt_util.now().date().isoformat()}})
+        entry, c = await self._setup()
+        self.assertEqual(c.pellets_memory["total_kg"], 20.0, "the 3 minutes Home Assistant was stopped count nothing")
+        self.assertEqual(c.pellets_memory["debit"], 1.07)
+        self.assertEqual(c.pellets_memory["sacs"], 6.0)
+        self.assertEqual(self.state("sensor.hestia_heating_poele_granules_brules"), "20.0")
+        self.assertEqual(self.state("sensor.hestia_heating_poele_energie"), "83.52")
+        energy = self.hass.states.get("sensor.hestia_heating_poele_energie").attributes
+        self.assertEqual((energy["device_class"], energy["state_class"], energy["unit_of_measurement"]),
+                         ("energy", "total_increasing", "kWh"))
+        self.assertEqual(self.state("sensor.hestia_heating_poele_brasier"), "unknown")
+        self.assertEqual(self.state("binary_sensor.hestia_heating_poele_brasier_a_nettoyer"), "unknown")
+        self.assertEqual(c.data["poele"]["conso"]["prix_kg"], 0.367)
+        await c.async_fire_pot_cleaned()
+        await self.hass.async_block_till_done()
+        self.assertEqual(c.pellets_memory["sacs_nettoyage"], 6.0)
+        self.assertEqual(self.state("sensor.hestia_heating_poele_brasier"), "0.0")
+        self.assertEqual(self.state("binary_sensor.hestia_heating_poele_brasier_a_nettoyer"), "off")
+        saved = await Store(self.hass, 1, PLANNING_STATE_KEY).async_load()
+        self.assertIsNotNone(saved["granules"]["nettoye_le"], "« J'ai nettoyé » is written at once")
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"brasier_kg": 100})
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"granules_prix_sac": "cinq"})
+        await c.async_set_settings({"brasier_kg": 20, "granules_prix_sac": 6.0})
+        await self.hass.async_block_till_done()
+        self.assertEqual(c.data["poele"]["conso"]["brasier"]["seuil_kg"], 20)
+        self.assertEqual(c.data["poele"]["conso"]["prix_source"], "reglages")
+        self.assertEqual(self.calls, [], "counting sends nothing")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_a_setting_changes_what_is_read(self):

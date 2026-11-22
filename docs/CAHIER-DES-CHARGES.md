@@ -256,9 +256,9 @@ Couper la prise en pleine chauffe arrête aussi l’extracteur qui refroidit le 
 
 Ce sont des ordres de grandeur, pas des mesures : la forme est bonne, l’échelle se règle d’un seul facteur, appris sur les sacs. Muet et prise à zéro : rien n’est compté. On sous-estime plutôt que d’inventer. Les débits vont dans le profil ; le facteur est appris.
 
-**Les kilos** : le débit intégré dans le temps, puis par jour et par saison. Une saison qui repart au 1er janvier coupe l’hiver en deux (point ouvert n° 8).
+**Les kilos** : le débit intégré dans le temps, puis par jour et par saison. La saison va du 1er septembre au 31 août, ou part du mois où Suivi Stock Pellet commence la sienne, pour que les deux comptent la même saison (une saison au 1er janvier couperait l’hiver en deux). Un arrêt de Home Assistant ne compte rien : plutôt rien qu’une supposition.
 
-**Le nettoyage du brasier** : seuil réglable, **15 kg** par défaut (un sac). Le brasier était déjà sale à 18 kg. Les kilos depuis le dernier nettoyage se calent sur les sacs déclarés dans Suivi Stock Pellet : un sac déclaré, c’est un réservoir vide, donc un sac entier brûlé depuis le remplissage précédent. La correction apprise (sac ÷ estimation) est bornée entre 0,7 et 1,6 ; l’estimation seule comptait 30 % trop bas. « J’ai nettoyé » remet le compteur à zéro (arrondi vers le bas, avec une marge de 0,5 kg), et remet le thermostat en hors gel et allumé, ce qui lève le verrou. **Le nettoyage bloque le prochain démarrage, jamais la chauffe en cours.**
+**Le nettoyage du brasier** : seuil réglable, **15 kg** par défaut (un sac). Le brasier était déjà sale à 18 kg. Les kilos depuis le dernier nettoyage se calent sur les sacs déclarés dans Suivi Stock Pellet : un sac déclaré, c’est un réservoir vide, donc un sac entier brûlé depuis le remplissage précédent. La correction apprise (sac ÷ estimation) est bornée entre 0,7 et 1,6 ; l’estimation seule comptait 30 % trop bas. Hestia n’apprend pas du premier sac qu’elle voit : elle ne sait pas si le réservoir était vide quand elle a commencé à compter. « J’ai nettoyé » remet le compteur à zéro (arrondi vers le bas, avec une marge de 0,5 kg), et remet le thermostat en hors gel et allumé, ce qui lève le verrou. **Le nettoyage bloque le prochain démarrage, jamais la chauffe en cours.** Dans Hestia 0.6, « J’ai nettoyé » ne fait que remettre le compteur à zéro : le blocage du démarrage et le thermostat viendront avec le pilote entier.
 
 **L’énergie et le prix** :
 
@@ -269,7 +269,7 @@ prix du kWh utile  = prix du kg ÷ 4,176
 énergie du poêle   = kilos × 4,176          ← c’est elle qu’Énergie doit recevoir
 ```
 
-Le prix ne vit qu’à un seul endroit (le sac et son poids). Un prix « sans rendement » est environ 20 % trop bas.
+Le prix ne vit qu’à un seul endroit (le sac et son poids). Un prix « sans rendement » est environ 20 % trop bas. Suivi Stock Pellet compte 4,6 kWh par kg, sans rendement : son énergie est la chaleur du granulé, pas celle qui entre dans la maison. Sans prix saisi dans Hestia, le prix du sac est la dépense de la saison ÷ les sacs achetés, lus dans Suivi Stock Pellet.
 
 ### Ce que montre la page Poêle
 
@@ -318,16 +318,16 @@ Ce qui dépend du foyer, avec sa valeur par défaut. | Réglage | Par défaut | 
 | Pièce trop chaude | consigne + 0,5 °C, prévue à 15 min | 0.4, fixe |
 | Délai entre deux hausses de flamme | 30 min | 0.4, fixe |
 | Réserve d’ordres | 4 (6 avant la ventilation) | 0.4, fixe |
-| Plafond d’ordres du poêle | lu dans les options de son intégration | à faire |
+| Plafond d’ordres du poêle | lu dans les options de son intégration | 0.5, lu (sinon celui du profil) |
 | Écart d’hystérésis hors boost | 1,0 °C | 0.4, fixe |
 | Saison douce | permis sous 18 °C, demande au-dessus de 19 °C | 0.4, fixe |
 | Délai de réponse en saison douce | 15 min | 0.4, fixe |
 | Sécurité surchauffe | 28 °C | 0.4, fixe |
 | Vérification d’arrêt | 25 min | à faire |
 | Couper la prise sans réponse | oui, après 5 min | à faire |
-| Prix et poids du sac | à saisir (lus dans Suivi Stock Pellet s’il est là) | à faire |
-| Seuil de nettoyage du brasier | 15 kg | à faire |
-| Débits par flamme | ceux du profil, puis appris sur les sacs | à faire |
+| Prix et poids du sac | à saisir (lus dans Suivi Stock Pellet s’il est là) | 0.6, Réglages |
+| Seuil de nettoyage du brasier | 15 kg | 0.6, Réglages |
+| Débits par flamme | ceux du profil, puis appris sur les sacs | 0.6 : le profil, et le facteur appris |
 | Puissance électrique simultanée | selon l’abonnement | à faire |
 | Destinataire des notifications | à choisir | à faire |
 
@@ -335,18 +335,20 @@ Ce qui dépend du foyer, avec sa valeur par défaut. | Réglage | Par défaut | 
 
 ## Hestia face à la maison d’essai
 
-Où en est Hestia 0.5 par rapport à ce fonctionnement. Le pilote « à l’ombre » compare déjà ses gestes à ceux de la maison chaque jour.
+Où en est Hestia 0.6 par rapport à ce fonctionnement. Le pilote « à l’ombre » compare déjà ses gestes à ceux de la maison chaque jour.
 
-| Règle | Hestia 0.5 | À faire |
+| Règle | Hestia 0.6 | À faire |
 | --- | --- | --- |
 | Escalier, marge de 7 points, hausse par demi-heure, réserve de 4, flamme au plus bas | pareil, en une seule fonction | — |
 | Pièce trop chaude, sur la température **lissée** | pareil depuis le 22 novembre (`ema_temp`) ; la sécurité des 28 °C lit la température en direct | — |
 | Plafond d’ordres lu dans les options de l’intégration | lu dans l’entrée de l’extension (`max_eeprom_writes_per_day`), sinon 20 | — |
 | Jamais « 1 sur 5 » poêle éteint | pas de flamme poêle éteint, seulement la flamme réglée en pâle ; courbe à 0 | — |
-| Énergie du poêle sur les kilos | l’interface donne à Énergie le compteur du thermostat, faux pour le poêle | débit, kilos et kWh dans Chauffage, puis dans l’interface v1 (ajout compatible) |
+| Débit, kilos, énergie et prix des granulés | pareil depuis la 0.6 : débit par état et flamme, facteur appris sur les sacs, saison | — |
+| Énergie du poêle sur les kilos | depuis la 0.6, l’interface donne à Énergie l’énergie comptée par Hestia, jamais le compteur du thermostat | Énergie : la lire (son fil) |
 | Saison douce sans réponse, poêle déjà en route : rien coupé | pareil | — |
 | Arrêt après 30 s d’« éteint », pas au retour d’un redémarrage | pareil ; un poêle relu au redémarrage n’est pas non plus un démarrage | — |
-| Brasier : compteur, seuil, blocage du prochain démarrage | non | avec les granulés |
+| Brasier : compteur, seuil, « J’ai nettoyé » | pareil depuis la 0.6 (sur les sacs, sinon sur les kilos de Hestia) | — |
+| Brasier : blocage du prochain démarrage, thermostat remis en hors gel | non | avec le pilote entier |
 | Démarrage : réglages seulement s’ils changent, contrôle d’allumage, rechargement | dit à l’ombre, sans contrôle | avec le pilote entier |
 | Arrêt vérifié à 25 min, escalade, prise | dit à l’ombre (« 3 essais, puis vérifier ») | avec le pilote entier |
 | Reprise après un redémarrage | non | avec le pilote entier |
@@ -364,7 +366,7 @@ Où en est Hestia 0.5 par rapport à ce fonctionnement. Le pilote « à l’ombr
 3. **La ventilation** : AUTO depuis la mi-novembre ; « flamme + 1 » attend l’avis de Frank.
 4. **Les seuils TPI du thermostat du poêle** (1 et 0,1, au lieu de 0 et 0 conseillés) écrêtent peut-être la demande. Pas prouvé : des demandes intermédiaires sont vues.
 5. **L’ouvrant de la pièce du poêle** : alerter (aujourd’hui) ou baisser la flamme à 1 à l’ouverture ?
-6. **La saison des compteurs** : du 1er septembre au 31 août plutôt que l’année civile.
+6. ~~**La saison des compteurs**~~ : tranché dans la 0.6, du 1er septembre au 31 août, ou du mois où Suivi Stock Pellet commence la sienne.
 7. **Le conseil « allumer le poêle »** part même hors saison, ou quand la température dehors est inconnue ; rien ne traite un granulé plus cher que l’électricité.
 8. **L’anticipation du démarrage** est reportée : montrer le prochain changement de préréglage du planning, pas une heure calculée.
 9. **Le plafond d’ordres de la maison d’essai** : le document de la maison et son capteur de quota ne donnent pas le même plafond. Hestia le lira à la source, dans les options de l’intégration.
@@ -380,7 +382,7 @@ La v0.1 ne commandait rien. Les versions, et la suite proposée :
 4. **0.4** — le pilote de poêle « à l’ombre » : il calcule ce qu’il ferait (démarrer, flamme 3, refuser pour surchauffe…) et l’affiche à côté de ce que font les automatisations de la maison, sans rien envoyer.
 5. **0.5** — le pilote règle la flamme, en option (Réglages, « Flamme ») : la flamme selon la demande du thermostat, un ordre à la fois, vérifié 5 min après, 12 ordres par jour au plus, et jamais dans la réserve de 4 sous le plafond de l’extension. Le démarrage, l’arrêt et les sécurités restent aux automatisations de la maison. Si la flamme change sans Hestia, ou si le poêle ne suit pas trois fois, Hestia la laisse jusqu’au lendemain. Revenir « À l’ombre » est le retour arrière en un clic. Jamais au labo.
 6. **Avant d’essayer « Flamme » à la maison** — fait le 22 novembre : la température lissée, le plafond d’ordres lu dans l’extension, jamais « 1 sur 5 » poêle éteint, l’exception de la saison douce, et pas de faux écart après un redémarrage.
-7. **Proposé ensuite : les granulés** — débit, kilos, nettoyage du brasier (compteur, seuil, calage sur les sacs, « J’ai nettoyé »), énergie et prix ; l’énergie du poêle donnée à Hestia Énergie sur les kilos.
+7. **0.6** — les granulés : débit, kilos, nettoyage du brasier (compteur, seuil, calage sur les sacs, « J’ai nettoyé »), énergie et prix ; l’énergie du poêle donnée à Hestia Énergie sur les kilos. Rien n’est envoyé au poêle pour ça.
 8. **Proposé ensuite : le pilote entier**, profil Micronova, toujours en option : le démarrage et ses cas, le contrôle d’allumage, l’arrêt vérifié et son escalade, les sécurités, la reprise après un redémarrage, les questions et les notifications. D’abord à l’ombre face à la maison d’essai, puis à la maison, jamais au labo.
 9. Les autres profils (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un, avec des testeurs.
 
@@ -401,6 +403,7 @@ La v0.1 ne commandait rien. Les versions, et la suite proposée :
 Le 22 novembre 2026 :
 
 - Le fonctionnement du poêle de la maison d’essai, écrit par Frank, est la base de la gestion des poêles dans la brique. Ses règles, leurs chiffres et leurs raisons sont repris plus haut, sans les données de la maison.
+- Frank : « allons-y » pour les granulés et le brasier (0.6), puis le pilote entier, en option éteinte par défaut.
 
 Le 20 novembre 2026 :
 

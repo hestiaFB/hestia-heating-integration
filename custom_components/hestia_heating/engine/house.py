@@ -9,7 +9,7 @@ import re
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from . import home_planning, phrases, pilot, planning, sources, stove as stove_engine
+from . import granules, home_planning, phrases, pilot, planning, sources, stove as stove_engine
 from .phrases import degrees, hour
 
 # The tone of each room's chip in the panel and the card (the colours of the charte).
@@ -86,6 +86,18 @@ def build(snap: dict) -> dict:
                                   stove_thermostat, snap.get("plug"), pellets, raw_stove.get("ecritures_max"))
         if not stove["piece"] and stove_thermostat:
             stove["piece"] = stove_thermostat.get("piece")
+    # The pellets, counted by Hestia from the stove's state (0.6): kilos, energy for Hestia Énergie, the fire pot.
+    pellet_memory = None
+    if stove:
+        chosen_g = snap.get("granules_reglages") or {}
+        bags = granules.bags_of(pellets, chosen_g.get("poids_sac"))
+        pellet_memory = granules.advance(snap.get("granules_memoire"), stove, bags, now, raw_stove["profile"].rates,
+                                         (pellets or {}).get("debut_saison"))
+        price = chosen_g.get("prix_sac") or (pellets or {}).get("prix_sac")
+        stove["conso"] = granules.view(pellet_memory, bags, chosen_g.get("brasier_kg"), price,
+                                       chosen_g.get("poids_sac") or (pellets or {}).get("sac_kg") or granules.BAG_KG)
+        stove["conso"]["prix_source"] = ("reglages" if chosen_g.get("prix_sac") else
+                                         "suivi" if (pellets or {}).get("prix_sac") else None)
     burning = bool(stove and stove["en_feu"])
     if stove_thermostat:
         stove_thermostat["etat"] = ("chauffe" if burning else "arret" if stove_thermostat["mode"] == "off"
@@ -202,6 +214,7 @@ def build(snap: dict) -> dict:
         },
         "a_regler": _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules) + plan["a_regler"],
         "_pilote": pilot_state,
+        "_granules": pellet_memory,
     }
 
 

@@ -49,6 +49,15 @@
       },
       "poele_granules_jours": {
         "name": "Granulés restants"
+      },
+      "poele_granules_brules": {
+        "name": "Granulés brûlés"
+      },
+      "poele_energie": {
+        "name": "Énergie du poêle"
+      },
+      "poele_brasier": {
+        "name": "Brasier, granulés depuis le nettoyage"
       }
     },
     "binary_sensor": {
@@ -57,6 +66,9 @@
       },
       "piece_en_chauffe": {
         "name": "{piece} en chauffe"
+      },
+      "poele_brasier_a_nettoyer": {
+        "name": "Brasier à nettoyer"
       }
     }
   }

@@ -7,7 +7,7 @@ Version 0.4.0b1. Ce document décrit ce que la brique lit, ce qu’elle publie e
 | Fichier | Rôle |
 | --- | --- |
 | `reader.py` | Tout ce qui touche Home Assistant : registres, états, historique, l’interface d’Hestia Weather. Ne fait que lire. |
-| `engine/` | Python pur, testé sans Home Assistant : `sources.py` (un thermostat → une source), `stove.py` (le poêle et les granulés), `planning.py` (Scheduler), `home_planning.py` (les plannings Hestia), `pilot.py` (le pilote du poêle : à l’ombre, ou la flamme), `house.py` (la maison en une phrase), `phrases.py` (les mots), `profiles.py` (les profils de poêle), `legacy.py` (anciens noms du panneau, lus par le socle). |
+| `engine/` | Python pur, testé sans Home Assistant : `sources.py` (un thermostat → une source), `stove.py` (le poêle et les granulés), `planning.py` (Scheduler), `home_planning.py` (les plannings Hestia), `pilot.py` (le pilote du poêle : à l’ombre, ou la flamme), `granules.py` (les granulés comptés par Hestia et le brasier, depuis la 0.6), `house.py` (la maison en une phrase), `phrases.py` (les mots), `profiles.py` (les profils de poêle), `legacy.py` (anciens noms du panneau, lus par le socle). |
 | `profiles/*.json` | Un profil par intégration de poêle, sans code. |
 | `coordinator.py` | Écoute les entités trouvées, recalcule, prévient les abonnés, envoie les changements des plannings Hestia actifs. Garde les réglages (`.storage/hestia_heating.reglages`) et le dernier changement traité de chaque thermostat (`.storage/hestia_heating.planning_etat`). |
 | `api.py` | L’interface pour les autres briques, `hass.data["hestia_heating_api"]`. |
@@ -28,7 +28,7 @@ Version 0.4.0b1. Ce document décrit ce que la brique lit, ce qu’elle publie e
 - **Le compteur d’énergie** de chaque thermostat (kWh, gardé en statistique) : un capteur d’énergie de son appareil, sinon celui dont l’identifiant commence comme le sien (`sensor.vt_bureau_energy`) ; le plus court gagne.
 - **Son thermostat** : celui choisi dans Réglages, sinon le Versatile Thermostat dont une entité pilotée appartient au poêle, sinon celui dont le nom dit « poêle ». Son type devient `poele` et sa puissance électrique `None` : le poêle ne compte jamais comme de l’électrique.
 - **La prise** : celle choisie dans Réglages, sinon un capteur de puissance dont le nom dit « poêle », une prise d’abord (« prise », « plug »…). Sont écartés les capteurs de l’appareil du poêle et ceux d’un thermostat (`sensor.thermostat_poele_mean_power_cycle`). Au-delà de 15 W, le poêle « tourne ».
-- **Les granulés** : les capteurs qui portent l’attribut `suivi_stock_pellet_key` (Suivi Stock Pellet). Jours restants = stock ÷ (kilos de la saison ÷ jours d’utilisation).
+- **Les granulés** : les capteurs qui portent l’attribut `suivi_stock_pellet_key` (Suivi Stock Pellet). Jours restants = stock ÷ (kilos de la saison ÷ jours d’utilisation). Depuis la 0.6 sont lus aussi les sacs déclarés consommés (`consomme_sacs` de `consomme_kg`), les sacs achetés (`achete_sacs` de `achete_kg`), la dépense (`depense`), le poids d’un sac et le mois où commence la saison (`poids_sac_kg`, `mois_debut_saison` de `stock`) : voir « Les granulés comptés par Hestia ».
 - **Le planning** : les interrupteurs de Scheduler (sinon les `switch.schedule_*` qui ont des `timeslots`) qui visent un thermostat. Le premier planning allumé qui s’applique au jour et vise le thermostat donne la journée. « Jours ouvrés » suit le capteur Workday quand il existe, sinon du lundi au vendredi.
 - **Le temps** : `hestia_weather_api` version 1 (`places()`, `hourly(lieu)`, `add_listener(lieu, update, brick="hestia_heating")`). Le lieu est celui choisi dans Extensions, sinon le premier. Sans Hestia Weather, le froid à venir n’est pas dit.
 
@@ -46,7 +46,11 @@ L’identifiant unique est `<entrée>_<clé>` ; l’entity_id est `<plateforme>.
 | `poele_etat` | sensor (énumération) | `eteint`, `allumage`, `chauffe`, `nettoyage`, `extinction`, `alarme`, `inconnu` ; en attributs le texte du poêle, « à traduire », depuis quand, le profil |
 | `poele_flamme` | sensor | la flamme réelle (sinon réglée) ; en attributs la flamme réglée et la demande du thermostat |
 | `poele_granules_jours` | sensor (jours) | jours de granulés au rythme de la saison ; en attributs le stock, les sacs, les kilos par jour et de la saison |
+| `poele_granules_brules` | sensor (kg, `total_increasing`) | les kilos brûlés comptés par Hestia depuis son installation, jamais remis à zéro (0.6) ; en attributs le débit, les kilos du jour et de la saison, la saison, le facteur appris, le prix du kilo, le coût du jour |
+| `poele_energie` | sensor (kWh, énergie, `total_increasing`) | la chaleur utile de ces kilos (× 4,176), à déclarer dans la page Énergie (0.6) ; en attributs les kWh par kg, ceux du jour, le prix du kWh |
+| `poele_brasier` | sensor (kg) | les kilos brûlés depuis le dernier nettoyage noté, inconnu tant qu’aucun ne l’a été (0.6) ; en attributs le seuil, la date du nettoyage, « par les sacs », la phrase |
 | `poele_alarme` | binary_sensor (problème) | avec le texte du poêle |
+| `poele_brasier_a_nettoyer` | binary_sensor (problème) | allumé au-delà du seuil, inconnu tant qu’aucun nettoyage n’a été noté (0.6) |
 | `piece_<id de la pièce>_en_chauffe` | binary_sensor (chaleur) | une par pièce, ajoutée quand une pièce apparaît ; en attributs température, consigne, puissance, demande, poêle |
 
 Les entités du poêle n’existent que s’il y a un poêle.
@@ -56,8 +60,8 @@ Les entités du poêle n’existent que s’il y a un poêle.
 `hass.data["hestia_heating_api"]`, **version 1**. Elle existe dès le démarrage, vide tant que la brique n’est pas prête ou si elle est déchargée. Dans la version 1, une méthode s’ajoute, elle ne se renomme ni ne se retire.
 
 - `version` : `1`.
-- `sources()` : une liste, une entrée par source de chaleur ou de froid : `id` (l’entité du thermostat, stable), `nom`, `type` (`radiateur`, `poele`, `clim`, `pac`, `vanne`, `autre`), `piece` (l’id de la pièce Home Assistant), `etat` (`chauffe`, `rafraichit`, `repos`, `arret`, `inconnu`), `puissance_w` (électricité tirée maintenant, `None` pour le poêle), `demande_pct`, `energie_stat` (le compteur d’énergie du thermostat, depuis la 0.2), `granules_stat` (la statistique des kilos de Suivi Stock Pellet, pour le poêle).
-- `poele()` (depuis la 0.2) : `nom`, `etat`, `en_feu`, `flamme`, `thermostat` (l’`id` de sa source), `energie_stat` (le compteur de son thermostat, souvent déclaré en « gaz » dans la page Énergie) et `granules` (`stock_kg`, `jours`, `kg_par_jour`, `saison_kg`, `stat`) ou `None`. `None` sans poêle.
+- `sources()` : une liste, une entrée par source de chaleur ou de froid : `id` (l’entité du thermostat, stable), `nom`, `type` (`radiateur`, `poele`, `clim`, `pac`, `vanne`, `autre`), `piece` (l’id de la pièce Home Assistant), `etat` (`chauffe`, `rafraichit`, `repos`, `arret`, `inconnu`), `puissance_w` (électricité tirée maintenant, `None` pour le poêle), `demande_pct`, `energie_stat` (le compteur d’énergie du thermostat, depuis la 0.2), `granules_stat` (la statistique des kilos de Suivi Stock Pellet, pour le poêle). **Pour le poêle, depuis la 0.6** : `energie_stat` est `sensor.hestia_heating_poele_energie` (jamais le compteur de son thermostat, qui compte le temps d’un interrupteur qui ne commande rien ; `None` sans cette entité) et `granules_stat` est `sensor.hestia_heating_poele_granules_brules` (sinon celle de Suivi Stock Pellet).
+- `poele()` (depuis la 0.2) : `nom`, `etat`, `en_feu`, `flamme`, `thermostat` (l’`id` de sa source), `energie_stat` (depuis la 0.6 l’énergie comptée par Hestia, `sensor.hestia_heating_poele_energie` ; avant, le compteur de son thermostat), `granules` (`stock_kg`, `jours`, `kg_par_jour`, `saison_kg`, `stat`) ou `None`, et `conso` (0.6 : `debit_kg_h`, `kg_jour`, `kg_saison`, `saison`, `total_kg`, `energie_kwh`, `kwh_jour`, `prix_kg`, `prix_kwh`, `cout_jour`, et `brasier` : `kg`, `seuil_kg`, `a_nettoyer`). `None` sans poêle.
 - `maison()` : `etat`, `titre`, `texte`, `temperature`, `en_chauffe`, `pieces`, `electrique_w`, et `poele` (`etat`, `flamme`) ou `None`. `None` si la brique n’est pas prête.
 - `add_listener(update, brick=None)` : `update()` est appelé à chaque changement ; `brick` nomme la brique qui lit (« hestia_energy »). Rend la fonction qui arrête l’écoute.
 
@@ -71,7 +75,21 @@ Unités : °C, W, %. Une valeur absente est `None`, jamais inventée.
 | `hestia_heating/subscribe` | la vue des cartes, entière une fois puis seulement ce qui change (`changes`, `removed`) ; `reload` quand la brique redémarre. Une seule souscription par tableau de bord (`card/src/stream.ts`) |
 | `hestia_heating/day` + `cible` (`poele` ou `piece/<id>`) | les courbes du jour depuis minuit, un point toutes les 5 min au plus, gardées 2 min |
 | `hestia_heating/settings` | les réglages et ce qu’ils peuvent valoir |
-| `hestia_heating/set_settings` + `reglages` | enregistre les réglages modifiés (`sources`, `extensions`, `poele_thermostat`, `poele_prise`, `weather_place`, `planning`, `pilote`). Un planning illisible est refusé (`invalid`), avec la raison en mots, et rien n’est enregistré |
+| `hestia_heating/set_settings` + `reglages` | enregistre les réglages modifiés (`sources`, `extensions`, `poele_thermostat`, `poele_prise`, `weather_place`, `planning`, `pilote`, `pilote_thermometre`, `planning_autorises`, `pilote_flamme_basse`, et depuis la 0.6 `brasier_kg` de 5 à 60, `granules_prix_sac` de 0,5 à 50 €, `granules_poids_sac` de 5 à 30 kg, vides pour « comme trouvé »). Un réglage illisible est refusé (`invalid`), avec la raison en mots, et rien n’est enregistré |
+| `hestia_heating/brasier_nettoye` | « J’ai nettoyé » : le compteur du brasier repart de zéro, écrit tout de suite. Rien n’est envoyé au poêle (0.6) |
+
+## Les granulés comptés par Hestia
+
+Depuis la 0.6 (`engine/granules.py`, Python pur, appelé par `house.py` à chaque calcul). Rien n’est envoyé au poêle pour compter.
+
+- **Le débit** (kg/h) se lit sur l’état du poêle, jamais sur sa flamme seule : `allumage` a le sien, `chauffe` et `nettoyage` suivent la flamme réelle (une valeur par flamme, `debits` du profil : Micronova 1,2 à l’allumage, puis 0,55 · 0,81 · 1,07 · 1,34 · 1,60), un poêle `inconnu` (muet, pas « à traduire ») dont la prise tire plus de 60 W compte le palier du milieu, le reste 0.
+- **Les kilos** : à chaque calcul, le débit vu au calcul d’avant, pendant le temps écoulé (5 min au plus), multiplié par le facteur appris. Total (jamais remis à zéro), jour, saison (du 1er septembre, ou du mois `mois_debut_saison` de Suivi Stock Pellet). Rien n’est arrondi pendant le compte.
+- **Le facteur** se cale sur les sacs : un sac déclaré consommé dans Suivi Stock Pellet, c’est un réservoir vide, donc un sac entier brûlé depuis le précédent. Facteur = poids du sac ÷ kilos estimés (sans facteur) depuis le sac précédent, si l’estimation dépasse 5 kg, borné entre 0,7 et 1,6. Pas au premier sac vu : le réservoir n’était pas connu vide au départ. Plusieurs sacs déclarés d’un coup n’apprennent rien. Une nouvelle saison de Suivi Stock Pellet (son compte qui redescend) déplace les repères sans rien perdre.
+- **Le brasier** : « J’ai nettoyé » note l’heure et le total. Avec Suivi Stock Pellet, les kilos depuis le nettoyage = ce qui restait dans le réservoir au nettoyage + les sacs versés depuis − ce qui reste maintenant (un sac moins ce qui est compté depuis le dernier sac versé) ; sinon, le total moins celui du nettoyage. Seuil `brasier_kg` (15 kg par défaut), « bientôt » à 4 kg du seuil.
+- **L’énergie** : kilos × 4,176 kWh utiles (4,8 × 0,87). **Le prix** : `granules_prix_sac`, sinon la dépense ÷ les sacs achetés de Suivi Stock Pellet ; ÷ `granules_poids_sac`, sinon `poids_sac_kg`, sinon 15 kg.
+- **La mémoire** (`granules` dans `.storage/hestia_heating.planning_etat`) : écrite au plus toutes les 5 min pendant que le poêle brûle, tout de suite quand un sac, le facteur, le nettoyage, le jour ou la saison changent, et quand la brique s’arrête. Au démarrage, le débit d’avant n’est pas repris : le temps où Home Assistant était arrêté ne compte rien.
+
+La vue (`poele.conso`) : `debit_kg_h` (avec le facteur), `kg_jour`, `kg_saison`, `saison`, `total_kg`, `energie_kwh`, `kwh_jour`, `correction`, `prix_kg`, `prix_kwh`, `cout_jour`, `cout_heure`, `prix_source` (`reglages`, `suivi` ou rien), `brasier` (`seuil_kg`, `kg`, `nettoye_le`, `a_nettoyer`, `bientot`, `par_les_sacs`, `texte`).
 
 ## Le planning Hestia
 

@@ -12,7 +12,8 @@ VIEW_VERSION = 1
 # What the cards read: the extensions, the schedules' details and the « à régler » stay out of their view.
 CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning")
 SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote",
-                "pilote_thermometre", "planning_autorises", "pilote_flamme_basse")
+                "pilote_thermometre", "planning_autorises", "pilote_flamme_basse", "brasier_kg", "granules_prix_sac",
+                "granules_poids_sac")
 # The planning's parts only the tab needs (the plannings, the editor, Scheduler, the journal).
 PLANNING_TAB_ONLY = ("hestia", "thermostats", "scheduler", "journal")
 
@@ -23,7 +24,7 @@ def _coordinator(hass):
 
 
 def async_setup_websocket(hass) -> None:
-    for command in (ws_view, ws_subscribe, ws_day, ws_settings, ws_set_settings):
+    for command in (ws_view, ws_subscribe, ws_day, ws_settings, ws_set_settings, ws_fire_pot_cleaned):
         websocket_api.async_register_command(hass, command)
 
 
@@ -146,4 +147,19 @@ async def ws_set_settings(hass, connection, msg):
     except ValueError as err:
         connection.send_error(msg["id"], "invalid", str(err))
         return
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "hestia_heating/brasier_nettoye"})
+@websocket_api.async_response
+async def ws_fire_pot_cleaned(hass, connection, msg):
+    """« J'ai nettoyé » : the fire pot's count starts again. Writes nothing to the stove."""
+    c = _coordinator(hass)
+    if c is None:
+        connection.send_error(msg["id"], "not_ready", "Hestia Chauffage n'est pas activée.")
+        return
+    if not c.data.get("poele"):
+        connection.send_error(msg["id"], "no_stove", "Pas de poêle trouvé.")
+        return
+    await c.async_fire_pot_cleaned()
     connection.send_result(msg["id"], {"ok": True})
