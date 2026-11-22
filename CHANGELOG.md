@@ -1,6 +1,27 @@
 # Changements
 
-## À venir — 0.6.0b1
+## À venir — 0.7.0b1
+
+Le pilote du poêle peut le conduire entier, en option : démarrer, arrêter, tenir les sécurités. Il reste « à l’ombre » tant que vous ne l’avez pas choisi.
+
+### Nouveautés
+- **Dans Réglages, « Le pilote de Hestia » a un quatrième choix : « Entier »**. Hestia fait alors ce que font vos automatisations du poêle : elle le démarre au passage de son thermostat en boost, règle sa flamme, l’arrête en hors gel, vérifie l’arrêt, et tient les sécurités. Coupez d’abord vos automatisations du poêle : deux pilotes en même temps se contrediraient.
+- **Le démarrage** : les réglages du poêle qui ont changé (consigne interne à 25 °C, ECO Stop, ventilation en AUTO s’il reste assez d’ordres), puis l’ordre d’allumage. Pas pris en 3 minutes : Hestia recharge l’intégration du poêle et renvoie l’ordre ; toujours rien, elle vous prévient. 3 démarrages par jour au plus.
+- **Les refus qui verrouillent** : la pièce trop chaude, le brasier à nettoyer, une alarme ou un poêle muet éteignent le thermostat du poêle, comme le fait la maison. « J’ai nettoyé » le rallume, en hors gel, pour le brasier.
+- **L’arrêt vérifié** : jusqu’à 3 ordres, puis une vérification 25 minutes après (l’état, les fumées sous 60 °C, la prise sous 70 W). Le poêle chauffe encore : l’ordre de nouveau, puis « Couper la prise ? », coupée sans réponse en 5 minutes si Réglages le permettent.
+- **La saison douce** : Hestia vous demande avant d’allumer, Oui ou Non, sur le téléphone et sur la page Poêle. Sans réponse en 15 minutes, le thermostat repasse hors gel, sauf si le poêle est déjà en route.
+- **Après un redémarrage de Home Assistant** : un poêle qui brûle avec son thermostat éteint retrouve son thermostat, en boost.
+- **Dans Réglages** : le service de vos téléphones pour les notifications (avec leurs boutons), l’interrupteur de la prise du poêle (trouvé seul quand c’est possible), et « Couper la prise sans réponse ».
+
+### Ce qui change
+- À l’ombre aussi, le pilote refuse un démarrage quand le brasier est à nettoyer.
+- Un arrêt demandé pendant que le poêle ne dit plus son état attend 2 minutes qu’il le dise, puis l’envoie quand même, comme la maison.
+
+### Ce qui ne change pas
+- Au labo, rien n’est jamais envoyé : ni ordre, ni notification, à un poêle ou un thermostat recopié d’une autre maison.
+- « À l’ombre » reste le choix de départ, et le retour arrière en un clic.
+
+## 0.6.0b1
 
 Hestia compte les granulés du poêle et dit quand nettoyer le brasier. Elle n’envoie rien au poêle pour ça.
 

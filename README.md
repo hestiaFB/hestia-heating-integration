@@ -4,14 +4,14 @@
 
 Elle ne remplace pas votre thermostat : elle s’appuie sur les intégrations que vous avez déjà.
 
-> **Bêta 0.6, en préparation.** Elle lit et explique, et elle a ses propres plannings. Un planning commence « En essai » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Même actif, il ne règle que les thermostats que vous avez cochés dans Réglages, « Ce que Hestia peut régler » : aucun au départ. Le pilote du poêle est « à l’ombre » au départ : il dit ce qu’il ferait. En option, il peut régler la flamme, et seulement elle ; le démarrage et l’arrêt restent à vos automatisations. Hestia compte aussi les granulés brûlés et dit quand nettoyer le brasier, sans rien envoyer au poêle. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
+> **Bêta 0.7, en préparation.** Elle lit et explique, et elle a ses propres plannings. Un planning commence « En essai » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Même actif, il ne règle que les thermostats que vous avez cochés dans Réglages, « Ce que Hestia peut régler » : aucun au départ. Le pilote du poêle est « à l’ombre » au départ : il dit ce qu’il ferait. En option, il peut régler la flamme, et seulement elle ; ou conduire le poêle entier (démarrer, arrêter, tenir les sécurités), à la place de vos automatisations. Hestia compte aussi les granulés brûlés et dit quand nettoyer le brasier, sans rien envoyer au poêle. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
 
-## Ce que montre la version 0.6
+## Ce que montre la version 0.7
 
 Un onglet **Chauffage** dans le panneau Hestia-FB :
 
 - **Accueil** : la maison en une phrase (« Le poêle chauffe, flamme 3. Un radiateur en appoint. »), le froid de la nuit, puis chaque pièce avec sa température, sa consigne, ce qu’elle fait et pourquoi.
-- **Poêle** : son état traduit dans vos mots, la flamme demandée et la flamme réelle, sa journée, les fumées, l’alarme, la prise mesurée, les granulés qu’il reste. Les granulés qu’il brûle (maintenant, aujourd’hui, cette saison, en kilos, en chaleur et en euros), calés sur les sacs déclarés dans Suivi Stock Pellet, et le brasier : les kilos depuis le dernier nettoyage, avec un bouton « J’ai nettoyé ». Et son pilote « à l’ombre » : ce que Hestia ferait (démarrer, quelle flamme, arrêter), à côté de ce que font vos automatisations. En option, Hestia règle la flamme elle-même.
+- **Poêle** : son état traduit dans vos mots, la flamme demandée et la flamme réelle, sa journée, les fumées, l’alarme, la prise mesurée, les granulés qu’il reste. Les granulés qu’il brûle (maintenant, aujourd’hui, cette saison, en kilos, en chaleur et en euros), calés sur les sacs déclarés dans Suivi Stock Pellet, et le brasier : les kilos depuis le dernier nettoyage, avec un bouton « J’ai nettoyé ». Et son pilote « à l’ombre » : ce que Hestia ferait (démarrer, quelle flamme, arrêter), à côté de ce que font vos automatisations. En option, Hestia règle la flamme elle-même, ou conduit le poêle entier : elle vous pose alors ses questions (saison douce, prise, brasier) sur votre téléphone et sur la page Poêle.
 - **Une pièce** : son thermostat, sa journée (température et consigne), ce qui vient ensuite.
 - **Planning** : la liste de vos plannings. Un planning, c’est une semaine en couleurs (tous les jours pareils, semaine et week-end, ou jour par jour) et les thermostats qu’il règle, « En essai » ou « Actif ». Les plannings de Scheduler sont lus, et se reprennent dans Hestia en un clic.
 - **Réglages** et **Extensions** : ce que la brique a trouvé, le thermostat et la prise du poêle, les thermostats à ne pas lire.
@@ -54,7 +54,8 @@ Hestia Chauffage rejoint [Hestia Weather](https://github.com/hestiaFB/hestia-wea
 ## Ce qui viendra ensuite
 
 - **D’autres conseils** : quand le poêle chauffe moins cher que l’électrique.
-- **Le pilote du poêle entier**, en option, éteint par défaut : après la flamme (0.5), un démarrage et un arrêt sûrs. Un profil par intégration de poêle (Micronova Agua IOT en premier).
+- **Les boutons Allumer et Éteindre** de la page Poêle.
+- **D’autres poêles** : un profil par intégration (Micronova Agua IOT en premier).
 
 ## Licence
 

@@ -28,12 +28,15 @@ type Stove={nom:string;fabricant:string|null;modele:string|null;piece:string|nul
  a_traduire:boolean;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_min:number;flamme_max:number;fumees:number|null;
  air:number|null;alarme:boolean|null;alarme_texte:string|null;eco_stop:boolean|null;ecritures:number|null;ecritures_max:number|null;ecritures_lues?:boolean;thermostat:string|null;
  thermostat_nom:string|null;demande_pct:number|null;consigne:number|null;preset:string|null;prise:string|null;prise_w:number|null;prise_tourne:boolean|null;
- entites:Record<string,string>;pilote?:Pilot;conso?:Conso};
+ entites:Record<string,string>;pilote?:Pilot;conso?:Conso;pilotable?:boolean};
 type Pilot={mode:string;action?:string;titre?:string;texte?:string;ton?:string;flamme?:number|null;maison?:string;accord?:boolean|null;
  journal?:{heure:string;qui:string;texte:string;accord:boolean|null}[];accord_jour?:{oui:number;sur:number};
  accord_semaine?:{oui:number;sur:number;depuis:string;ecarts:{jour:string;heure:string;texte:string;hestia:string|null}[]};
  maison_c?:number|null;thermometre?:string|null;thermometre_lu?:boolean;flamme_basse?:string|null;
- commande?:{envois:number;max:number;lache:string|null;copie:boolean;attente:number|null;texte?:string}};
+ commande?:{envois:number;max:number;lache:string|null;copie:boolean;attente:number|null;texte?:string};conduite?:Drive};
+/** The whole pilot (0.7): the sequence under way, the question waiting for an answer, the lock. */
+type Drive={actif:boolean;copie:boolean;texte?:string|null;demarrages?:number;max_demarrages?:number;pilotable?:boolean;
+ question?:{sujet:string;texte:string;reste_min?:number;reponses:string[]}|null;sequence?:string|null;verrou?:string|null;injoignable?:boolean};
 type Segment={de:number;a:number;ton:string};
 type Lane={id:string;nom:string;segments:Segment[];thermostat?:string;source?:string|null;bloque?:boolean};
 type Range=[string,string,string];
@@ -57,12 +60,15 @@ type View={pret:boolean;version:string;maison:House;pieces:Room[];sources:Source
  mis_a_jour:string;calcul_ms:number|null};
 type Day={debut:string;maintenant_min:number;series:Record<string,[number,number|null][]>};
 type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null;planning:Model;pilote:string;pilote_thermometre:string|null;planning_autorises:string[];pilote_flamme_basse:string|null;
-  brasier_kg?:number|null;granules_prix_sac?:number|null;granules_poids_sac?:number|null};
+  brasier_kg?:number|null;granules_prix_sac?:number|null;granules_poids_sac?:number|null;pilote_notifier?:string|null;poele_prise_switch?:string|null;couper_prise?:boolean};
  trouve:{thermostats:{id:string;nom:string;piece:string}[];coupes:{id:string;nom:string}[];poele:boolean;poele_thermostat:string|null;
-  prises:{id:string;nom:string;poele:boolean}[];prise:string|null;thermometres:{id:string;nom:string;maison:boolean}[];interrupteurs?:{id:string;nom:string}[];poele_copie?:boolean;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null}}};
+  prises:{id:string;nom:string;poele:boolean}[];prise:string|null;thermometres:{id:string;nom:string;maison:boolean}[];interrupteurs?:{id:string;nom:string}[];poele_copie?:boolean;
+  notifieurs?:string[];coupures?:{id:string;nom:string;poele:boolean}[];coupure?:string|null;pilotable?:boolean;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null}}};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='0.6.0b1';
+const VERSION='0.7.0b1';
+// The whole pilot's answers, as on the phone.
+const ANSWER:Record<string,string>={oui:'Oui, allumer',non:'Non',couper:'Couper la prise',ignorer:'Ignorer',nettoye:'J’ai nettoyé'};
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
 const deg=(v:number|null|undefined)=>v==null?'—':`${num(v)} °C`;
 /** « 2026-11-21 » → « 21 nov. ». */
@@ -286,6 +292,7 @@ export class HestiaHeatingSetup extends LitElement {
  @state() private sel?:{r:number;i:number};
  /** « J'ai nettoyé » asks once more before the fire pot's count starts again. */
  @state() private cleaning=false;
+ @state() private answering=false;
  private timer=0;
 
  connectedCallback(){super.connectedCallback();void this.load();this.timer=window.setInterval(()=>{if(!this.count())void this.load();},30000);}
@@ -428,7 +435,8 @@ export class HestiaHeatingSetup extends LitElement {
     ...(room?.planning?[listRow({label:'Le planning',sub:room.prochain?`Puis ${room.prochain.texte} ${when(room.prochain.a)}.`:undefined,value:room.planning,go:()=>this.go('planning')})]:[]),
    ],{more:html`<span class="nk-def">lu, pas décidé</span>`})}
    ${s.pilote?.mode==='ombre'?noteBox('À l’ombre','Le pilote du poêle ne commande rien : il calcule ce qu’il ferait et le compare à ce que font vos automatisations. Dans Réglages, il peut régler la flamme, et seulement elle.')
-     :s.pilote?.mode==='flamme'?noteBox('La flamme','Hestia règle la flamme du poêle, et seulement elle : le démarrage, l’arrêt et les sécurités restent à vos automatisations. Si la flamme change sans elle, elle la laisse jusqu’au lendemain.'):this.modeNote(v)}`;
+     :s.pilote?.mode==='flamme'?noteBox('La flamme','Hestia règle la flamme du poêle, et seulement elle : le démarrage, l’arrêt et les sécurités restent à vos automatisations. Si la flamme change sans elle, elle la laisse jusqu’au lendemain.')
+     :s.pilote?.mode==='entier'?noteBox('Le pilote entier','Hestia démarre et arrête le poêle, règle sa flamme et tient ses sécurités, comme vos automatisations le faisaient. Elles doivent rester coupées : deux pilotes en même temps se contrediraient.'):this.modeNote(v)}`;
  }
  /** The pellets counted by Hestia: the rate now, today, the season, the factor learnt on the bags, the price. */
  private burnt(s:Stove,c:Conso,bags:boolean){
@@ -457,8 +465,9 @@ export class HestiaHeatingSetup extends LitElement {
  /** The pilot, in shadow or flame mode: what Hestia does or would do, what the house does, and today's journal. */
  private pilotPart(s:Stove){
   const p=s.pilote;
-  if(!p||(p.mode!=='ombre'&&p.mode!=='flamme'))return nothing;
-  const steer=p.mode==='flamme'?p.commande:undefined;
+  if(!p||(p.mode!=='ombre'&&p.mode!=='flamme'&&p.mode!=='entier'))return nothing;
+  const whole=p.mode==='entier'?p.conduite:undefined;
+  const steer=p.mode==='flamme'||p.mode==='entier'?p.commande:undefined;
   const agree=(ok:boolean|null|undefined,yes:string,no:string)=>ok==null?nothing:html`<span class=${'chip '+(ok?'calm':'act')}>${ok?yes:no}</span>`;
   const day=p.accord_jour,week=p.accord_semaine;
   const rules:[string,string][]=[
@@ -466,16 +475,31 @@ export class HestiaHeatingSetup extends LitElement {
    ['Flamme','La demande du thermostat : 85 % donne 5, 65 % donne 4, 45 % donne 3, sinon 2. La flamme du poêle tient tant qu’elle reste dans les paliers de la demande ± 7 points. Flamme 1 si la pièce va dépasser sa consigne de 0,5 °C dans 15 min, et tant qu’elle y reste. Baisse tout de suite, hausse 30 min après le dernier changement de flamme, sauf deux paliers d’écart.'],
    ['Ordres du jour',`Il en garde 4 pour pouvoir éteindre (l’extension du poêle en laisse passer ${s.ecritures_max??20} par jour).${steer?` Hestia elle-même : 12 ordres par jour au plus, un à la fois, vérifié 5 min après, renvoyé au plus toutes les 10 min.`:''}`],
    ['Arrêt','Thermostat hors gel, éteint 30 s, ou la maison assez chaude 2 min (à 1 °C ou moins de la consigne, ou à la consigne en boost). Confirmé par l’état du poêle, ses fumées sous 60 °C ou sa prise sous 70 W.'],
-   ['Sécurités','Une alarme qui dure 2 min, la pièce du poêle au-dessus de 28 °C : il coupe. Le poêle muet 15 min : il vous prévient.']];
+   ['Sécurités','Une alarme qui dure 2 min, la pièce du poêle au-dessus de 28 °C : il coupe. Le poêle muet 15 min : il vous prévient.'],
+   ...(whole?[['Ce que Hestia envoie','Avant un démarrage, les réglages du poêle qui ont changé (sa consigne interne, ECO Stop, la ventilation s’il reste plus de 6 ordres), puis l’ordre d’allumage 2 s après. Pas pris en 3 min : l’intégration du poêle est rechargée et l’ordre renvoyé ; toujours rien : « le poêle ne répond pas ». 3 démarrages par jour au plus.'],
+    ['Arrêt vérifié','Jusqu’à 3 ordres, 15 s d’écart, puis une vérification 25 min après. Le poêle chauffe encore : l’ordre de nouveau, puis « Couper la prise ? » (coupée sans réponse en 5 min si Réglages le permettent).'],
+    ['Verrou','Un démarrage refusé pour la pièce trop chaude, le brasier, une alarme ou un poêle muet éteint le thermostat du poêle. « J’ai nettoyé » le rallume pour le brasier ; sinon, rallumez-le vous-même.'],
+    ['Après un redémarrage','3 min après, un poêle qui brûle avec son thermostat éteint retrouve son thermostat, en boost. Rien n’est envoyé au poêle.']] as [string,string][]:[]),
+  ];
+  const q=whole?.question;
+  const answer=async(r:string)=>{this.answering=true;try{await this.hass!.callWS({type:'hestia_heating/repondre',reponse:r});await this.load();}
+   catch(e){this.error=(e as {message?:string}).message??'La réponse n’a pas été notée.';}finally{this.answering=false;}};
+  const title=whole?'Le pilote conduit le poêle':steer?'Le pilote règle la flamme':'Le pilote, à l’ombre';
   return html`${steer?.lache?noteBox('Flamme laissée',steer.lache):nothing}
-   ${steer?.copie?noteBox('Labo','Ce poêle est recopié d’une autre maison : Hestia ne lui envoie jamais rien. La flamme reste à l’ombre.'):nothing}
-   ${listSection(steer?'Le pilote règle la flamme':'Le pilote, à l’ombre',[
-    listRow({label:html`<b>${steer?'Hestia fait':'Hestia ferait'}</b>`,sub:steer&&p.action!=='flamme'&&p.action!=='garder'&&p.action!=='attendre'?`${p.texte} Ce geste reste à vos automatisations : Hestia ne règle que la flamme.`:p.texte,
-     value:html`<span class=${'chip '+(p.ton??'off')}>${p.titre}</span>`}),
-    ...(steer?[listRow({label:'Ordres de Hestia aujourd’hui',sub:steer.texte??(steer.attente!=null?`Flamme ${steer.attente} demandée : vérifiée dans 5 min.`:'Un ordre à la fois, vérifié 5 min après.'),value:`${steer.envois} / ${steer.max}`})]:[]),
-    listRow({label:html`<b>La maison fait</b>`,sub:day?.sur?`Aujourd’hui, la maison a fait comme Hestia ${day.oui} fois sur ${day.sur}.`:'Ce que font vos automatisations, vu de dehors : l’état du poêle et sa flamme.',
+   ${steer?.copie||whole?.copie?noteBox('Labo',whole?'Ce poêle est recopié d’une autre maison : Hestia ne lui envoie jamais rien, ni ordre ni notification. Le pilote reste à l’ombre.'
+     :'Ce poêle est recopié d’une autre maison : Hestia ne lui envoie jamais rien. La flamme reste à l’ombre.'):nothing}
+   ${q?listSection('Hestia vous demande',[listRow({label:html`<b>${q.texte}</b>`,control:true,
+     sub:q.sujet==='saison'?`Sans réponse${q.reste_min!=null?` dans ${q.reste_min} min`:''}, le thermostat repasse hors gel, sauf si le poêle est déjà en route.`:'La même question est sur votre téléphone.',
+     value:html`<span class="pot-ask">${q.reponses.map((r,i)=>html`<button type="button" class=${i===0?'primary':''} ?disabled=${this.answering} @click=${()=>answer(r)}>${ANSWER[r]??r}</button>`)}</span>`})]):nothing}
+   ${listSection(title,[
+    listRow({label:html`<b>${steer?'Hestia fait':'Hestia ferait'}</b>`,sub:whole?(whole.texte??p.texte):steer&&p.action!=='flamme'&&p.action!=='garder'&&p.action!=='attendre'?`${p.texte} Ce geste reste à vos automatisations : Hestia ne règle que la flamme.`:p.texte,
+     level:whole?.injoignable||whole?.verrou?'todo':undefined,value:html`<span class=${'chip '+(p.ton??'off')}>${p.titre}</span>`}),
+    ...(whole&&!whole.copie&&whole.pilotable!==false?[listRow({label:'Démarrages de Hestia aujourd’hui',sub:'Au plus 3 par jour : au-delà, allumez-le vous-même.',value:`${whole.demarrages??0} / ${whole.max_demarrages??3}`})]:[]),
+    ...(steer?[listRow({label:'Ordres de flamme aujourd’hui',sub:steer.texte??(steer.attente!=null?`Flamme ${steer.attente} demandée : vérifiée dans 5 min.`:'Un ordre à la fois, vérifié 5 min après.'),value:`${steer.envois} / ${steer.max}`})]:[]),
+    whole?listRow({label:html`<b>Le poêle</b>`,sub:'Ce qu’il dit de lui-même.',value:p.maison??'—'})
+     :listRow({label:html`<b>La maison fait</b>`,sub:day?.sur?`Aujourd’hui, la maison a fait comme Hestia ${day.oui} fois sur ${day.sur}.`:'Ce que font vos automatisations, vu de dehors : l’état du poêle et sa flamme.',
      value:html`<span class="vals">${p.maison??'—'}${agree(p.accord,'d’accord','autrement')}</span>`}),
-    ...(week?.sur?[listRow({label:html`<b>Depuis le ${dayOf(week.depuis)}</b>`,sub:week.ecarts.length?'Les derniers écarts sont juste en dessous.':'Aucun écart : la maison a toujours fait comme Hestia.',
+    ...(!whole&&week?.sur?[listRow({label:html`<b>Depuis le ${dayOf(week.depuis)}</b>`,sub:week.ecarts.length?'Les derniers écarts sont juste en dessous.':'Aucun écart : la maison a toujours fait comme Hestia.',
       value:html`<span class=${'chip '+(week.oui===week.sur?'calm':'act')}>d’accord ${week.oui} fois sur ${week.sur}</span>`}),
      ...(week.ecarts.length?[moreRow('Les écarts',String(week.ecarts.length),week.ecarts.map(g=>listRow({label:html`<b>${dayOf(g.jour)}, ${g.heure}</b> · ${g.texte}`,
       sub:g.hestia?`Juste avant : ${g.hestia}`:undefined})))]:[])]:[]),
@@ -484,7 +508,9 @@ export class HestiaHeatingSetup extends LitElement {
       :'La moyenne des pièces. Si vos automatisations lisent un autre capteur, choisissez-le dans Réglages.',
      level:p.thermometre&&!p.thermometre_lu?'todo':undefined,value:deg(p.maison_c),go:()=>this.go('reglages')}),
     moreRow('Ses règles',String(rules.length),rules.map(([n,t])=>listRow({label:n,sub:t}))),
-   ],{more:html`<span class="nk-def">${steer&&!steer.copie?'la flamme seulement':'rien n’est envoyé'}</span>`,help:steer?'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter. Hestia n’envoie que la flamme ; le démarrage et l’arrêt, elle ne fait que les dire, à côté de ce que fait la maison.':'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter. À l’ombre, il ne fait que le dire, à côté de ce que fait la maison.'})}
+   ],{more:html`<span class="nk-def">${whole?(whole.copie||whole.pilotable===false?'rien n’est envoyé':'démarrage, flamme, arrêt'):steer&&!steer.copie?'la flamme seulement':'rien n’est envoyé'}</span>`,
+     help:whole?'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter, et Hestia le fait, comme vos automatisations. Chaque geste est écrit dans le journal du jour.'
+     :steer?'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter. Hestia n’envoie que la flamme ; le démarrage et l’arrêt, elle ne fait que les dire, à côté de ce que fait la maison.':'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter. À l’ombre, il ne fait que le dire, à côté de ce que fait la maison.'})}
    ${p.journal?.length?listSection('Le pilote aujourd’hui',[...p.journal].reverse().map(j=>listRow({label:html`<b>${j.heure}</b> · ${j.texte}`,value:agree(j.accord,'comme Hestia','autrement')}))):nothing}`;
  }
 
@@ -663,8 +689,13 @@ export class HestiaHeatingSetup extends LitElement {
     listRow({label:'Le pilote de Hestia',control:true,sub:this.val<string>('pilote')==='eteint'?'Éteint : la page Poêle ne montre que ce que dit le poêle.'
       :this.val<string>('pilote')==='flamme'?(f.poele_copie?'Ce poêle est recopié d’une autre maison : Hestia ne lui enverra rien.'
         :'Hestia règle la flamme, et seulement elle. Coupez d’abord votre automatisation qui règle la flamme : si la flamme change sans Hestia, elle la laisse jusqu’au lendemain. Le démarrage, l’arrêt et les sécurités restent à vos automatisations.')
+      :this.val<string>('pilote')==='entier'?(f.poele_copie?'Ce poêle est recopié d’une autre maison : Hestia ne lui enverra rien.'
+        :f.pilotable===false?'Le profil de ce poêle ne dit pas encore comment l’allumer et l’éteindre : Hestia ne lui enverra rien.'
+        :'Hestia démarre et arrête le poêle, règle sa flamme et tient ses sécurités. Coupez d’abord toutes vos automatisations du poêle (démarrage, modulation, arrêt, vérification, sécurités) : deux pilotes en même temps se contrediraient.')
       :'À l’ombre : il montre ce qu’il ferait, à côté de ce que font vos automatisations. Il ne commande rien.',
-     value:segmented<string>('Le pilote de Hestia',[['ombre','À l’ombre'],['flamme','Flamme'],['eteint','Éteint']],this.val<string>('pilote')??'ombre',x=>this.set('pilote',x))}),
+     level:this.val<string>('pilote')==='entier'&&!f.poele_copie&&f.pilotable!==false?'todo':undefined,
+     value:segmented<string>('Le pilote de Hestia',[['ombre','À l’ombre'],['flamme','Flamme'],['entier','Entier'],['eteint','Éteint']],this.val<string>('pilote')??'ombre',x=>this.set('pilote',x))}),
+    ...(this.val<string>('pilote')==='entier'?this.wholeRows(f):[]),
     ...(this.val<string>('pilote')!=='eteint'?[listRow({label:'La température de la maison',control:true,
      sub:house?'Choisie par vous : prenez le capteur que lisent vos automatisations du poêle.':'La moyenne des pièces que Hestia voit.',
      value:html`<select aria-label="Température de la maison" @change=${(e:Event)=>{const x=(e.target as HTMLSelectElement).value;this.set('pilote_thermometre',x||null);}}>
@@ -688,6 +719,26 @@ export class HestiaHeatingSetup extends LitElement {
      value:toggle('Hestia peut régler '+t.nom,allowed.includes(t.id),on=>this.set('planning_autorises',on?[...allowed,t.id]:allowed.filter(x=>x!==t.id)))})),
      {help:'Un planning Actif n’envoie qu’aux thermostats cochés ici, et à aucun autre. Aucun au départ : pour un essai, cochez seulement vos thermostats d’essai.'})}
    ${listSection('',[listRow({label:'Les pièces',sub:'Elles viennent de Home Assistant : la pièce du thermostat, sinon celle de son appareil.',go:()=>this.openHa('/config/areas/dashboard')})])}`;
+ }
+
+ /** The whole pilot's settings: where it says what it does, the plug's switch, and whether it cuts it without an answer. */
+ private wholeRows(f:Settings['trouve']){
+  const notifier=this.val<string|null>('pilote_notifier'),cut=this.val<string|null>('poele_prise_switch');
+  const phones=f.notifieurs??[],switches=f.coupures??[];
+  return [
+   listRow({label:'Vous prévenir sur',control:true,sub:notifier?'Les questions de Hestia (saison douce, prise, brasier) arrivent avec leurs boutons, comme vos notifications du poêle.'
+     :'Aucun : seulement les notifications de Home Assistant et la page Poêle. Choisissez le service de vos téléphones (par ex. un groupe).',
+    level:notifier?undefined:'todo',
+    value:html`<select aria-label="Service de notification" @change=${(e:Event)=>{const x=(e.target as HTMLSelectElement).value;this.set('pilote_notifier',x||null);}}>
+     <option value="" ?selected=${!notifier}>Aucun</option>${phones.map(n=>html`<option value=${n} ?selected=${notifier===n}>${n}</option>`)}
+     ${notifier&&!phones.includes(notifier)?html`<option value=${notifier} selected>${notifier}</option>`:nothing}</select>`}),
+   listRow({label:'L’interrupteur de sa prise',control:true,sub:cut?'Choisi par vous.':f.coupure?'Trouvé seul, d’après la prise mesurée.':'Aucun trouvé : en dernier recours, Hestia vous dira de couper le poêle vous-même.',
+    value:html`<select aria-label="Interrupteur de la prise du poêle" @change=${(e:Event)=>{const x=(e.target as HTMLSelectElement).value;this.set('poele_prise_switch',x||null);}}>
+     <option value="" ?selected=${!cut}>${f.coupure?'Trouvé seul':'Aucun'}</option>${switches.map(x=>html`<option value=${x.id} ?selected=${cut===x.id}>${x.nom}</option>`)}
+     ${cut&&!switches.some(x=>x.id===cut)?html`<option value=${cut} selected>${cut}</option>`:nothing}</select>`}),
+   listRow({label:'Couper la prise sans réponse',control:true,sub:'En dernier recours : 25 min après l’arrêt et deux ordres, le poêle chauffe encore. Sans réponse en 5 min à « Couper la prise ? », Hestia la coupe.',
+    value:toggle('Couper la prise sans réponse',this.val<boolean>('couper_prise')!==false,on=>this.set('couper_prise',on))}),
+  ];
  }
 
  /** A number to type, empty for « as found ». The integration checks the bounds again. */

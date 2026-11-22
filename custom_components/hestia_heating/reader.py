@@ -44,6 +44,8 @@ class Found:
     stove: dict | None = None                                # {profile, device, roles: {role: entity_id}, entities}
     plug: str | None = None
     plugs: list[dict] = field(default_factory=list)          # every power sensor that could be the stove's plug
+    plug_switch: str | None = None                           # the switch that cuts the stove's plug (the whole pilot)
+    plug_switches: list[dict] = field(default_factory=list)  # every switch that could be it
     thermometers: list[dict] = field(default_factory=list)   # every temperature sensor the pilot could read the house on
     house_sensor: str | None = None                          # the one chosen in Réglages (else: the average of the rooms)
     switches: list[dict] = field(default_factory=list)       # every input_boolean that could ask for the lowest flame
@@ -184,6 +186,7 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
         named = [p for p in found.plugs if p["poele"]]
         found.plug = chosen if chosen and hass.states.get(chosen) else next(
             (p["entity_id"] for p in sorted(named, key=lambda p: not p["prise"])), None)
+        _plug_switch(hass, entities, found, settings.get("poele_prise_switch"))
     # 4. The schedules (Scheduler) and the Workday sensor.
     if SCHEDULER not in off_ext:
         for entry in entities.entities.values():
@@ -195,6 +198,43 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
     found.workday = next((e.entity_id for e in entities.entities.values()
                           if e.platform == WORKDAY and e.domain == "binary_sensor" and not e.disabled_by), None)
     return found
+
+
+def _plug_switch(hass: HomeAssistant, entities, found: Found, chosen: str | None) -> None:
+    """The switch that cuts the stove's plug, for the whole pilot's last resort: the one chosen in Réglages, else the
+    switch of the plug's own device, else the one named like the plug (« sensor.prise_granules_power » →
+    « switch.prise_granules »). Never the stove's own switches (ECO Stop) nor a schedule's."""
+    stove_ids = set((found.stove or {}).get("entities") or ())
+    stove_device = (found.stove or {}).get("device_id")
+    candidates = []
+    for s in hass.states.async_all("switch"):
+        entry = entities.async_get(s.entity_id)
+        if s.entity_id in stove_ids or (stove_device and entry is not None and entry.device_id == stove_device):
+            continue
+        if (entry is not None and entry.platform == SCHEDULER) or "timeslots" in s.attributes:
+            continue
+        label = f"{s.entity_id} {s.attributes.get('friendly_name') or ''}"
+        candidates.append({"entity_id": s.entity_id, "nom": s.attributes.get("friendly_name") or s.entity_id,
+                           "poele": bool(sources.STOVE_NAME.search(label)), "prise": bool(sources.PLUG_NAME.search(label)),
+                           "device_id": entry.device_id if entry else None})
+    candidates.sort(key=lambda c: (not c["poele"], not c["prise"], c["nom"].casefold()))
+    found.plug_switches = [{k: c[k] for k in ("entity_id", "nom", "poele")} for c in candidates if c["poele"] or c["prise"]]
+    if chosen and hass.states.get(chosen) is not None:
+        found.plug_switch = chosen
+        return
+    if not found.plug:
+        return
+    plug_entry = entities.async_get(found.plug)
+    same = [c for c in candidates if plug_entry is not None and plug_entry.device_id and c["device_id"] == plug_entry.device_id]
+    if len(same) == 1:
+        found.plug_switch = same[0]["entity_id"]
+        return
+    stem = found.plug.split(".", 1)[1]
+    for end in ("_power", "_puissance", "_current_power", "_watts", "_w"):
+        if stem.endswith(end):
+            stem = stem[: -len(end)]
+            break
+    found.plug_switch = next((c["entity_id"] for c in candidates if c["entity_id"] == f"switch.{stem}"), None)
 
 
 def _energy_counters(hass: HomeAssistant, entities, climates: list[dict]) -> None:

@@ -7,6 +7,7 @@ plain Python on dictionaries (engine/house.py), well under a millisecond.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import date, datetime, timedelta
@@ -21,7 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from . import reader
 from .const import API_KEY, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
-from .engine import granules, home_planning, house, phrases, pilot, profiles
+from .engine import driver, granules, home_planning, house, phrases, pilot, profiles
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +37,8 @@ DAY_CACHE_S = 120
 DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
             "planning": None, "pilote": "ombre", "pilote_thermometre": None,
             "planning_autorises": [], "pilote_flamme_basse": None,
-            "brasier_kg": None, "granules_prix_sac": None, "granules_poids_sac": None}
+            "brasier_kg": None, "granules_prix_sac": None, "granules_poids_sac": None,
+            "pilote_notifier": None, "poele_prise_switch": None, "couper_prise": True}
 # What the pellets settings may be (Réglages): the fire pot's threshold, a bag's price and weight.
 PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granules_poids_sac": (5, 30)}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
@@ -56,6 +58,13 @@ PELLETS_SAVE_S = 300
 PELLETS_KEYS = ("sacs", "correction", "nettoye_le", "jour", "saison")
 PELLET_WORDS = {"brasier_kg": "seuil du brasier (kg)", "granules_prix_sac": "prix d’un sac (€)",
                 "granules_poids_sac": "poids d’un sac (kg)"}
+# The whole pilot (0.7): what a person answers on the phone (the companion app's actions) and the buttons' words; a
+# gesture waits this long for Home Assistant's answer.
+ANSWER_EVENT = "mobile_app_notification_action"
+ACTION_TITLES = {"HESTIA_POELE_OUI": "Oui, allumer", "HESTIA_POELE_NON": "Non", "HESTIA_POELE_NETTOYE": "J’ai nettoyé",
+                 "HESTIA_POELE_COUPER": "Couper la prise", "HESTIA_POELE_IGNORER": "Ignorer"}
+GESTURE_TIMEOUT_S = 30
+TAG = "hestia_poele_"
 
 
 class HeatingCoordinator:
@@ -74,6 +83,13 @@ class HeatingCoordinator:
         # The pellets counted by Hestia (engine/granules.py), kept with the planning's state.
         self.pellets_memory: dict = {}
         self._pellets_saved = 0.0
+        # The whole pilot: the answers given since the last look, since when Home Assistant runs (None when this brick
+        # started after it), the next look it asked for, and the phone notices that carry buttons.
+        self.answers: dict[str, str] = {}
+        self.ha_since: str | None = None
+        self._wake = None
+        self._asked: set[str] = set()
+        self._gestures: asyncio.Task | None = None
         self.settings: dict = dict(DEFAULTS)
         self.model: dict = home_planning.default()
         self.profiles: list[profiles.Profile] = []
@@ -125,6 +141,9 @@ class HeatingCoordinator:
         # The thermostat seen before a restart is not a « before »: a thermostat restored off (or in boost) by the
         # restart is neither a switch-off nor a step up, as for the house's own automations.
         self.pilot_memory = {k: v for k, v in (state.get("pilote") or {}).items() if k not in ("mode", "preset")}
+        # The whole pilot's sequences are not carried over a restart: only its day's count and its lock are.
+        if "conduite" in self.pilot_memory:
+            self.pilot_memory["conduite"] = driver.kept(self.pilot_memory["conduite"])
         self.pilot_journal = [j for j in state.get("journal_pilote") or [] if isinstance(j, dict) and j.get("jour") and j.get("qui")]
         # The rate seen before the stop is not carried over it: the time Home Assistant was stopped counts nothing.
         pellets = state.get("granules")
@@ -139,9 +158,10 @@ class HeatingCoordinator:
         for event in (er.EVENT_ENTITY_REGISTRY_UPDATED, dr.EVENT_DEVICE_REGISTRY_UPDATED, ar.EVENT_AREA_REGISTRY_UPDATED):
             self._unsubs.append(hass.bus.async_listen(event, self._registry_changed))
         self._unsubs.append(async_track_time_interval(hass, self._tick, TICK))
+        self._unsubs.append(hass.bus.async_listen(ANSWER_EVENT, self._phone_answer))
         if hass.state is not CoreState.running:
             # The stove's integration or Versatile Thermostat may load after this brick: walked again once all is up.
-            self._unsubs.append(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._started))
+            self._unsubs.append(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._ha_started))
         self._listen()
 
     async def async_stop(self) -> None:
@@ -150,13 +170,19 @@ class HeatingCoordinator:
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
-        for handle in (self._track_unsub, self._weather_unsub, self._pending, self._discover_pending):
+        for handle in (self._track_unsub, self._weather_unsub, self._pending, self._discover_pending, self._wake):
             if handle:
                 handle()
-        self._track_unsub = self._weather_unsub = self._pending = self._discover_pending = None
+        self._track_unsub = self._weather_unsub = self._pending = self._discover_pending = self._wake = None
         for stopped in list(self._stop_listeners):
             stopped()
         self._stop_listeners.clear()
+
+    @callback
+    def _ha_started(self, _event=None) -> None:
+        # Home Assistant just started: the whole pilot takes the stove back in hand 3 minutes later (engine/driver.py).
+        self.ha_since = dt_util.now().isoformat()
+        self._started()
 
     @callback
     def _started(self, _event=None) -> None:
@@ -217,10 +243,15 @@ class HeatingCoordinator:
             snap = reader.snapshot(self.hass, self.found, self.settings, hourly)
             today = snap["now"].date().isoformat()
             self.journal = [j for j in self.journal if j.get("jour") == today]
+            answers = dict(self.answers)
             snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
                         pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory,
                         autorises=self.settings.get("planning_autorises") or [],
-                        granules_memoire=self.pellets_memory, granules_reglages=self._pellet_settings())
+                        granules_memoire=self.pellets_memory, granules_reglages=self._pellet_settings(),
+                        pret=self.hass.state is CoreState.running,
+                        conduite={"reponses": answers, "prise_switch": self.found.plug_switch,
+                                  "couper_prise": self.settings.get("couper_prise") is not False,
+                                  "ha_depuis": self.ha_since})
             view = house.build(snap)
             due, waiting = view["planning"].pop("_dus"), view["planning"].pop("_sans_repere")
             # Orders only once Home Assistant runs: a thermostat that loads after this brick is not yet there.
@@ -231,6 +262,10 @@ class HeatingCoordinator:
                 view["planning"].pop("_sans_repere")
             self._pilot(view.pop("_pilote", None), view.get("poele"), today)
             self._pellets(view.pop("_granules", None))
+            # The answers were given to this look: the next one does not see them again.
+            for key in answers:
+                if self.answers.get(key) == answers[key]:
+                    self.answers.pop(key, None)
         except Exception:  # noqa: BLE001 - a strange state never stops the brick: the last good view stays
             _LOGGER.exception("Hestia Chauffage n'a pas pu lire la maison")
             return
@@ -245,7 +280,8 @@ class HeatingCoordinator:
 
     def _pilot(self, state: dict | None, stove: dict | None, today: str) -> None:
         """Keep the pilot's memory and its journal of the week, and put today's journal and the week's tally in the
-        stove's view. Nothing is sent."""
+        stove's view. In « flamme » and « entier » modes, make the orders the view gives (never during the start of
+        Home Assistant, never to a copy) and look again when the whole pilot asks."""
         if state is not None:
             since = (date.fromisoformat(today) - timedelta(days=PILOT_DAYS - 1)).isoformat()
             kept = [j for j in self.pilot_journal if j["jour"] >= since]
@@ -257,7 +293,10 @@ class HeatingCoordinator:
                 self._save_state()
             if state.get("ordre"):
                 self._flame_order(state["ordre"])
-        if stove and stove.get("pilote", {}).get("mode") in ("ombre", "flamme"):
+            if state.get("ordres"):
+                self._drive(state["ordres"], stove)
+            self._wake_in(state.get("reveil"))
+        if stove and stove.get("pilote", {}).get("mode") in ("ombre", "flamme", "entier"):
             day = [j for j in self.pilot_journal if j["jour"] == today]
             stove["pilote"]["journal"] = day[-PILOT_SHOWN:]
             stove["pilote"]["accord_jour"] = _tally(day)
@@ -274,6 +313,152 @@ class HeatingCoordinator:
             "number", "set_value", {"entity_id": order["entity_id"], "value": order["valeur"]}, blocking=False,
             context=Context()))
 
+    # --- the whole pilot (0.7): its gestures, its notices, the answers ---------------------------------------------
+
+    def _wake_in(self, seconds: float | None) -> None:
+        """The next look the whole pilot asked for (2 s after the settings, 15 s between two stop orders…)."""
+        if self._wake:
+            self._wake()
+            self._wake = None
+        if seconds is not None and seconds < TICK.total_seconds():
+            self._wake = async_call_later(self.hass, seconds, self._woken)
+
+    @callback
+    def _woken(self, _now=None) -> None:
+        self._wake = None
+        self._build()
+
+    @callback
+    def _phone_answer(self, event) -> None:
+        """A button of a Hestia notice pressed on a phone (HESTIA_POELE_…)."""
+        action = str((event.data or {}).get("action") or "")
+        answer = next((k for k, v in driver.ANSWERS.items() if v == action), None)
+        if answer is not None:
+            self.hass.async_create_task(self.async_answer(answer))
+
+    async def async_answer(self, answer: str) -> None:
+        """An answer to the whole pilot, from a phone or from the Poêle page. « nettoye » also starts the fire pot's
+        count again (« J'ai nettoyé »)."""
+        if answer not in driver.ANSWERS:
+            raise ValueError("réponse inconnue")
+        if answer == "nettoye":
+            await self.async_fire_pot_cleaned()
+            return
+        self.answers[answer] = dt_util.now().isoformat()
+        self._build()
+
+    def _drive(self, orders: list[dict], stove: dict | None) -> None:
+        """The whole pilot's gestures, one after the other in one task (the settings, then the order to light; hors gel
+        then on). Only once Home Assistant runs, never to an entity copied from another Home Assistant."""
+        if self.hass.state is not CoreState.running or not stove:
+            return
+        calls = [c for o in orders for c in self._calls_of(o, stove)]
+        if not calls:
+            return
+        previous = self._gestures
+
+        async def run() -> None:
+            if previous and not previous.done():
+                await asyncio.wait({previous}, timeout=GESTURE_TIMEOUT_S)
+            for domain, service, data in calls:
+                if not self.hass.services.has_service(domain, service):
+                    _LOGGER.warning("Pilote du poêle : le service %s.%s n'existe pas", domain, service)
+                    continue
+                try:
+                    await asyncio.wait_for(self.hass.services.async_call(domain, service, data, blocking=True,
+                                                                         context=Context()), GESTURE_TIMEOUT_S)
+                except Exception as err:  # noqa: BLE001 - one gesture that fails does not stop the next ones
+                    _LOGGER.warning("Pilote du poêle : %s.%s n'a pas abouti (%s)", domain, service, err)
+
+        self._gestures = self.hass.async_create_task(run())
+
+    def _sendable(self, entity_id: str | None) -> bool:
+        if not entity_id:
+            return False
+        entry = er.async_get(self.hass).async_get(entity_id)
+        if entry is not None and entry.platform == reader.REMOTE:
+            _LOGGER.warning("Pilote du poêle : %s est recopié d'une autre maison, rien ne lui est envoyé", entity_id)
+            return False
+        return self.hass.states.get(entity_id) is not None
+
+    def _calls_of(self, order: dict, stove: dict) -> list[tuple[str, str, dict]]:
+        """[(domain, service, data)] for one gesture of engine/driver.py: none when it must not be made."""
+        gesture = order.get("geste")
+        if gesture == "notifier":
+            return self._notice(order)
+        if gesture == "effacer":
+            return self._clear(order["sujet"])
+        if (self.found.stove or {}).get("copie"):
+            return []
+        profile = (self.found.stove or {}).get("profile")
+        orders = profile.orders if profile else {}
+        entities = stove.get("entites") or {}
+        if gesture == "thermostat":
+            target = stove.get("thermostat")
+            if not self._sendable(target):
+                return []
+            _LOGGER.info("Pilote du poêle : %s %s", order["service"], target)
+            return [("climate", order["service"], {"entity_id": target, **(order.get("donnees") or {})})]
+        if gesture in ("allumer", "eteindre"):
+            spec = orders.get(gesture) or {}
+            target = entities.get(spec.get("role"))
+            if not spec.get("service") or not self._sendable(target):
+                return []
+            _LOGGER.info("Pilote du poêle : %s (%s)", gesture, target)
+            domain, service = spec["service"].split(".", 1)
+            return [(domain, service, {"entity_id": target, **(spec.get("donnees") or {})})]
+        if gesture == "reglage":
+            spec = next((s for s in orders.get("reglages") or () if s.get("role") == order.get("role")), None)
+            target = entities.get(order.get("role"))
+            if not spec or not self._sendable(target):
+                return []
+            domain, service = spec["service"].split(".", 1)
+            return [(domain, service, {"entity_id": target, **(spec.get("donnees") or {})})]
+        if gesture == "recharger":
+            entry_id = (self.found.stove or {}).get("entry_id")
+            if not orders.get("recharger") or not entry_id:
+                return []
+            _LOGGER.info("Pilote du poêle : intégration du poêle rechargée")
+            return [("homeassistant", "reload_config_entry", {"entry_id": entry_id})]
+        if gesture == "prise":
+            target = self.found.plug_switch
+            if not self._sendable(target):
+                return []
+            _LOGGER.warning("Pilote du poêle : prise du poêle coupée (%s)", target)
+            return [("switch", "turn_off", {"entity_id": target})]
+        return []
+
+    def _notifier(self) -> str | None:
+        target = self.settings.get("pilote_notifier") or ""
+        return target[7:] if target.startswith("notify.") else None
+
+    def _notice(self, order: dict) -> list[tuple[str, str, dict]]:
+        """A notice: in Home Assistant's notifications when it lasts, and on the phones of the notifier chosen in
+        Réglages, with its buttons."""
+        subject = TAG + order["sujet"]
+        out = []
+        if order.get("persistante"):
+            out.append(("persistent_notification", "create", {"notification_id": subject, "title": order["titre"],
+                                                              "message": order["texte"]}))
+        notifier = self._notifier()
+        if notifier:
+            data: dict = {"tag": subject}
+            if order.get("actions"):
+                data["actions"] = [{"action": a, "title": ACTION_TITLES.get(a, a)} for a in order["actions"]]
+                self._asked.add(order["sujet"])
+            out.append(("notify", notifier, {"title": order["titre"], "message": order["texte"], "data": data}))
+        return out
+
+    def _clear(self, subject: str) -> list[tuple[str, str, dict]]:
+        """A notice no longer true: out of Home Assistant's notifications, and off the phones when it carried buttons
+        (the companion app's « clear_notification »)."""
+        out = [("persistent_notification", "dismiss", {"notification_id": TAG + subject})]
+        notifier = self._notifier()
+        if notifier and subject in self._asked:
+            self._asked.discard(subject)
+            out.append(("notify", notifier, {"message": "clear_notification", "data": {"tag": TAG + subject}}))
+        return out
+
     def _pellet_settings(self) -> dict:
         s = self.settings
         return {"brasier_kg": s.get("brasier_kg"), "prix_sac": s.get("granules_prix_sac"),
@@ -289,9 +474,11 @@ class HeatingCoordinator:
             self._save_state()
 
     async def async_fire_pot_cleaned(self) -> None:
-        """« J'ai nettoyé » : the fire pot's count starts again now. Written at once."""
+        """« J'ai nettoyé » : the fire pot's count starts again now. Written at once. The whole pilot hears it too (its
+        lock of the fire pot is lifted)."""
         bags = granules.bags_of(self.data.get("granules"), self.settings.get("granules_poids_sac"))
         self.pellets_memory = granules.cleaned(self.pellets_memory, bags, dt_util.now())
+        self.answers["nettoye"] = dt_util.now().isoformat()
         await self.state_store.async_save(self._state())
         self._build()
 
@@ -423,6 +610,14 @@ class HeatingCoordinator:
         sensor = changes.get("pilote_thermometre")
         if sensor is not None and not (isinstance(sensor, str) and sensor.startswith("sensor.")):
             raise ValueError("thermomètre de la maison illisible")
+        notifier = changes.get("pilote_notifier")
+        if notifier is not None and not (isinstance(notifier, str) and notifier.startswith("notify.")):
+            raise ValueError("service de notification illisible")
+        cut = changes.get("poele_prise_switch")
+        if cut is not None and not (isinstance(cut, str) and cut.startswith("switch.")):
+            raise ValueError("interrupteur de la prise illisible")
+        if "couper_prise" in changes and not isinstance(changes["couper_prise"], bool):
+            raise ValueError("« couper la prise sans réponse » : oui ou non")
         for key, (low_v, high_v) in PELLET_LIMITS.items():
             value = changes.get(key)
             if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))

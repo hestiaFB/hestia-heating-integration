@@ -9,7 +9,7 @@ import re
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from . import granules, home_planning, phrases, pilot, planning, sources, stove as stove_engine
+from . import driver, granules, home_planning, phrases, pilot, planning, sources, stove as stove_engine
 from .phrases import degrees, hour
 
 # The tone of each room's chip in the panel and the card (the colours of the charte).
@@ -158,12 +158,16 @@ def build(snap: dict) -> dict:
         "en_marche": [s["id"] for s in srcs if s["etat"] in ("chauffe", "rafraichit")],
     }
     # The stove's pilot: « à l'ombre » (0.4) it only says what Hestia would do, next to what the house does; « flamme »
-    # (0.5, switched on by the user) it also gives the flame's order to send.
+    # (0.5, switched on by the user) it also gives the flame's order to send; « entier » (0.7, switched on too) it also
+    # starts and stops the stove and keeps its safeties (engine/driver.py).
     pilot_state = None
+    copies = set(snap.get("copies") or ())
     if stove:
         mode = snap.get("pilote") if snap.get("pilote") in pilot.MODES else "ombre"
         stove["pilote"] = {"mode": mode}
-        if mode in ("ombre", "flamme"):
+        # Never a stove, nor a stove's thermostat, copied from another Home Assistant (a lab copies the home).
+        copy = bool(raw_stove.get("copie")) or bool(stove_thermostat and stove_thermostat["id"] in copies)
+        if mode in ("ombre", "flamme", "entier"):
             # The house's temperature: the sensor chosen in Réglages (the automations' own), else the rooms' average.
             sensor, low = snap.get("house_sensor"), snap.get("flamme_basse")
             house_c = sensor["c"] if sensor else house["temperature"]
@@ -173,13 +177,14 @@ def build(snap: dict) -> dict:
             stove["pilote"].update(maison_c=house_c, thermometre=sensor["nom"] if sensor else None,
                                    thermometre_lu=sensor is None or sensor["c"] is not None,
                                    flamme_basse=low["nom"] if low else None)
-            order = None
-            if mode == "flamme":
-                order, stove["pilote"]["commande"] = pilot.steer(decision, stove, memory, events, now,
-                                                                bool(raw_stove.get("copie")))
-            pilot_state = {"memoire": memory, "evenements": events, "ordre": order}
+            order, orders, wake = None, [], None
+            if mode in ("flamme", "entier"):
+                order, stove["pilote"]["commande"] = pilot.steer(decision, stove, memory, events, now, copy)
+            if mode == "entier":
+                orders, events, stove["pilote"]["conduite"], wake = _drive(snap, decision, stove, stove_thermostat,
+                                                                           memory, events, now, copy)
+            pilot_state = {"memoire": memory, "evenements": events, "ordre": order, "ordres": orders, "reveil": wake}
     lanes = _lanes(room_list, srcs, stove_thermostat, lines, naive_now)
-    copies = set(snap.get("copies") or ())
     room_names = {r["id"]: r["nom"] for r in room_list}
     plan = _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, aimed_on, schedules, copies,
                           snap.get("applied") or {}, naive_now, now.tzinfo, set(snap.get("autorises") or ()))
@@ -216,6 +221,44 @@ def build(snap: dict) -> dict:
         "_pilote": pilot_state,
         "_granules": pellet_memory,
     }
+
+
+# What pilot.decide() says Hestia « would » do: in « entier » mode the driver's journal says what it does instead.
+WOULD = ("Hestia démarrerait", "Hestia arrêterait", "Hestia couperait", "Hestia ne démarrerait pas",
+         "Hestia demanderait", "Hestia vous préviendrait")
+
+
+def _drive(snap, decision, stove, thermostat, memory, events, now, copy) -> tuple[list, list, dict, float | None]:
+    """« Entier » mode: the gestures of the start, the stop and the safeties (engine/driver.py), once Home Assistant
+    runs; the journal tells what Hestia does, and the stove's starts and stops it asked for are its own."""
+    if not snap.get("pret", True):
+        return [], events, {"actif": True, "copie": copy, "texte": "Hestia attend que Home Assistant ait fini de "
+                            "démarrer."}, None
+    ctx = {**(snap.get("conduite") or {}), "copie": copy, "brasier": (stove.get("conso") or {}).get("brasier")}
+    orders, done, status, wake = driver.drive(decision, stove, thermostat, memory, now, ctx)
+    sequences = memory.get("conduite") or {}
+
+    def hestia_s(name: str, within: timedelta) -> bool:
+        try:
+            at = datetime.fromisoformat((sequences.get(name) or {}).get("a") or "")
+        except (TypeError, ValueError):
+            return False
+        return now - at < within
+
+    out = []
+    for e in events:
+        if e["qui"] == "hestia" and e["texte"].startswith(WOULD):
+            continue
+        if e["qui"] == "maison" and e["texte"] == "La maison a démarré le poêle." and hestia_s("allumage",
+                                                                                            timedelta(minutes=15)):
+            e = {"heure": e["heure"], "qui": "hestia", "accord": None,
+                 "texte": "Le poêle s’allume, comme Hestia l’a demandé."}
+        elif e["qui"] == "maison" and e["texte"] == "La maison a éteint le poêle." and hestia_s("arret",
+                                                                                             timedelta(minutes=30)):
+            e = {"heure": e["heure"], "qui": "hestia", "accord": None,
+                 "texte": "Le poêle s’éteint, comme Hestia l’a demandé."}
+        out.append(e)
+    return orders, done + out, status, wake
 
 
 def _public(s: dict) -> dict:
