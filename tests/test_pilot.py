@@ -86,6 +86,22 @@ class Flame(unittest.TestCase):
         decision, _, _ = decide(s, thermostat("boost", demand=50, room=20.8), seen(s, t))
         self.assertEqual(decision["flamme"], 3)
 
+    def test_flame_one_reads_the_smoothed_temperature_not_a_puff_on_the_probe(self):
+        # A puff of hot air from the stove: the live temperature jumps, the slope with it; the smoothed one does not.
+        s = stove("chauffe", 5)
+        puff = thermostat("boost", demand=95, room=20.3, slope=8.0, target=21.5, temperature_lissee=19.7)
+        decision, _, _ = decide(s, puff, seen(s, puff))
+        self.assertEqual((decision["action"], decision["flamme"]), ("garder", 5))
+        # The smoothed temperature itself on its way past the set point: flame 1, and the text says it.
+        hot = thermostat("boost", demand=95, room=21.9, slope=2.0, target=21.5, temperature_lissee=21.6)
+        decision, _, _ = decide(s, hot, seen(s, hot))
+        self.assertEqual(decision["flamme"], 1)
+        self.assertIn("22,1 °C dans 15 min", decision["texte"])
+        # Over 28 °C, the safety reads the live temperature.
+        burning = thermostat("boost", demand=95, room=28.5, slope=0.0, target=21.5, temperature_lissee=27.5)
+        decision, _, _ = decide(s, burning, seen(s, burning))
+        self.assertEqual(decision["action"], "couper")
+
     def test_it_keeps_four_orders_to_stop_the_stove(self):
         s, t = stove("chauffe", 4, ecritures=21), thermostat("boost", demand=50)
         decision, _, _ = decide(s, t, seen(s, t))

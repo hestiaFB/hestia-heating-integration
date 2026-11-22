@@ -11,9 +11,10 @@ The thermostat of the stove decides how much to heat (its demand, in %); the pil
   season (the house at 18 °C or more, until it falls under 18 °C; then allowed up to 19 °C) it asks first.
 - Flame, in every burning state: the demand gives the flame (85 % → 5, 65 % → 4, 45 % → 3, else 2); the stove's
   current flame holds while it stays within the steps of the demand ± 7 points. Flame 1 when the room, carried 15
-  minutes ahead on its rising slope, would pass its set point by 0.5 °C, and it stays at 1 while the room is at its set
-  point. Down at once; up only 30 minutes after the stove's flame last changed, unless two steps apart. The stove's
-  daily writes keep 4 orders aside, to be able to stop it.
+  minutes ahead on its rising slope, would pass its set point by 0.5 °C, and it stays at 1 while the room is at its
+  set point: on the thermostat's smoothed temperature (`ema_temp`), as the house does. Down at once; up only 30
+  minutes after the stove's flame last changed, unless two steps apart. The stove's daily writes keep 4 orders aside,
+  to be able to stop it.
 - Stop: the thermostat at hors gel (frost), or off for 30 seconds, or the house warm enough for 2 minutes (no longer
   1 °C under the set point, or not under it at all in boost). Checked by the stove's state, its smoke under 60 °C, or
   its plug under 70 W.
@@ -123,6 +124,10 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     preset, mode = thermostat.get("preset"), thermostat.get("mode")
     demand, room, target_c, slope = (thermostat.get("demande_pct"), thermostat.get("temperature"),
                                      thermostat.get("consigne"), thermostat.get("pente"))
+    # The flame reads the smoothed temperature (a puff of hot air on the probe once cost two orders); the overheat
+    # safety reads the live one.
+    smooth = thermostat.get("temperature_lissee")
+    smooth = room if smooth is None else smooth
     before_preset, before_mode = mem.get("preset"), mem.get("mode")
     mem.update(preset=preset, mode=mode)
     off_since = _held(mem, "arret_a", mode == "off", None, now)
@@ -208,7 +213,7 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
                              f"Le poêle signale une alarme ({stove.get('alarme_texte') or 'alarme'}) : le pilote ne "
                              "touche plus à la flamme, et coupe si elle dure 2 minutes.", flame_set, stove)
     elif burning:
-        decision = _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo, hi)
+        decision = _flame(stove, now, demand, smooth, target_c, slope, flame_set, flame_since, lo, hi)
     else:
         decision = _rest(stove, state, preset, wants_off, silent)
 
