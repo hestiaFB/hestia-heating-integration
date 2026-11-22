@@ -53,6 +53,13 @@ class House(unittest.TestCase):
         # 90 kg in 30 days of use: 3 kg a day, 150 kg left.
         self.assertEqual((g["kg_par_jour"], g["jours"], g["stock_sacs"]), (3.0, 50, 10.0))
 
+    def test_the_smoothed_temperature_of_a_versatile_thermostat(self):
+        from engine import sources
+        read = lambda **extra: sources.read(m.vt("climate.vt_x", "X", "sejour", **extra))["temperature_lissee"]
+        self.assertEqual(read(specific_states={"ema_temp": 20.4}), 20.4)
+        self.assertEqual(read(ema_temp=20.6), 20.6)
+        self.assertIsNone(read())
+
     def test_the_cold_to_come(self):
         self.assertEqual(self.view["dehors"]["nuit_min"], -3.0)
         self.assertIsNotNone(self.view["dehors"]["demain_max"])

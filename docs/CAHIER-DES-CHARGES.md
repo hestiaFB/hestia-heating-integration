@@ -340,7 +340,7 @@ Où en est Hestia 0.5 par rapport à ce fonctionnement. Le pilote « à l’ombr
 | Règle | Hestia 0.5 | À faire |
 | --- | --- | --- |
 | Escalier, marge de 7 points, hausse par demi-heure, réserve de 4, flamme au plus bas | pareil, en une seule fonction | — |
-| Pièce trop chaude, sur la température **lissée** | sur la température brute | lire `ema_temp` : avant l’essai du mode « Flamme » |
+| Pièce trop chaude, sur la température **lissée** | pareil depuis le 22 novembre (`ema_temp`) ; la sécurité des 28 °C lit la température en direct | — |
 | Plafond d’ordres lu dans les options de l’intégration | 20, fixe dans le profil | le lire dans l’entrée `aguaiot` : avant l’essai du mode « Flamme » |
 | Jamais « 1 sur 5 » poêle éteint | la page et la carte montrent la flamme réelle même éteint | la flamme visée en pâle, éteint |
 | Énergie du poêle sur les kilos | l’interface donne à Énergie le compteur du thermostat, faux pour le poêle | débit, kilos et kWh dans Chauffage, puis dans l’interface v1 (ajout compatible) |
@@ -379,7 +379,7 @@ La v0.1 ne commandait rien. Les versions, et la suite proposée :
 3. **0.3** — les plannings maison, simples : une semaine en couleurs (tous les jours pareils, semaine et week-end, ou jour par jour), des plages, le niveau du reste du temps, et les thermostats cochés. Un thermostat suit un seul planning. Scheduler reste lu, et un de ses plannings se reprend dans Hestia en un clic. Chaque planning commence « En essai » et n’envoie, une fois « Actif », que des préréglages, jamais un allumage ou un arrêt (détail dans [technique.md](technique.md#le-planning-hestia)). Les matins froids et le prix de l’électricité, prévus d’abord, sont laissés de côté pour rester simple.
 4. **0.4** — le pilote de poêle « à l’ombre » : il calcule ce qu’il ferait (démarrer, flamme 3, refuser pour surchauffe…) et l’affiche à côté de ce que font les automatisations de la maison, sans rien envoyer.
 5. **0.5** — le pilote règle la flamme, en option (Réglages, « Flamme ») : la flamme selon la demande du thermostat, un ordre à la fois, vérifié 5 min après, 12 ordres par jour au plus. Le démarrage, l’arrêt et les sécurités restent aux automatisations de la maison. Si la flamme change sans Hestia, ou si le poêle ne suit pas trois fois, Hestia la laisse jusqu’au lendemain. Revenir « À l’ombre » est le retour arrière en un clic. Jamais au labo.
-6. **Avant d’essayer « Flamme » à la maison** — la pièce trop chaude sur la température lissée, le plafond d’ordres lu dans l’intégration, jamais « 1 sur 5 » poêle éteint, l’exception de la saison douce (voir « Hestia face à la maison d’essai »).
+6. **Avant d’essayer « Flamme » à la maison** — le plafond d’ordres lu dans l’intégration, jamais « 1 sur 5 » poêle éteint, l’exception de la saison douce (voir « Hestia face à la maison d’essai »).
 7. **Proposé ensuite : les granulés** — débit, kilos, nettoyage du brasier (compteur, seuil, calage sur les sacs, « J’ai nettoyé »), énergie et prix ; l’énergie du poêle donnée à Hestia Énergie sur les kilos.
 8. **Proposé ensuite : le pilote entier**, profil Micronova, toujours en option : le démarrage et ses cas, le contrôle d’allumage, l’arrêt vérifié et son escalade, les sécurités, la reprise après un redémarrage, les questions et les notifications. D’abord à l’ombre face à la maison d’essai, puis à la maison, jamais au labo.
 9. Les autres profils (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un, avec des testeurs.
