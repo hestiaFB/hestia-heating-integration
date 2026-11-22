@@ -163,6 +163,8 @@ class StartAndStop(unittest.TestCase):
         decision, mem, events = decide(s, thermostat("boost"), seen(s, thermostat("eco")), house_c=18.4)
         self.assertEqual((decision["action"], decision["titre"]), ("demander", "Démarrer ?"))
         self.assertIn("saison douce", decision["texte"])
+        # Without an answer, back to hors gel, but never a stove already on its way.
+        self.assertIn("sauf si le poêle est déjà en route", decision["texte"])
         self.assertEqual(events[0]["texte"], "Hestia demanderait votre accord pour démarrer le poêle (saison douce).")
         self.assertTrue(mem["saison_douce"])
         # Under 18 °C it no longer asks, and it does not ask again until the house reaches 19 °C.
@@ -197,6 +199,33 @@ class StartAndStop(unittest.TestCase):
         decision, _, _ = decide(s, thermostat("boost", mode="off", demand=50), mem, NOW + timedelta(seconds=40))
         self.assertEqual(decision["action"], "arreter")
         self.assertIn("Le thermostat est éteint.", decision["texte"])
+
+    def test_a_silent_moment_of_the_cloud_is_not_a_start(self):
+        t = thermostat("boost", demand=20)
+        s = stove("chauffe", 1)
+        _, mem, _ = decide(s, t, seen(s, t))
+        _, mem, events = decide(stove("inconnu", None), t, mem, NOW + timedelta(minutes=1))
+        _, mem, events = decide(s, t, mem, NOW + timedelta(minutes=2))
+        self.assertFalse([e for e in events if e["qui"] == "maison"])
+        # A stove really off before its silence, then burning: the house started it.
+        off = stove("eteint", 1)
+        _, mem, _ = decide(off, t, seen(off, t))
+        _, mem, _ = decide(stove("inconnu", None), t, mem, NOW + timedelta(minutes=1))
+        _, mem, events = decide(stove("allumage", 1), t, mem, NOW + timedelta(minutes=2))
+        self.assertEqual([e["texte"] for e in events if e["qui"] == "maison"], ["La maison a démarré le poêle."])
+
+    def test_a_thermostat_restored_off_by_a_restart_is_not_a_switch_off(self):
+        s = stove("chauffe", 3)
+        # The first look after a restart: nothing seen before (the coordinator drops the old mode and preset).
+        mem = {"etat": "chauffe", "reglee": 3}
+        decision, mem, _ = decide(s, thermostat("boost", mode="off", demand=50), mem)
+        decision, mem, _ = decide(s, thermostat("boost", mode="off", demand=50), mem, NOW + timedelta(minutes=2))
+        self.assertNotEqual(decision["action"], "arreter")
+        # Back from « unavailable », or from a thermostat without a preset: not a switch-off either.
+        for before in (thermostat(None, mode="unavailable"), thermostat(None, mode="heat")):
+            decision, mem, _ = decide(s, thermostat("boost", mode="off", demand=50), seen(s, before))
+            decision, _, _ = decide(s, thermostat("boost", mode="off", demand=50), mem, NOW + timedelta(seconds=40))
+            self.assertNotEqual(decision["action"], "arreter")
 
     def test_a_warm_house_stops_it_after_two_minutes(self):
         s, t = stove("chauffe", 2), thermostat("comfort", demand=20, target=20.0)

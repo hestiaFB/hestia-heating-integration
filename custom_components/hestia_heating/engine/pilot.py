@@ -16,9 +16,9 @@ The thermostat of the stove decides how much to heat (its demand, in %); the pil
   set point: on the thermostat's smoothed temperature (`ema_temp`), as the house does. Down at once; up only 30
   minutes after the stove's flame last changed, unless two steps apart. The stove's daily writes keep 4 orders aside,
   to be able to stop it.
-- Stop: the thermostat at hors gel (frost), or off for 30 seconds, or the house warm enough for 2 minutes (no longer
-  1 °C under the set point, or not under it at all in boost). Checked by the stove's state, its smoke under 60 °C, or
-  its plug under 70 W.
+- Stop: the thermostat at hors gel (frost), or off for 30 seconds (switched off from a known state with a preset, not
+  restored off by a restart), or the house warm enough for 2 minutes (no longer 1 °C under the set point, or not under
+  it at all in boost). Checked by the stove's state, its smoke under 60 °C, or its plug under 70 W.
 - Safety: an alarm that lasts 2 minutes, or the stove's room over 28 °C while it burns: cut (the thermostat off, then
   the stove). A stove silent for 15 minutes: say so, nothing else.
 - A switch chosen in Réglages (« flamme au plus bas », like a switch that forces flame 1) asks for the lowest flame.
@@ -113,16 +113,20 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
 
     # What the house did since the last look: the stove's state and its flame, seen from outside.
     before_state, before_flame = mem.get("etat"), mem.get("reglee")
+    # A silent moment (the cloud) is not a change of the stove: compare with the last state it said.
+    known_before = mem.get("etat_connu", before_state) if before_state == "inconnu" else before_state
     house_did = None
-    if before_state in ("eteint", "inconnu", "alarme") and burning:
+    if known_before in ("eteint", "alarme") and burning:
         house_did = "demarre"
-    elif before_state in BURNING and state in ("extinction", "eteint"):
+    elif known_before in BURNING and state in ("extinction", "eteint"):
         house_did = "eteint"
     elif before_flame is not None and flame_set is not None and flame_set != before_flame and burning:
         house_did = "flamme"
     if before_flame is not None and flame_set is not None and flame_set != before_flame:
         mem["reglee_a"] = now.isoformat()
     mem.update(etat=state, reglee=flame_set)
+    if state != "inconnu":
+        mem["etat_connu"] = state
     flame_since = _iso(stove.get("flamme_depuis")) or _iso(mem.get("reglee_a"))
     alarm = bool(stove.get("alarme")) or state == "alarme"
     alarm_since = _held(mem, "alarme_a", alarm, stove.get("alarme_depuis"), now)
@@ -143,7 +147,12 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     smooth = room if smooth is None else smooth
     before_preset, before_mode = mem.get("preset"), mem.get("mode")
     mem.update(preset=preset, mode=mode)
-    off_since = _held(mem, "arret_a", mode == "off", None, now)
+    # A real switch-off only: from a known state with a preset, not the way back from a restart or a reload.
+    if mode == "off" and before_mode != "off":
+        mem["arret_vrai"] = before_mode not in (None, "unavailable", "unknown") and before_preset is not None
+    elif mode != "off":
+        mem["arret_vrai"] = None
+    off_since = _held(mem, "arret_a", mode == "off" and bool(mem.get("arret_vrai")), None, now)
     wants_off = preset == "frost" or bool(off_since and now - off_since >= OFF_HELD)
     overheat = room is not None and room > OVERHEAT_C
     warm = warm_enough(house_c, target_c, preset)
@@ -178,7 +187,8 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
         elif mild:
             start = _decision("demander", "Démarrer ?", f"Le thermostat est passé en boost à {at}, mais {house_text} "
                               "(saison douce, 18 °C ou plus). Le pilote vous demanderait d’abord votre accord ; sans "
-                              "réponse en 15 min, il remettrait le thermostat hors gel.", None, stove)
+                              "réponse en 15 min, il remettrait le thermostat hors gel, sauf si le poêle est déjà "
+                              "en route : alors il ne couperait rien.", None, stove)
             mem.update(demande=now.isoformat(), demarrage=None, refus=None)
         else:
             start = _decision("demarrer", "Démarrer le poêle", f"Le thermostat est passé en boost à {at}, le poêle "

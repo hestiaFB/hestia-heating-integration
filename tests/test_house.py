@@ -65,6 +65,11 @@ class House(unittest.TestCase):
         self.assertIsNotNone(self.view["dehors"]["demain_max"])
         self.assertIsNone(house.build(m.snapshot(hourly=None))["dehors"])
 
+    def test_a_stove_off_has_no_flame_even_if_it_reports_one(self):
+        # Some stoves report a real flame of 1 while off: never « flamme 1 » for a stove that does not burn.
+        s = house.build(m.snapshot(stove=m.stove(status="Off", flame="1")))["poele"]
+        self.assertEqual((s["en_feu"], s["flamme"], s["flamme_reglee"]), (False, None, 1))
+
     def test_nothing_heats(self):
         quiet = [m.vt("climate.vt_bureau", "Radiateur bureau", "bureau")]
         view = house.build(m.snapshot(stove=m.stove(status="Off"), climates=quiet))

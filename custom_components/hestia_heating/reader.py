@@ -97,6 +97,8 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
             device = devices.async_get(device_id)
             found.stove = {"profile": profile, "roles": roles, "entities": [e["entity_id"] for e in ents],
                            "device_id": device_id,
+                           # The stove integration's own entry: its options say how many orders a day it lets through.
+                           "entry_id": _entry_of(hass, device, profile.integration),
                            "device": {"name": (device.name_by_user if device else None) or "Poêle",
                                       "maker": device.manufacturer if device else None,
                                       "model": device.model if device else None,
@@ -277,6 +279,31 @@ def _state(hass: HomeAssistant, entity_id: str | None) -> dict | None:
             "last_changed": dt_util.as_local(state.last_changed)}
 
 
+def _entry_of(hass: HomeAssistant, device, domain: str) -> str | None:
+    """The config entry of `domain` the device belongs to (`config_entry_id` on recent Home Assistant, else the older
+    set of entries)."""
+    if device is None:
+        return None
+    one = getattr(device, "config_entry_id", None)
+    ids = [one] if one else list(getattr(device, "config_entries", None) or ())
+    return next((eid for eid in ids if (ce := hass.config_entries.async_get_entry(eid)) is not None
+                 and ce.domain == domain), None)
+
+
+def _writes_cap(hass: HomeAssistant, stove: dict) -> int | None:
+    """The daily orders the stove integration lets through, read in its options (the profile names the option), or
+    None: the profile's own figure then."""
+    option = stove["profile"].limits.get("option_ecritures")
+    entry = hass.config_entries.async_get_entry(stove["entry_id"]) if option and stove.get("entry_id") else None
+    if entry is None:
+        return None
+    try:
+        cap = int(float(entry.options.get(option, entry.data.get(option))))
+    except (TypeError, ValueError):
+        return None
+    return cap if cap > 0 else None
+
+
 def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dict] | None = None) -> dict:
     """The plain dictionary engine.house.build() works on: the states of what was found, now."""
     climates, window_since = [], {}
@@ -294,7 +321,7 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
     stove = None
     if found.stove:
         roles = {role: s for role, e in found.stove["roles"].items() if (s := _state(hass, e)) is not None}
-        stove = {**found.stove, "roles": roles}
+        stove = {**found.stove, "roles": roles, "ecritures_max": _writes_cap(hass, found.stove)}
     plug = None
     if found.plug and (p := hass.states.get(found.plug)) is not None:
         try:
@@ -394,9 +421,11 @@ def weather_listen(hass: HomeAssistant, place: str | None, update: Callable[[], 
         return lambda: None
 
 
-async def day_history(hass: HomeAssistant, start: datetime, end: datetime, wanted: list[tuple[str, str, str | None]]) -> dict:
+async def day_history(hass: HomeAssistant, start: datetime, end: datetime, wanted: list[tuple[str, str, str | None]],
+                      text: tuple[str, ...] = ()) -> dict:
     """{name: [(datetime, value)]} for each (name, entity_id, attribute) since `start`: read in the recorder's executor,
-    compacted by the socle's recorder_history (one day of one entity at a time)."""
+    compacted by the socle's recorder_history (one day of one entity at a time). The series named in `text` keep
+    their raw text (a stove's state), the others are numbers."""
     from homeassistant.components.recorder import get_instance
 
     from . import recorder_history
@@ -408,10 +437,13 @@ async def day_history(hass: HomeAssistant, start: datetime, end: datetime, wante
             points = []
             for row in rows:
                 raw = row.attributes.get(attribute) if attribute else row.state
-                try:
-                    value = float(raw)
-                except (TypeError, ValueError):
-                    value = None
+                if name in text:
+                    value = raw
+                else:
+                    try:
+                        value = float(raw)
+                    except (TypeError, ValueError):
+                        value = None
                 points.append((dt_util.as_local(max(row.last_changed, start)), value))
             out[name] = points
         return out

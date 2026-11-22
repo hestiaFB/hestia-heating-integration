@@ -23,5 +23,5 @@
     "alarme": ["ALARM", "MEM. ALARM", "Alarm"]
   },
   "alarme_ok": ["OK", "0", "None", "Aucune"],
-  "limites": {"ecritures_par_jour": 20, "cloud": true}
+  "limites": {"ecritures_par_jour": 20, "option_ecritures": "max_eeprom_writes_per_day", "cloud": true}
 }

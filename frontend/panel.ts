@@ -22,7 +22,7 @@ type Pellets={stock_kg:number|null;stock_sacs:number|null;sac_kg:number|null;sai
  kg_par_jour:number|null;jours:number|null;depense:number|null};
 type Stove={nom:string;fabricant:string|null;modele:string|null;piece:string|null;profil:string;profil_nom:string;cloud:boolean;etat:string;texte:string|null;
  a_traduire:boolean;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_min:number;flamme_max:number;fumees:number|null;
- air:number|null;alarme:boolean|null;alarme_texte:string|null;eco_stop:boolean|null;ecritures:number|null;ecritures_max:number|null;thermostat:string|null;
+ air:number|null;alarme:boolean|null;alarme_texte:string|null;eco_stop:boolean|null;ecritures:number|null;ecritures_max:number|null;ecritures_lues?:boolean;thermostat:string|null;
  thermostat_nom:string|null;demande_pct:number|null;consigne:number|null;preset:string|null;prise:string|null;prise_w:number|null;prise_tourne:boolean|null;
  entites:Record<string,string>;pilote?:Pilot};
 type Pilot={mode:string;action?:string;titre?:string;texte?:string;ton?:string;flamme?:number|null;maison?:string;accord?:boolean|null;
@@ -401,7 +401,7 @@ export class HestiaHeatingSetup extends LitElement {
     ...(s.prise?[listRow({label:'Prise du poêle',sub:'Témoin hors cloud : le poêle tourne-t-il vraiment ?',value:s.prise_w==null?'—':`${watts(s.prise_w)}${s.prise_tourne?' · tourne':''}`})]:[]),
     listRow({label:'Alarme',sub:s.alarme_texte&&s.alarme?`Code du poêle : ${s.alarme_texte}`:undefined,value:s.alarme==null?'—':s.alarme?html`<span class="chip alert">${s.alarme_texte??'alarme'}</span>`:'aucune',level:s.alarme?'todo':undefined}),
     ...(s.eco_stop!=null?[listRow({label:'ECO Stop',sub:'Le filet anti-surchauffe du poêle, qui survit à une panne de Home Assistant.',value:s.eco_stop?'actif':'coupé'})]:[]),
-    ...(writes?[listRow({label:'Ordres reçus aujourd’hui',sub:s.ecritures_max?`La mémoire du poêle en accepte ${s.ecritures_max} par jour.`:undefined,value:writes})]:[]),
+    ...(writes?[listRow({label:'Ordres reçus aujourd’hui',sub:s.ecritures_max?`L’extension du poêle en laisse passer ${s.ecritures_max} par jour${s.ecritures_lues?' (lu dans ses options)':''}, pour ménager sa mémoire.`:undefined,value:writes})]:[]),
    ],{more:html`<span class="nk-def">profil ${s.profil_nom}${s.cloud?' · par le cloud':''}</span>`})}
    ${this.pilotPart(s)}
    ${g?listSection('Granulés',[
@@ -427,7 +427,7 @@ export class HestiaHeatingSetup extends LitElement {
   const rules:[string,string][]=[
    ['Démarrage','Au passage du thermostat en boost (ou en chauffe, déjà en boost), le poêle éteint. Jamais de lui-même. Pas si le thermostat est éteint, le poêle en alarme ou muet, sa pièce au-dessus de 28 °C, ou la maison déjà à la consigne. En saison douce (la maison à 18 °C ou plus), il vous demande d’abord.'],
    ['Flamme','La demande du thermostat : 85 % donne 5, 65 % donne 4, 45 % donne 3, sinon 2. La flamme du poêle tient tant qu’elle reste dans les paliers de la demande ± 7 points. Flamme 1 si la pièce va dépasser sa consigne de 0,5 °C dans 15 min, et tant qu’elle y reste. Baisse tout de suite, hausse 30 min après le dernier changement de flamme, sauf deux paliers d’écart.'],
-   ['Ordres du jour',`Il en garde 4 pour pouvoir éteindre (la mémoire du poêle en accepte ${s.ecritures_max??20} par jour).${steer?` Hestia elle-même : 12 ordres par jour au plus, un à la fois, vérifié 5 min après, renvoyé au plus toutes les 10 min.`:''}`],
+   ['Ordres du jour',`Il en garde 4 pour pouvoir éteindre (l’extension du poêle en laisse passer ${s.ecritures_max??20} par jour).${steer?` Hestia elle-même : 12 ordres par jour au plus, un à la fois, vérifié 5 min après, renvoyé au plus toutes les 10 min.`:''}`],
    ['Arrêt','Thermostat hors gel, éteint 30 s, ou la maison assez chaude 2 min (à 1 °C ou moins de la consigne, ou à la consigne en boost). Confirmé par l’état du poêle, ses fumées sous 60 °C ou sa prise sous 70 W.'],
    ['Sécurités','Une alarme qui dure 2 min, la pièce du poêle au-dessus de 28 °C : il coupe. Le poêle muet 15 min : il vous prévient.']];
   return html`${steer?.lache?noteBox('Flamme laissée',steer.lache):nothing}

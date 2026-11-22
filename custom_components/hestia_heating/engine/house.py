@@ -83,7 +83,7 @@ def build(snap: dict) -> dict:
     stove = None
     if raw_stove:
         stove = stove_engine.read(raw_stove["profile"], raw_stove.get("device") or {}, raw_stove.get("roles") or {},
-                                  stove_thermostat, snap.get("plug"), pellets)
+                                  stove_thermostat, snap.get("plug"), pellets, raw_stove.get("ecritures_max"))
         if not stove["piece"] and stove_thermostat:
             stove["piece"] = stove_thermostat.get("piece")
     burning = bool(stove and stove["en_feu"])

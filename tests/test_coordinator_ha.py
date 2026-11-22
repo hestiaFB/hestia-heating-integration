@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from custom_components.hestia_heating.const import API_KEY, DOMAIN  # noqa: E402
 from custom_components.hestia_heating.websocket import CARD_KEYS, card_view  # noqa: E402
+from custom_components.hestia_heating.coordinator import _burning_only  # noqa: E402
 from homeassistant.util import dt as dt_util  # noqa: E402
 
 
@@ -317,6 +318,17 @@ class MadeUpHouse(SetsTheFlame, HomeAssistantWithAHouse):
         self.assertNotIn("scheduler", view["planning"])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
+    async def test_the_daily_orders_come_from_the_stove_integrations_options(self):
+        """The stove integration lets so many orders through a day, set in its own options: Hestia reads it there."""
+        stove_entry = next(e for e in self.hass.config_entries._entries.values() if e.domain == "aguaiot")
+        object.__setattr__(stove_entry, "options", {"max_eeprom_writes_per_day": 25})
+        entry, c = await self._setup()
+        self.assertEqual((c.data["poele"]["ecritures_max"], c.data["poele"]["ecritures_lues"]), (25, True))
+
+    async def test_without_the_option_the_profiles_figure(self):
+        entry, c = await self._setup()
+        self.assertEqual((c.data["poele"]["ecritures_max"], c.data["poele"]["ecritures_lues"]), (20, False))
+
     async def test_the_stove_pilot_in_the_shade_only_watches(self):
         """0.4: the pilot says what Hestia would do and what the house did; it never calls a service."""
         entry, c = await self._setup()
@@ -528,6 +540,18 @@ class CopiedHouse(SendsThePlanning, SetsTheFlame, HomeAssistantWithAHouse):
         self.assertEqual(c.journal[-1]["statut"], "recopie")
         self.assertTrue(c.data["planning"]["labo"])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+
+
+class TheStovesDayCurve(unittest.TestCase):
+    def test_the_flame_is_zero_while_the_stove_does_not_burn(self):
+        at = lambda h, mi=0: datetime(2026, 11, 22, h, mi)
+        flames = [(at(0), 1.0), (at(18, 59), 5.0), (at(20, 16), 1.0)]
+        states = [(at(0), "Éteindre"), (at(18, 45), "Allumage"), (at(20, 38), "Extinction")]
+        curve = _burning_only(flames, states, m.PROFILE)
+        self.assertEqual(curve, [(at(0), 0.0), (at(18, 45), 1.0), (at(18, 59), 5.0), (at(20, 16), 1.0), (at(20, 38), 0.0)])
+        # Without the stove's states, the curve stays as read.
+        self.assertEqual(_burning_only(flames, [], m.PROFILE), flames)
 
 
 if __name__ == "__main__":

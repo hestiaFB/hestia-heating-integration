@@ -11,7 +11,12 @@ Le pilote du poêle peut régler la flamme, en option. Il reste « à l’ombre 
 - Dans Réglages, « Flamme au plus bas » : un interrupteur (`input_boolean`) qui, allumé, demande la flamme 1, comme le font déjà certaines automatisations. Le pilote en tient compte, à l’ombre aussi.
 
 ### Ce qui change
-- Le profil Micronova compte 20 ordres par jour pour la mémoire du poêle (25 avant), comme le quota que suivent les automatisations de la maison.
+- Le nombre d’ordres que l’extension du poêle laisse passer chaque jour est lu dans ses options (Agua IOT : `max_eeprom_writes_per_day`). Sans cette option, le profil Micronova compte 20 (25 avant), la valeur par défaut de l’extension.
+
+### Corrections
+- Poêle éteint, la page et la carte n’affichent plus « Flamme 1 » : certains poêles donnent une flamme réelle de 1 même éteints. La courbe du jour met la flamme à 0 quand le poêle ne brûle pas.
+- Le pilote ne prend plus un thermostat remis sur « éteint » par un redémarrage de Home Assistant pour une demande d’arrêt, ni un poêle relu au redémarrage pour un démarrage. Ce faux écart pouvait apparaître dans le bilan.
+- En saison douce, le pilote dit qu’il ne couperait rien, sans réponse, à un poêle déjà en route.
 
 ### Ce qui ne change pas
 - Par défaut, le pilote est « à l’ombre » : il n’envoie rien. Revenir « À l’ombre » arrête les ordres tout de suite.

@@ -110,7 +110,9 @@ class HeatingCoordinator:
         self.model = home_planning.loaded(self.settings.get("planning"))
         state = await self.state_store.async_load() or {}
         self.applied = state.get("thermostats") or {}
-        self.pilot_memory = state.get("pilote") or {}
+        # The thermostat seen before a restart is not a « before »: a thermostat restored off (or in boost) by the
+        # restart is neither a switch-off nor a step up, as for the house's own automations.
+        self.pilot_memory = {k: v for k, v in (state.get("pilote") or {}).items() if k not in ("mode", "preset")}
         self.pilot_journal = [j for j in state.get("journal_pilote") or [] if isinstance(j, dict) and j.get("jour") and j.get("qui")]
         folder = Path(__file__).parent / "profiles"
         self.profiles = await self.hass.async_add_executor_job(profiles.load_all, folder)
@@ -408,6 +410,8 @@ class HeatingCoordinator:
             flame = entities.get("flamme_reelle") or entities.get("flamme")
             if flame:
                 wanted.append(("flamme", flame, None))
+                if entities.get("etat"):
+                    wanted.append(("etat", entities["etat"], None))
             if stove.get("thermostat"):
                 wanted += [("temperature", stove["thermostat"], "current_temperature"),
                            ("demande", stove["thermostat"], "power_percent")]
@@ -416,11 +420,34 @@ class HeatingCoordinator:
             if room and room.get("principal"):
                 wanted += [("temperature", room["principal"], "current_temperature"),
                            ("consigne", room["principal"], "temperature")]
-        series = await reader.day_history(self.hass, start, now, wanted) if wanted else {}
+        series = await reader.day_history(self.hass, start, now, wanted, text=("etat",)) if wanted else {}
+        if "etat" in series:
+            profile = next((p for p in self.profiles if p.id == (self.data.get("poele") or {}).get("profil")), None)
+            series["flamme"] = _burning_only(series.get("flamme") or [], series.pop("etat"), profile)
         view = {"debut": start.isoformat(), "maintenant_min": now.hour * 60 + now.minute,
                 "series": {name: _minutes(points, start) for name, points in series.items()}}
         self._days[target] = (time.monotonic(), view)
         return view
+
+
+def _burning_only(flames: list[tuple], states: list[tuple], profile) -> list[tuple]:
+    """The flame curve at 0 while the stove does not burn: some stoves report a real flame of 1 while off."""
+    if profile is None or not states:
+        return flames
+    changes = sorted([(at, value, "f") for at, value in flames] + [(at, value, "s") for at, value in states],
+                     key=lambda c: (c[0], c[2] == "f"))
+    out, flame, burning = [], None, None
+    for at, value, kind in changes:
+        if kind == "s":
+            burning = profile.translate(value)[0] in profiles.BURNING
+        else:
+            flame = value
+        shown = flame if burning or burning is None else 0.0
+        if out and out[-1][0] == at:
+            out[-1] = (at, shown)
+        else:
+            out.append((at, shown))
+    return out
 
 
 def _minutes(points: list[tuple[datetime, float | None]], start: datetime, step: int = 5) -> list[list]:
