@@ -22,9 +22,10 @@ def _role(roles: dict, name: str) -> dict:
 
 
 def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = None, plug: dict | None = None,
-         pellets: dict | None = None) -> dict:
+         pellets: dict | None = None, writes_cap: int | None = None) -> dict:
     """`roles`: {role: {entity_id, state, attributes, last_changed}} as found by the profile; `thermostat`: the source
-    read from the stove's thermostat (sources.read); `plug`: {entity_id, w}; `pellets`: pellets(...) below."""
+    read from the stove's thermostat (sources.read); `plug`: {entity_id, w}; `pellets`: pellets(...) below;
+    `writes_cap`: the daily orders the stove integration lets through, read in its options (else the profile's)."""
     status = _role(roles, "etat")
     text = status.get("state")
     state, known = profile.translate(text)
@@ -56,7 +57,9 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "a_traduire": not known,
         "en_feu": state in BURNING,
         "depuis": since.isoformat() if isinstance(since, datetime) else None,
-        "flamme": int(real_flame) if real_flame is not None else (int(set_flame) if set_flame is not None else None),
+        # Some stoves report a real flame of 1 while off: the flame is only said while the stove burns.
+        "flamme": None if state not in BURNING else int(real_flame) if real_flame is not None else (
+            int(set_flame) if set_flame is not None else None),
         "flamme_reglee": None if set_flame is None else int(set_flame),
         "flamme_depuis": flame_since.isoformat() if isinstance(flame_since, datetime) else None,
         "flamme_min": int(flame_spec.get("min", 1)),
@@ -68,7 +71,8 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "alarme_depuis": min(alarm_since).isoformat() if alarm_since else None,
         "eco_stop": None if eco in (None, "unknown", "unavailable") else eco == "on",
         "ecritures": None if writes is None else int(writes),
-        "ecritures_max": profile.limits.get("ecritures_par_jour"),
+        "ecritures_max": writes_cap or profile.limits.get("ecritures_par_jour"),
+        "ecritures_lues": writes_cap is not None,
         "thermostat": (thermostat or {}).get("entite"),
         "thermostat_nom": (thermostat or {}).get("nom"),
         "demande_pct": (thermostat or {}).get("demande_pct"),

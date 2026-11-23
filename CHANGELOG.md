@@ -1,6 +1,29 @@
 # Changements
 
-## À venir — 0.4.0b1
+## À venir — 0.5.0b1
+
+Le pilote du poêle peut régler la flamme, en option. Il reste « à l’ombre » tant que vous ne l’avez pas choisi.
+
+### Nouveautés
+- **Dans Réglages, « Le pilote de Hestia » a un troisième choix : « Flamme »**. Hestia règle alors la flamme du poêle selon la demande de son thermostat, avec les mêmes règles qu’à l’ombre. Seulement la flamme : le démarrage, l’arrêt et les sécurités restent à vos automatisations.
+- Sur la page Poêle, « Hestia fait » et « Ordres de Hestia aujourd’hui » (par exemple 4 sur 12), avec la flamme demandée en attente de vérification. Le journal dit chaque ordre et s’il a été suivi.
+- **Hestia est prudente** : un ordre à la fois, vérifié 5 minutes après, la même flamme renvoyée au plus toutes les 10 minutes, 12 ordres par jour au plus. Si la flamme change sans elle (une autre automatisation la règle encore), ou si le poêle ne suit pas 3 fois, elle laisse la flamme jusqu’au lendemain et le dit en haut de la page Poêle.
+- Dans Réglages, « Flamme au plus bas » : un interrupteur (`input_boolean`) qui, allumé, demande la flamme 1, comme le font déjà certaines automatisations. Le pilote en tient compte, à l’ombre aussi.
+
+### Ce qui change
+- Le nombre d’ordres que l’extension du poêle laisse passer chaque jour est lu dans ses options (Agua IOT : `max_eeprom_writes_per_day`). Sans cette option, le profil Micronova compte 20 (25 avant), la valeur par défaut de l’extension.
+
+### Corrections
+- Poêle éteint, la page et la carte n’affichent plus « Flamme 1 » : certains poêles donnent une flamme réelle de 1 même éteints. La courbe du jour met la flamme à 0 quand le poêle ne brûle pas.
+- Le pilote ne prend plus un thermostat remis sur « éteint » par un redémarrage de Home Assistant pour une demande d’arrêt, ni un poêle relu au redémarrage pour un démarrage. Ce faux écart pouvait apparaître dans le bilan.
+- En saison douce, le pilote dit qu’il ne couperait rien, sans réponse, à un poêle déjà en route.
+
+### Ce qui ne change pas
+- Par défaut, le pilote est « à l’ombre » : il n’envoie rien. Revenir « À l’ombre » arrête les ordres tout de suite.
+- Jamais d’ordre à un poêle recopié d’une autre maison (le labo), même réglé sur « Flamme ».
+- Avant de choisir « Flamme », éteignez votre automatisation qui règle déjà la flamme : sinon Hestia la voit faire et s’arrête pour la journée.
+
+## 0.4.0b1
 
 Le pilote du poêle, « à l’ombre » : Hestia dit ce qu’elle ferait du poêle, à côté de ce que font vos automatisations. Elle ne le commande pas.
 

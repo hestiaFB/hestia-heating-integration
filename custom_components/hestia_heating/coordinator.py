@@ -35,7 +35,7 @@ TICK = timedelta(minutes=1)
 DAY_CACHE_S = 120
 DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
             "planning": None, "pilote": "ombre", "pilote_thermometre": None,
-            "planning_autorises": []}
+            "planning_autorises": [], "pilote_flamme_basse": None}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en essai, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
@@ -110,7 +110,9 @@ class HeatingCoordinator:
         self.model = home_planning.loaded(self.settings.get("planning"))
         state = await self.state_store.async_load() or {}
         self.applied = state.get("thermostats") or {}
-        self.pilot_memory = state.get("pilote") or {}
+        # The thermostat seen before a restart is not a « before »: a thermostat restored off (or in boost) by the
+        # restart is neither a switch-off nor a step up, as for the house's own automations.
+        self.pilot_memory = {k: v for k, v in (state.get("pilote") or {}).items() if k not in ("mode", "preset")}
         self.pilot_journal = [j for j in state.get("journal_pilote") or [] if isinstance(j, dict) and j.get("jour") and j.get("qui")]
         folder = Path(__file__).parent / "profiles"
         self.profiles = await self.hass.async_add_executor_job(profiles.load_all, folder)
@@ -234,12 +236,24 @@ class HeatingCoordinator:
             self.pilot_journal = (kept + new)[-PILOT_KEEP:]
             if changed:
                 self._save_state()
-        if stove and stove.get("pilote", {}).get("mode") == "ombre":
+            if state.get("ordre"):
+                self._flame_order(state["ordre"])
+        if stove and stove.get("pilote", {}).get("mode") in ("ombre", "flamme"):
             day = [j for j in self.pilot_journal if j["jour"] == today]
             stove["pilote"]["journal"] = day[-PILOT_SHOWN:]
             stove["pilote"]["accord_jour"] = _tally(day)
             stove["pilote"]["accord_semaine"] = {**_tally(self.pilot_journal), "depuis": min(
                 (j["jour"] for j in self.pilot_journal), default=today), "ecarts": _gaps(self.pilot_journal)}
+
+    def _flame_order(self, order: dict) -> None:
+        """« Flamme » mode: the stove's flame, as the house's modulation sets it (number.set_value), without waiting
+        for the answer; the pilot checks 5 minutes later that the flame followed. Only once Home Assistant runs."""
+        if self.hass.state is not CoreState.running:
+            return
+        _LOGGER.info("Pilote du poêle : flamme %s (%s)", order["valeur"], order["entity_id"])
+        self.hass.async_create_task(self.hass.services.async_call(
+            "number", "set_value", {"entity_id": order["entity_id"], "value": order["valeur"]}, blocking=False,
+            context=Context()))
 
     def _save_state(self) -> None:
         self.state_store.async_delay_save(lambda: {"thermostats": self.applied, "pilote": self.pilot_memory,
@@ -360,6 +374,9 @@ class HeatingCoordinator:
         allowed = changes.get("planning_autorises", [])
         if not isinstance(allowed, list) or not all(isinstance(t, str) and t.startswith("climate.") for t in allowed):
             raise ValueError("thermostats autorisés illisibles")
+        low = changes.get("pilote_flamme_basse")
+        if low is not None and not (isinstance(low, str) and low.startswith("input_boolean.")):
+            raise ValueError("interrupteur « flamme au plus bas » illisible")
         sensor = changes.get("pilote_thermometre")
         if sensor is not None and not (isinstance(sensor, str) and sensor.startswith("sensor.")):
             raise ValueError("thermomètre de la maison illisible")
@@ -393,6 +410,8 @@ class HeatingCoordinator:
             flame = entities.get("flamme_reelle") or entities.get("flamme")
             if flame:
                 wanted.append(("flamme", flame, None))
+                if entities.get("etat"):
+                    wanted.append(("etat", entities["etat"], None))
             if stove.get("thermostat"):
                 wanted += [("temperature", stove["thermostat"], "current_temperature"),
                            ("demande", stove["thermostat"], "power_percent")]
@@ -402,11 +421,34 @@ class HeatingCoordinator:
                 wanted += [("temperature", room["principal"], "current_temperature"),
                            ("consigne", room["principal"], "temperature"),
                            ("demande", room["principal"], "power_percent")]
-        series = await reader.day_history(self.hass, start, now, wanted) if wanted else {}
+        series = await reader.day_history(self.hass, start, now, wanted, text=("etat",)) if wanted else {}
+        if "etat" in series:
+            profile = next((p for p in self.profiles if p.id == (self.data.get("poele") or {}).get("profil")), None)
+            series["flamme"] = _burning_only(series.get("flamme") or [], series.pop("etat"), profile)
         view = {"debut": start.isoformat(), "maintenant_min": now.hour * 60 + now.minute,
                 "series": {name: _minutes(points, start) for name, points in series.items()}}
         self._days[target] = (time.monotonic(), view)
         return view
+
+
+def _burning_only(flames: list[tuple], states: list[tuple], profile) -> list[tuple]:
+    """The flame curve at 0 while the stove does not burn: some stoves report a real flame of 1 while off."""
+    if profile is None or not states:
+        return flames
+    changes = sorted([(at, value, "f") for at, value in flames] + [(at, value, "s") for at, value in states],
+                     key=lambda c: (c[0], c[2] == "f"))
+    out, flame, burning = [], None, None
+    for at, value, kind in changes:
+        if kind == "s":
+            burning = profile.translate(value)[0] in profiles.BURNING
+        else:
+            flame = value
+        shown = flame if burning or burning is None else 0.0
+        if out and out[-1][0] == at:
+            out[-1] = (at, shown)
+        else:
+            out.append((at, shown))
+    return out
 
 
 def _minutes(points: list[tuple[datetime, float | None]], start: datetime, step: int = 5) -> list[list]:

@@ -1,6 +1,7 @@
-"""The stove's pilot « à l'ombre » (0.4): what Hestia would do with the stove, next to what the house does. Plain
-Python, and it sends nothing: the coordinator only keeps its memory and its journal (docs/technique.md, « Le pilote du
-poêle »). Its rules follow the stove automations that already run a real house (start manager, modulation, stop,
+"""The stove's pilot: what Hestia would do with the stove, next to what the house does. Plain Python: it says what to
+send, the coordinator sends it, or not (docs/technique.md, « Le pilote du poêle »). « À l'ombre » (0.4) it sends
+nothing. « Flamme » (0.5, an option the user switches on) it sets the stove's flame, and only that: starting,
+stopping and the safeties stay with the house's own automations. Its rules follow the stove automations that already run a real house (start manager, modulation, stop,
 stop check, safeties and their watch), so that the two can be compared gesture by gesture.
 
 The thermostat of the stove decides how much to heat (its demand, in %); the pilot turns it into the stove's gestures:
@@ -15,11 +16,18 @@ The thermostat of the stove decides how much to heat (its demand, in %); the pil
   set point: on the thermostat's smoothed temperature (`ema_temp`), as the house does. Down at once; up only 30
   minutes after the stove's flame last changed, unless two steps apart. The stove's daily writes keep 4 orders aside,
   to be able to stop it.
-- Stop: the thermostat at hors gel (frost), or off for 30 seconds, or the house warm enough for 2 minutes (no longer
-  1 °C under the set point, or not under it at all in boost). Checked by the stove's state, its smoke under 60 °C, or
-  its plug under 70 W.
+- Stop: the thermostat at hors gel (frost), or off for 30 seconds (switched off from a known state with a preset, not
+  restored off by a restart), or the house warm enough for 2 minutes (no longer 1 °C under the set point, or not under
+  it at all in boost). Checked by the stove's state, its smoke under 60 °C, or its plug under 70 W.
 - Safety: an alarm that lasts 2 minutes, or the stove's room over 28 °C while it burns: cut (the thermostat off, then
   the stove). A stove silent for 15 minutes: say so, nothing else.
+- A switch chosen in Réglages (« flamme au plus bas », like a switch that forces flame 1) asks for the lowest flame.
+
+In « flamme » mode (`steer()`): one order at a time (number.set_value on the stove's flame, as the house's
+modulation does), checked 5 minutes later; again at most every 10 minutes while the flame has not followed; 12 orders
+a day at most from Hestia, on top of the 4 the stove's own daily writes keep aside. A flame changed without Hestia
+(another automation still sets it), or 3 orders not followed in a day: Hestia lets go of the flame until the next day.
+Never a stove copied from another house (a lab).
 """
 from __future__ import annotations
 
@@ -42,7 +50,11 @@ GAP_C = 1.0                     # the house must be this much under the set poin
 MILD_ON_C, MILD_OFF_C = 18.0, 19.0
 STOP_SMOKE_C, STOP_PLUG_W, HOT_PLUG_W = 60, 70, 60
 BURNING = ("allumage", "chauffe", "nettoyage")
-MODES = ("ombre", "eteint")
+MODES = ("ombre", "flamme", "eteint")
+# « Flamme » mode: an order is checked after CONFIRM; one not followed is sent again after RESEND at the earliest;
+# GAP between two orders; HESTIA_WRITES orders a day at most; FAILS orders not followed and Hestia lets go for the day.
+CONFIRM, RESEND, GAP = timedelta(minutes=5), timedelta(minutes=10), timedelta(minutes=3)
+HESTIA_WRITES, FAILS = 12, 3
 ACTS = ("demarrer", "demander", "refuser", "flamme", "arreter", "couper", "alerter")
 # What a decision looks like on the panel.
 TONE = {"demarrer": "stove", "flamme": "stove", "garder": "stove", "arreter": "calm", "couper": "alert",
@@ -88,9 +100,10 @@ def warm_enough(house_c: float | None, target_c: float | None, preset: str | Non
 
 
 def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datetime,
-           house_c: float | None = None) -> tuple[dict, dict, list[dict]]:
+           house_c: float | None = None, low: str | None = None) -> tuple[dict, dict, list[dict]]:
     """(the decision, the new memory, the day's events: what Hestia would do and what the house did). `house_c`: the
-    house's temperature (the average of its rooms)."""
+    house's temperature (the sensor chosen in Réglages, else the average of its rooms). `low`: the name of the switch
+    that asks for the lowest flame, when it is on."""
     mem = {k: v for k, v in (memory or {}).items() if k not in ("jour", "demarrages", "cible", "hausse")}
     events: list[dict] = []
     at = hour(now)
@@ -100,16 +113,20 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
 
     # What the house did since the last look: the stove's state and its flame, seen from outside.
     before_state, before_flame = mem.get("etat"), mem.get("reglee")
+    # A silent moment (the cloud) is not a change of the stove: compare with the last state it said.
+    known_before = mem.get("etat_connu", before_state) if before_state == "inconnu" else before_state
     house_did = None
-    if before_state in ("eteint", "inconnu", "alarme") and burning:
+    if known_before in ("eteint", "alarme") and burning:
         house_did = "demarre"
-    elif before_state in BURNING and state in ("extinction", "eteint"):
+    elif known_before in BURNING and state in ("extinction", "eteint"):
         house_did = "eteint"
     elif before_flame is not None and flame_set is not None and flame_set != before_flame and burning:
         house_did = "flamme"
     if before_flame is not None and flame_set is not None and flame_set != before_flame:
         mem["reglee_a"] = now.isoformat()
     mem.update(etat=state, reglee=flame_set)
+    if state != "inconnu":
+        mem["etat_connu"] = state
     flame_since = _iso(stove.get("flamme_depuis")) or _iso(mem.get("reglee_a"))
     alarm = bool(stove.get("alarme")) or state == "alarme"
     alarm_since = _held(mem, "alarme_a", alarm, stove.get("alarme_depuis"), now)
@@ -130,7 +147,12 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     smooth = room if smooth is None else smooth
     before_preset, before_mode = mem.get("preset"), mem.get("mode")
     mem.update(preset=preset, mode=mode)
-    off_since = _held(mem, "arret_a", mode == "off", None, now)
+    # A real switch-off only: from a known state with a preset, not the way back from a restart or a reload.
+    if mode == "off" and before_mode != "off":
+        mem["arret_vrai"] = before_mode not in (None, "unavailable", "unknown") and before_preset is not None
+    elif mode != "off":
+        mem["arret_vrai"] = None
+    off_since = _held(mem, "arret_a", mode == "off" and bool(mem.get("arret_vrai")), None, now)
     wants_off = preset == "frost" or bool(off_since and now - off_since >= OFF_HELD)
     overheat = room is not None and room > OVERHEAT_C
     warm = warm_enough(house_c, target_c, preset)
@@ -165,7 +187,8 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
         elif mild:
             start = _decision("demander", "Démarrer ?", f"Le thermostat est passé en boost à {at}, mais {house_text} "
                               "(saison douce, 18 °C ou plus). Le pilote vous demanderait d’abord votre accord ; sans "
-                              "réponse en 15 min, il remettrait le thermostat hors gel.", None, stove)
+                              "réponse en 15 min, il remettrait le thermostat hors gel, sauf si le poêle est déjà "
+                              "en route : alors il ne couperait rien.", None, stove)
             mem.update(demande=now.isoformat(), demarrage=None, refus=None)
         else:
             start = _decision("demarrer", "Démarrer le poêle", f"Le thermostat est passé en boost à {at}, le poêle "
@@ -213,7 +236,7 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
                              f"Le poêle signale une alarme ({stove.get('alarme_texte') or 'alarme'}) : le pilote ne "
                              "touche plus à la flamme, et coupe si elle dure 2 minutes.", flame_set, stove)
     elif burning:
-        decision = _flame(stove, now, demand, smooth, target_c, slope, flame_set, flame_since, lo, hi)
+        decision = _flame(stove, now, demand, smooth, target_c, slope, flame_set, flame_since, lo, hi, low)
     else:
         decision = _rest(stove, state, preset, wants_off, silent)
 
@@ -230,11 +253,13 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     return decision, mem, events
 
 
-def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo, hi) -> dict:
+def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo, hi, low=None) -> dict:
     """The flame, from the stove's current one: the house's modulation, step by step."""
     current = flame_set
     hot, why = False, ""
-    if room is not None and room > 0 and target_c is not None:
+    if low:
+        hot, why = True, f"« {low} » demande la flamme au plus bas."
+    elif room is not None and room > 0 and target_c is not None:
         projected = room + max(slope or 0, 0) * AHEAD_H
         if projected > target_c + OVER_C:
             hot, why = True, (f"La pièce serait à {degrees(projected)} dans 15 min, plus de 0,5 °C au-dessus de sa "
@@ -341,3 +366,60 @@ def _house_event(did: str, at: str, flame_set, decision: dict, before: str, aske
     target = int(wanted) if kind in ("flamme", "garder") and wanted.isdigit() else decision.get("flamme")
     return {"heure": at, "qui": "maison", "texte": f"La maison a mis la flamme à {flame_set}.",
             "accord": None if target is None else target == flame_set}
+
+
+def steer(decision: dict, stove: dict, mem: dict, events: list[dict], now: datetime, copy: bool) -> tuple[dict | None, dict]:
+    """« Flamme » mode: the order to send now ({entity_id, valeur}) or None, and what the panel says of it. `mem` (the
+    memory decide() returned) and `events` are updated: an order sent, followed or not, a flame changed without
+    Hestia. Only the flame: starting, stopping and the safeties stay with the house."""
+    at, today = hour(now), now.date().isoformat()
+    if mem.get("envois_jour") != today:
+        mem.update(envois_jour=today, envois=0, echecs=0, lache=None)
+    flame_set, entity = stove.get("flamme_reglee"), (stove.get("entites") or {}).get("flamme")
+    sent = dict(mem.get("envoi") or {})
+    sent_at = _iso(sent.get("a"))
+    ours = bool(sent_at and sent.get("valeur") == flame_set and now - sent_at < RESEND)
+    # The flame changed: by Hestia's order, or by someone else (another automation still sets it).
+    if mem.get("reglee_a") == now.isoformat() and stove.get("etat") in BURNING:
+        for e in [e for e in events if e["qui"] == "maison" and e["texte"].startswith("La maison a mis la flamme")]:
+            events.remove(e)
+        if ours:
+            sent["fin"] = "suivi"
+            events.append({"heure": at, "qui": "hestia", "texte": f"La flamme est passée à {flame_set}, comme Hestia "
+                           "l’a demandé.", "accord": None})
+        elif not mem.get("lache"):
+            mem["lache"] = (f"La flamme est passée à {flame_set} à {at} sans Hestia : une autre automatisation la règle "
+                            "encore. Hestia ne touche plus à la flamme jusqu’à demain ; coupez votre automatisation de "
+                            "modulation.")
+            events.append({"heure": at, "qui": "maison", "texte": f"La flamme est passée à {flame_set} sans Hestia : "
+                           "Hestia la laisse jusqu’à demain.", "accord": False})
+    # An order not followed after 5 minutes.
+    if sent_at and not sent.get("fin") and now - sent_at >= CONFIRM:
+        sent["fin"] = "rate"
+        mem["echecs"] = mem.get("echecs", 0) + 1
+        events.append({"heure": at, "qui": "hestia", "texte": f"Le poêle n’a pas suivi : sa flamme est à "
+                       f"{flame_set if flame_set is not None else '?'}, pas à {sent.get('valeur')}.", "accord": None})
+        if mem["echecs"] >= FAILS and not mem.get("lache"):
+            mem["lache"] = (f"Le poêle n’a pas suivi {FAILS} ordres aujourd’hui : Hestia ne touche plus à la flamme "
+                            "jusqu’à demain.")
+    mem["envoi"] = sent or None
+    # In this mode Hestia does what it would have done: its « would » lines give way to what it sends.
+    for e in [e for e in events if e["qui"] == "hestia" and e["texte"].startswith("Hestia mettrait la flamme")]:
+        events.remove(e)
+    status = {"envois": mem.get("envois", 0), "max": HESTIA_WRITES, "lache": mem.get("lache"), "copie": copy,
+              "attente": sent.get("valeur") if sent_at and not sent.get("fin") else None}
+    target = decision.get("flamme")
+    if copy or not entity or mem.get("lache") or decision["action"] != "flamme" or target is None:
+        return None, status
+    if sent_at and (not sent.get("fin") or now - sent_at < GAP
+                    or (sent.get("fin") == "rate" and sent.get("valeur") == target and now - sent_at < RESEND)):
+        return None, status
+    if mem.get("envois", 0) >= HESTIA_WRITES:
+        status["texte"] = f"{HESTIA_WRITES} ordres de Hestia aujourd’hui : elle n’en envoie plus jusqu’à demain."
+        return None, status
+    mem["envoi"] = {"a": now.isoformat(), "valeur": target}
+    mem["envois"] = mem.get("envois", 0) + 1
+    events.insert(0, {"heure": at, "qui": "hestia", "texte": f"Hestia met la flamme à {target}.", "accord": None,
+                      "envoye": True})
+    status.update(envois=mem["envois"], attente=target)
+    return {"entity_id": entity, "valeur": target}, status

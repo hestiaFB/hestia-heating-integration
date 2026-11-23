@@ -65,7 +65,7 @@ class House(unittest.TestCase):
         self.assertEqual(s["demande_pct"], 60)
         self.assertTrue(s["prise_tourne"])
         self.assertEqual(s["ecritures"], 4)
-        self.assertEqual(s["ecritures_max"], 25)
+        self.assertEqual(s["ecritures_max"], 20)   # the house's own quota of orders a day (20 by default)
         g = self.view["granules"]
         # 90 kg in 30 days of use: 3 kg a day, 150 kg left.
         self.assertEqual((g["kg_par_jour"], g["jours"], g["stock_sacs"]), (3.0, 50, 10.0))
@@ -81,6 +81,11 @@ class House(unittest.TestCase):
         self.assertEqual(self.view["dehors"]["nuit_min"], -3.0)
         self.assertIsNotNone(self.view["dehors"]["demain_max"])
         self.assertIsNone(house.build(m.snapshot(hourly=None))["dehors"])
+
+    def test_a_stove_off_has_no_flame_even_if_it_reports_one(self):
+        # Some stoves report a real flame of 1 while off: never « flamme 1 » for a stove that does not burn.
+        s = house.build(m.snapshot(stove=m.stove(status="Off", flame="1")))["poele"]
+        self.assertEqual((s["en_feu"], s["flamme"], s["flamme_reglee"]), (False, None, 1))
 
     def test_nothing_heats(self):
         quiet = [m.vt("climate.vt_bureau", "Radiateur bureau", "bureau")]

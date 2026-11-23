@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from custom_components.hestia_heating.const import API_KEY, DOMAIN  # noqa: E402
 from custom_components.hestia_heating.websocket import CARD_KEYS, card_view  # noqa: E402
+from custom_components.hestia_heating.coordinator import _burning_only  # noqa: E402
 from homeassistant.util import dt as dt_util  # noqa: E402
 
 
@@ -65,6 +66,28 @@ class SendsThePlanning:
         self.assertEqual(self.sent, [], "saving the planning sends nothing at once")
         c.applied[thermostat] = {"a": (now - timedelta(minutes=30)).isoformat()}
         c._build()
+        await hass.async_block_till_done()
+        return entry, c
+
+
+class SetsTheFlame:
+    """« Flamme » mode (0.5): the stove's thermostat asks for much more, Hestia sets the flame with number.set_value."""
+
+    async def _flame_mode(self, flame_entity):
+        hass = self.hass
+        hass.set_state(CoreState.running)
+        self.sent = []
+
+        async def handler(call):
+            self.sent.append((call.domain, call.service, dict(call.data)))
+        hass.services.async_register("number", "set_value", handler)
+        entry, c = await self._setup()
+        await c.async_set_settings({"pilote": "flamme"})
+        await hass.async_block_till_done()
+        self.assertEqual(self.sent, [], "nothing at once: the flame 3 fits a demand of 60 %")
+        attrs = dict(hass.states.get("climate.vt_poele").attributes, power_percent=95)
+        hass.states.async_set("climate.vt_poele", "heat", attrs)
+        await asyncio.sleep(1.5)
         await hass.async_block_till_done()
         return entry, c
 
@@ -216,7 +239,7 @@ class PlanningHestia(SendsThePlanning, HomeAssistantWithAHouse):
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
 
-class MadeUpHouse(HomeAssistantWithAHouse):
+class MadeUpHouse(SetsTheFlame, HomeAssistantWithAHouse):
     """The made-up house with its own integrations: rooms, a stove's device, Versatile Thermostat."""
 
     async def test_it_finds_the_house_and_says_it(self):
@@ -295,6 +318,17 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         self.assertNotIn("scheduler", view["planning"])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
+    async def test_the_daily_orders_come_from_the_stove_integrations_options(self):
+        """The stove integration lets so many orders through a day, set in its own options: Hestia reads it there."""
+        stove_entry = next(e for e in self.hass.config_entries._entries.values() if e.domain == "aguaiot")
+        object.__setattr__(stove_entry, "options", {"max_eeprom_writes_per_day": 25})
+        entry, c = await self._setup()
+        self.assertEqual((c.data["poele"]["ecritures_max"], c.data["poele"]["ecritures_lues"]), (25, True))
+
+    async def test_without_the_option_the_profiles_figure(self):
+        entry, c = await self._setup()
+        self.assertEqual((c.data["poele"]["ecritures_max"], c.data["poele"]["ecritures_lues"]), (20, False))
+
     async def test_the_stove_pilot_in_the_shade_only_watches(self):
         """0.4: the pilot says what Hestia would do and what the house did; it never calls a service."""
         entry, c = await self._setup()
@@ -324,6 +358,39 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         await hass.async_block_till_done()
         self.assertEqual(c.data["poele"]["pilote"], {"mode": "eteint"})
         self.assertTrue(await hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_in_flame_mode_hestia_sets_the_flame_and_only_it(self):
+        entry, c = await self._flame_mode("number.poele_power")
+        self.assertEqual(self.sent, [("number", "set_value", {"entity_id": "number.poele_power", "value": 5})])
+        p = c.data["poele"]["pilote"]
+        self.assertEqual((p["mode"], p["commande"]["envois"], p["commande"]["attente"]), ("flamme", 1, 5))
+        self.assertEqual(c.data["poele"]["pilote"]["journal"][-1]["texte"], "Hestia met la flamme à 5.")
+        # The stove follows: Hestia's own change, not the house's; nothing sent again.
+        self.hass.states.async_set("number.poele_power", "5", {})
+        await asyncio.sleep(1.5)
+        await self.hass.async_block_till_done()
+        said = [j["texte"] for j in c.data["poele"]["pilote"]["journal"]]
+        self.assertIn("La flamme est passée à 5, comme Hestia l’a demandé.", said)
+        self.assertNotIn("La maison a mis la flamme à 5.", said)
+        self.assertEqual(len(self.sent), 1)
+        self.assertIsNone(c.data["poele"]["pilote"]["commande"]["lache"])
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"pilote_flamme_basse": "switch.poele"})
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_low_flame_switch_asks_for_flame_one(self):
+        self.hass.states.async_set("input_boolean.flamme_minimum", "off", {"friendly_name": "Flamme minimum"})
+        entry, c = await self._setup()
+        self.assertEqual(c.found.switches[0]["entity_id"], "input_boolean.flamme_minimum")
+        await c.async_set_settings({"pilote_flamme_basse": "input_boolean.flamme_minimum"})
+        await self.hass.async_block_till_done()
+        self.hass.states.async_set("input_boolean.flamme_minimum", "on", {"friendly_name": "Flamme minimum"})
+        await asyncio.sleep(1.5)
+        await self.hass.async_block_till_done()
+        p = c.data["poele"]["pilote"]
+        self.assertEqual((p["action"], p["flamme"], p["flamme_basse"]), ("flamme", 1, "Flamme minimum"))
+        self.assertEqual(self.calls, [], "in the shade, nothing is sent")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_the_pilot_reads_the_house_on_the_thermometer_chosen(self):
         """The pilot weighs the house on the automations' own sensor once chosen, else on the rooms' average."""
@@ -396,7 +463,7 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
 
-class CopiedHouse(SendsThePlanning, HomeAssistantWithAHouse):
+class CopiedHouse(SendsThePlanning, SetsTheFlame, HomeAssistantWithAHouse):
     """The same house copied by Remote Home Assistant, as in the lab: no device, no room, no integration of its own.
     The thermostats say they are Versatile Thermostats by their attributes, the stove by the ids of its entities."""
 
@@ -427,6 +494,13 @@ class CopiedHouse(SendsThePlanning, HomeAssistantWithAHouse):
         copy("sensor.prise_du_poele_puissance", "42", {"device_class": "power", "friendly_name": "Prise poêle"})
         for key, r in m.pellets().items():
             copy(r["entity_id"], r["state"], {**r["attributes"], "suivi_stock_pellet_key": key})
+
+    async def test_a_copied_stove_is_never_sent_a_flame(self):
+        entry, c = await self._flame_mode("number.essai_power")
+        self.assertEqual(self.sent, [])
+        self.assertTrue(c.data["poele"]["pilote"]["commande"]["copie"])
+        self.assertTrue(c.found.stove["copie"])
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_it_finds_the_house_and_says_it(self):
         entry, c = await self._setup()
@@ -468,6 +542,18 @@ class CopiedHouse(SendsThePlanning, HomeAssistantWithAHouse):
         self.assertEqual(c.journal[-1]["statut"], "recopie")
         self.assertTrue(c.data["planning"]["labo"])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+
+
+class TheStovesDayCurve(unittest.TestCase):
+    def test_the_flame_is_zero_while_the_stove_does_not_burn(self):
+        at = lambda h, mi=0: datetime(2026, 11, 22, h, mi)
+        flames = [(at(0), 1.0), (at(18, 59), 5.0), (at(20, 16), 1.0)]
+        states = [(at(0), "Éteindre"), (at(18, 45), "Allumage"), (at(20, 38), "Extinction")]
+        curve = _burning_only(flames, states, m.PROFILE)
+        self.assertEqual(curve, [(at(0), 0.0), (at(18, 45), 1.0), (at(18, 59), 5.0), (at(20, 16), 1.0), (at(20, 38), 0.0)])
+        # Without the stove's states, the curve stays as read.
+        self.assertEqual(_burning_only(flames, [], m.PROFILE), flames)
 
 
 if __name__ == "__main__":
