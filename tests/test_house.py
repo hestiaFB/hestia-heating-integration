@@ -41,6 +41,23 @@ class House(unittest.TestCase):
         self.assertEqual(self.rooms["atelier"]["etat"], "rafraichit")
         self.assertEqual(self.rooms["atelier"]["badge"]["ton"], "cold")
 
+    def test_each_room_gives_its_modes_for_the_card(self):
+        # The card's mode buttons: the presets its main thermostat offers, « none » left out, and the one it is on.
+        bureau = self.rooms["bureau"]
+        self.assertEqual(bureau["principal"], "climate.vt_bureau")
+        self.assertEqual(bureau["modes"], ["frost", "eco", "comfort", "boost"])
+        self.assertEqual(bureau["preset"], "comfort")
+        self.assertFalse(bureau["recopie"])
+        # The air conditioner offers no preset: no button.
+        self.assertEqual(self.rooms["atelier"]["modes"], [])
+
+    def test_a_copied_thermostat_greys_out_the_card_s_modes(self):
+        # A lab copies the home: a press on a mode would reach the other house.
+        view = house.build(m.snapshot(copies=["climate.vt_bureau"]))
+        rooms = {r["id"]: r for r in view["pieces"]}
+        self.assertTrue(rooms["bureau"]["recopie"])
+        self.assertFalse(rooms["amis"]["recopie"])
+
     def test_the_stove_and_its_pellets(self):
         s = self.view["poele"]
         self.assertEqual((s["etat"], s["en_feu"], s["flamme"], s["flamme_max"]), ("chauffe", True, 3, 5))

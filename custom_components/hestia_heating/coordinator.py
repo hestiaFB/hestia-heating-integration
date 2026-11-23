@@ -400,7 +400,8 @@ class HeatingCoordinator:
             room = next((r for r in self.data.get("pieces") or [] if r["id"] == target[6:]), None)
             if room and room.get("principal"):
                 wanted += [("temperature", room["principal"], "current_temperature"),
-                           ("consigne", room["principal"], "temperature")]
+                           ("consigne", room["principal"], "temperature"),
+                           ("demande", room["principal"], "power_percent")]
         series = await reader.day_history(self.hass, start, now, wanted) if wanted else {}
         view = {"debut": start.isoformat(), "maintenant_min": now.hour * 60 + now.minute,
                 "series": {name: _minutes(points, start) for name, points in series.items()}}

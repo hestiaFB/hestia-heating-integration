@@ -126,6 +126,11 @@ def build(snap: dict) -> dict:
         room_list.append(_room(room, stove if stove and stove["piece"] == room["id"] else None, stove_thermostat, lines,
                                window_since, now))
     room_list.sort(key=lambda r: (not r["poele"], _natural(r["nom"])))
+    copies = set(snap.get("copies") or ())
+    for r in room_list:
+        # A thermostat copied from another Home Assistant (a lab): the card's mode buttons stay greyed out, a press
+        # would reach the other house.
+        r["recopie"] = r["principal"] in copies
     # 5. The house.
     electric = [s for s in srcs if s["type"] in ("radiateur", "vanne", "pac", "autre") and s["etat"] == "chauffe"]
     cooling = [s for s in srcs if s["etat"] == "rafraichit"]
@@ -160,7 +165,6 @@ def build(snap: dict) -> dict:
                                    thermometre_lu=sensor is None or sensor["c"] is not None)
             pilot_state = {"memoire": memory, "evenements": events}
     lanes = _lanes(room_list, srcs, stove_thermostat, lines, naive_now)
-    copies = set(snap.get("copies") or ())
     room_names = {r["id"]: r["nom"] for r in room_list}
     plan = _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, aimed_on, schedules, copies,
                           snap.get("applied") or {}, naive_now, now.tzinfo, set(snap.get("autorises") or ()))
@@ -256,6 +260,8 @@ def _room(room: dict, stove: dict | None, stove_thermostat: dict | None, lines: 
         "principal": main["id"] if main else None,
         "type": (main or {}).get("type"),
         "preset": preset,
+        # The presets its main thermostat offers (the card's mode buttons), as the thermostat names them.
+        "modes": list((main or {}).get("prereglages_dispo") or []),
         "demande_pct": (main or {}).get("demande_pct") if main is not stove_src else (
             heating[0]["demande_pct"] if heating else (main or {}).get("demande_pct")),
         "puissance_w": round(watts) if heating else 0,

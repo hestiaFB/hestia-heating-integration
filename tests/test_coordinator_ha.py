@@ -443,6 +443,8 @@ class CopiedHouse(SendsThePlanning, HomeAssistantWithAHouse):
         self.assertEqual(ids, {"climate.vt_poele", "climate.vt_sejour", "climate.vt_bureau"})
         self.assertEqual({s["id"]: s["type"] for s in d["sources"]}["climate.vt_poele"], "poele")
         self.assertEqual(len(d["pieces"]), 3)
+        # The card's mode buttons stay greyed out: a press would reach the other house.
+        self.assertTrue(all(r["recopie"] for r in d["pieces"]))
         self.assertTrue(d["maison"]["titre"].startswith("Le poêle chauffe, flamme 3."), d["maison"]["titre"])
         vt = next(e for e in d["extensions"] if e["id"] == "versatile_thermostat")
         self.assertEqual((vt["trouve"], vt["installee"]), (3, True))

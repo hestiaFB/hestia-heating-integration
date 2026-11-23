@@ -7,14 +7,17 @@ import {follow,type Connection} from './stream';
 /* Hestia Chauffage's card, after the cards' mock-up validated by Frank on 20 Nov. 2026:
    1 · la maison: the house in one sentence, every room, the night's cold (card: maison, by default)
    2 · le poêle: its flame, its day, its smoke, the plug, the pellets (card: poele)
-   3 · une pièce: its temperature, its set point, its demand, its day (card: piece, piece: <id>), or one line (court: true)
+   3 · une pièce: its temperature, its set point, its demand, its day, its modes (card: piece, piece: <id>), or one line
+       (court: true). A tap on it opens its thermostat (tap_action: page, the room's page in the tab; none, nothing)
    4 · le planning: the day of each room and of the stove, from the planning Hestia or Scheduler (card: planning)
    Every figure comes from the integration (hestia_heating/subscribe, day): the card only puts it into words. */
 
-type Hass={callWS:<T>(msg:Record<string,unknown>)=>Promise<T>;connection:Connection;themes?:{darkMode?:boolean}};
+type Hass={callWS:<T>(msg:Record<string,unknown>)=>Promise<T>;callService:(domain:string,service:string,data:Record<string,unknown>)=>Promise<unknown>;
+ connection:Connection;themes?:{darkMode?:boolean}};
 type Badge={texte:string;ton:string};
 type Room={id:string;nom:string;temperature:number|null;consigne:number|null;etat:string;poele:boolean;demande_pct:number|null;puissance_w:number;
- pente:number|null;fenetre:boolean;badge:Badge;raison:string|null;planning:string|null;prochain:{a:string;texte:string}|null;type:string|null};
+ pente:number|null;fenetre:boolean;badge:Badge;raison:string|null;planning:string|null;prochain:{a:string;texte:string}|null;type:string|null;
+ principal:string|null;preset:string|null;modes?:string[];recopie?:boolean};
 type Stove={nom:string;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;fumees:number|null;
  prise:string|null;prise_w:number|null;demande_pct:number|null;ecritures:number|null;ecritures_max:number|null;alarme:boolean|null;alarme_texte:string|null};
 type Pellets={stock_sacs:number|null;stock_kg:number|null;jours:number|null};
@@ -24,8 +27,10 @@ type Planning={source:string|null;jour_nom:string;labo?:boolean;essai?:boolean;m
 type View={pret:boolean;maison:{etat:string;titre:string;temperature:number|null;en_chauffe:number;pieces:number;electrique_w:number};
  pieces:Room[];poele:Stove|null;granules:Pellets|null;dehors:{nuit_min:number|null;demain_max:number|null}|null;planning:Planning};
 type Day={maintenant_min:number;series:Record<string,[number,number|null][]>};
-type Config={type:string;card?:string;piece?:string;court?:boolean;name?:string};
+type Config={type:string;card?:string;piece?:string;court?:boolean;name?:string;tap_action?:string};
 const CARDS=['maison','poele','piece','planning'];
+/** A tap on a room's card: its thermostat (Home Assistant's own window, by default), its page in the tab, or nothing. */
+export const TAPS=['thermostat','page','none'];
 
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{maximumFractionDigits:d}).replace('-','−');
 const deg=(v:number|null|undefined)=>v==null?'—':`${num(v)} °C`;
@@ -36,6 +41,13 @@ function when(iso:string){const d=new Date(iso),now=new Date(),t=new Date(now);t
  if(d.toDateString()===now.toDateString())return hm(d);if(d.toDateString()===t.toDateString())return `demain ${hm(d)}`;return `${DAYS[d.getDay()]} ${hm(d)}`;}
 const STOVE_WORD:Record<string,string>={eteint:'éteint',allumage:'allumage',chauffe:'chauffe',nettoyage:'nettoyage',extinction:'extinction',alarme:'alarme',inconnu:'inconnu'};
 const LANE_WORD:Record<string,string>={poele:'poêle en chauffe',confort:'confort',eco:'éco',hors_gel:'hors gel',boost:'boost',arret:'arrêt'};
+/* A room's modes, as its thermostat names them (Versatile Thermostat's presets first), in this order, and their colour. */
+const MODE_WORD:Record<string,string>={frost:'Hors gel',eco:'Éco',comfort:'Confort',boost:'Boost',away:'Absent',sleep:'Nuit',home:'Présent',activity:'Activité'};
+const MODE_TONE:Record<string,string>={frost:'off',eco:'cold',comfort:'heat',boost:'act',away:'off',sleep:'cold',home:'heat',activity:'act'};
+const ORDER=Object.keys(MODE_WORD);
+const modeRank=(m:string)=>{const i=ORDER.indexOf(m);return i<0?ORDER.length:i;};
+// A mode pressed shows as chosen until the thermostat says so, at most this long.
+const PENDING_MS=10_000;
 
 /* The day's curves: one line per series, its own scale or the shared one (temperatures). A gap (no value) cuts the
    line; the last run reaches « now » only when the series still has a value at its end. */
@@ -47,26 +59,29 @@ function runs(points:[number,number|null][],end?:number){
  if(run&&last?.[1]!=null&&end!=null&&end>run.at(-1)![0])run.push([end,run.at(-1)![1]]);
  return out;
 }
-function paths(points:[number,number|null][],lo:number,hi:number,step=false,end?:number){
- const x=(m:number)=>(m/1440*W).toFixed(1),y=(v:number)=>(H-6-(v-lo)/(hi-lo||1)*(H-12)).toFixed(1);
+function paths(points:[number,number|null][],lo:number,hi:number,step=false,end?:number,band?:number){
+ const x=(m:number)=>(m/1440*W).toFixed(1),y=(v:number)=>(band?H-(v-lo)/(hi-lo||1)*band:H-6-(v-lo)/(hi-lo||1)*(H-12)).toFixed(1);
  const line=(run:[number,number][])=>run.map(([m,v],i)=>i===0?`M${x(m)} ${y(v)}`:step?`H${x(m)}V${y(v)}`:`L${x(m)} ${y(v)}`).join('');
  const all=runs(points,end);
  return {line:all.map(line).join(''),area:all.map(r=>`M${x(r[0][0])} ${H}`+line(r).replace(/^M/,'L')+`V${H}Z`).join('')};
 }
-function chart(lines:{pts:[number,number|null][];cls:string;step?:boolean;fill?:boolean;lo?:number;hi?:number}[],now:number,label:string):TemplateResult{
+/* `band`: a series drawn low in the chart, on that many pixels (a thermostat's demand, under the temperature). */
+function chart(lines:{pts:[number,number|null][];cls:string;step?:boolean;fill?:boolean;lo?:number;hi?:number;band?:number}[],now:number,label:string):TemplateResult{
  const vals=lines.filter(l=>l.lo==null).flatMap(l=>l.pts.map(p=>p[1])).filter((x):x is number=>x!=null);
  const lo=vals.length?Math.floor(Math.min(...vals)-.5):15,hi=vals.length?Math.ceil(Math.max(...vals)+.5):22;
  return html`<svg class="chart" viewBox="0 0 ${W} ${H+14}" role="img" aria-label=${label}>
   ${[0,360,720,1080].map(m=>svg`<line class="grid" x1=${m/1440*W} x2=${m/1440*W} y1="0" y2=${H}></line><text x=${m/1440*W+2} y=${H+12}>${m/60} h</text>`)}
-  ${lines.map(l=>{const p=paths(l.pts,l.lo??lo,l.hi??hi,l.step,now);
+  ${lines.map(l=>{const p=paths(l.pts,l.lo??lo,l.hi??hi,l.step,now,l.band);
    return p.line?svg`${l.fill?svg`<path class=${l.cls+' area'} d=${p.area}></path>`:nothing}<path class=${l.cls} d=${p.line}></path>`:nothing;})}
   <line class="now" x1=${now/1440*W} x2=${now/1440*W} y1="0" y2=${H}></line></svg>`;
 }
 
 class HestiaHeatingCard extends LitElement {
  static styles=[unsafeCSS(charte),unsafeCSS(heating)];
- static properties={_view:{state:true},_day:{state:true},_error:{state:true}};
+ static properties={_view:{state:true},_day:{state:true},_error:{state:true},_pending:{state:true},_refused:{state:true}};
  declare _view?:View;declare _day?:Day;declare _error?:string;
+ /** The mode just pressed, until the thermostat says it; what went wrong with the last press. */
+ declare _pending?:{id:string;mode:string;at:number};declare _refused?:string;
  private _hass?:Hass;private _config:Config={type:'custom:hestia-heating-card',card:'maison'};private _stop?:()=>void;private _again?:number;
  private _dayAt=0;private _dayFor='';
 
@@ -75,9 +90,10 @@ class HestiaHeatingCard extends LitElement {
  setConfig(config:Config){
   const card=config.card??'maison';
   if(!CARDS.includes(card))throw new Error(`card: ${card} ? (${CARDS.join(', ')})`);
+  if(config.tap_action!=null&&!TAPS.includes(config.tap_action))throw new Error(`tap_action: ${config.tap_action} ? (${TAPS.join(', ')})`);
   this._config={...config,card};
  }
- getCardSize(){const c=this._config.card;return c==='piece'&&this._config.court?2:c==='planning'?6:5;}
+ getCardSize(){const c=this._config.card;return c==='piece'&&this._config.court?2:c==='planning'||c==='piece'?6:5;}
  getGridOptions(){const c=this._config.card;return c==='planning'?{columns:'full',rows:'auto'}:{columns:12,rows:'auto',min_columns:6};}
  set hass(hass:Hass){
   const other=this._hass?.connection!==hass.connection;
@@ -112,7 +128,45 @@ class HestiaHeatingCard extends LitElement {
   if(this._error)return html`<ha-card><div class="head"><h2 class="nw-title">Chauffage</h2></div><p class="empty">${this._error}</p></ha-card>`;
   if(!v||!v.pret)return html`<ha-card><div class="head"><h2 class="nw-title">Chauffage</h2></div><p class="empty">Lecture des thermostats…</p></ha-card>`;
   const c=this._config.card;
-  return html`<ha-card>${c==='poele'?this._stove(v):c==='piece'?this._room(v):c==='planning'?this._planning(v):this._house(v)}</ha-card>`;
+  if(c==='piece'){
+   const r=this._roomOf(v),tap=r&&this._tapAction(r);
+   return html`<ha-card class=${tap?'tap':''} @click=${tap?(e:MouseEvent)=>this._tap(e,r!):nothing}>${this._room(v)}</ha-card>`;
+  }
+  return html`<ha-card>${c==='poele'?this._stove(v):c==='planning'?this._planning(v):this._house(v)}</ha-card>`;
+ }
+
+ /* A room's card: a tap opens its thermostat, its page in the tab, or nothing (the card's settings, « Clic sur la
+    carte »). A press on a mode or on « i » is not a tap on the card. */
+ private _roomOf(v:View){return v.pieces.find(x=>x.id===this._config.piece)??v.pieces[0];}
+ private _tapAction(r:Room){const t=this._config.tap_action??'thermostat';return t==='thermostat'&&!r.principal?'page':t==='none'?'':t;}
+ private _tap(e:Event,r:Room){
+  if(e.composedPath().some(n=>n instanceof HTMLElement&&n!==e.currentTarget&&(n.tagName==='BUTTON'||n.tagName==='A')))return;
+  const t=this._tapAction(r);
+  if(t==='thermostat')this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId:r.principal},bubbles:true,composed:true}));
+  else if(t==='page')this._open('pieces/'+r.id);
+ }
+ private _key(e:KeyboardEvent,r:Room){if(e.key==='Enter'||e.key===' '){e.preventDefault();this._tap(e,r);}}
+
+ /* A room's modes: the thermostat's own presets. The press is the user's, sent from this browser as Home Assistant's
+    own thermostat card does; never to a thermostat copied from another house (a lab), where it would reach that
+    house. */
+ private _modes(r:Room){
+  const modes=[...(r.modes??[])].filter(m=>m!=='none').sort((a,b)=>modeRank(a)-modeRank(b));
+  if(!modes.length||!r.principal)return nothing;
+  const p=this._pending,pending=p&&p.id===r.principal&&Date.now()-p.at<PENDING_MS&&r.preset!==p.mode?p.mode:null,on=pending??r.preset;
+  const locked=!!r.recopie;
+  // A press here, even on a greyed button, is never a tap on the card.
+  return html`<div class="modes" role="group" aria-label="Mode du thermostat" style=${`--n:${Math.min(modes.length,4)}`} @click=${(e:Event)=>e.stopPropagation()}>
+   ${modes.map(m=>html`<button type="button" class=${'mode '+(MODE_TONE[m]??'heat')+(m===on?' on':'')} aria-pressed=${m===on} ?disabled=${locked}
+     title=${locked?'Thermostat recopié d’une autre maison : rien ne lui est envoyé.':''} @click=${()=>this._setMode(r,m)}>${MODE_WORD[m]??m}</button>`)}</div>
+   ${locked?html`<p class="note">Thermostat recopié d’une autre maison : les modes se choisissent là-bas.</p>`:this._refused?html`<p class="note bad">${this._refused}</p>`:nothing}`;
+ }
+ private async _setMode(r:Room,mode:string){
+  if(!this._hass||!r.principal||r.recopie||mode===r.preset)return;
+  this._pending={id:r.principal,mode,at:Date.now()};this._refused=undefined;
+  window.setTimeout(()=>{if(this._pending?.at&&Date.now()-this._pending.at>=PENDING_MS)this._pending=undefined;},PENDING_MS+50);
+  try{await this._hass.callService('climate','set_preset_mode',{entity_id:r.principal,preset_mode:mode});}
+  catch(e){this._pending=undefined;this._refused=`Le thermostat n’a pas pris « ${MODE_WORD[mode]??mode} » : ${(e as {message?:string}).message??'pas de réponse'}.`;}
  }
 
  /* 1 · La maison */
@@ -147,19 +201,29 @@ class HestiaHeatingCard extends LitElement {
 
  /* 3 · Une pièce, longue ou courte */
  private _room(v:View){
-  const r=v.pieces.find(x=>x.id===this._config.piece)??v.pieces[0];
+  const r=this._roomOf(v);
   if(!r)return html`<div class="head"><h2 class="nw-title">${this._config.name||'Pièce'}</h2></div><p class="empty">Aucun thermostat trouvé.</p>`;
-  const name=this._config.name||r.nom;
-  if(this._config.court)return html`<div class="short" role="button" tabindex="0" @click=${()=>this._open('pieces/'+r.id)}>
+  const name=this._config.name||r.nom,tap=this._tapAction(r);
+  const what=tap==='thermostat'?`Ouvrir le thermostat de ${r.nom}`:`Ouvrir la page de ${r.nom}`;
+  if(this._config.court)return html`<div class="short" role=${tap?'button':nothing} tabindex=${tap?0:nothing} aria-label=${tap?what:nothing}
+    @keydown=${tap?(e:KeyboardEvent)=>this._key(e,r):nothing}>
     <div class="temp">${r.temperature!=null?num(r.temperature):'—'}<sup>°C</sup></div><div><b>${name}</b><span class="nw-say">${r.raison??(r.consigne!=null?`Consigne ${deg(r.consigne)}`:'')}</span></div>${this._chip(r.badge)}</div>`;
   const d=this._day,slope=r.pente!=null&&Math.abs(r.pente)>=.05?`${r.pente>0?'↗':'↘'} ${r.pente>0?'+':''}${num(r.pente)} °C par heure`:null;
   return html`<div class="head"><h2 class="nw-title">${name}</h2>${this._chip(r.badge)}${this._info('pieces/'+r.id,'Ouvrir la page de la pièce')}</div>
-   <div class="reading"><div><div class="temp">${r.temperature!=null?num(r.temperature):'—'}<sup>°C</sup></div>${slope?html`<div class="slope">${slope}</div>`:nothing}</div>
+   <div class="reading"><div role=${tap?'button':nothing} tabindex=${tap?0:nothing} aria-label=${tap?what:nothing} @keydown=${tap?(e:KeyboardEvent)=>this._key(e,r):nothing}><div class="temp">${r.temperature!=null?num(r.temperature):'—'}<sup>°C</sup></div>${slope?html`<div class="slope">${slope}</div>`:nothing}</div>
     ${r.consigne!=null?html`<div class="target"><span class="nw-label">Consigne</span><b>${deg(r.consigne)}</b><span class="nw-say">${r.planning??''}${r.prochain?` jusqu’à ${when(r.prochain.a)}`:''}</span></div>`:nothing}</div>
    ${r.demande_pct!=null&&!r.poele?html`<div class="nw-panel"><div class="flame-row"><span class="nw-label">Demande du thermostat</span><b>${r.demande_pct} %</b></div>
     <div class="bar"><i style=${`width:${r.demande_pct}%`}></i></div><div class="nw-say">${r.raison??''}</div></div>`:r.raison?html`<div class="nw-say">${r.raison}</div>`:nothing}
-   ${d&&d.series.temperature?.length?html`${chart([{pts:d.series.temperature,cls:'temp'},{pts:d.series.consigne??[],cls:'target',step:true}],d.maintenant_min,`Température et consigne de ${r.nom} aujourd’hui`)}
-    <div class="nw-legend"><span><i class="sw temp"></i>température</span><span><i class="sw target"></i>consigne</span></div>`:nothing}`;
+   ${d&&d.series.temperature?.length?this._roomDay(r,d):nothing}
+   ${this._modes(r)}`;
+ }
+ /** The room's day: its temperature (and its area), its set point in steps, and low in the chart when its thermostat
+     heated (its demand, 0 to 100 %). */
+ private _roomDay(r:Room,d:Day){
+  const demand=(d.series.demande??[]).some(p=>(p[1]??0)>0)&&!r.poele;
+  return html`${chart([...(demand?[{pts:d.series.demande,cls:'demand',step:true,fill:true,lo:0,hi:100,band:18}]:[]),
+    {pts:d.series.temperature,cls:'temp',fill:true},{pts:d.series.consigne??[],cls:'target',step:true}],d.maintenant_min,`Température et consigne de ${r.nom} aujourd’hui`)}
+   <div class="nw-legend"><span><i class="sw temp"></i>température</span><span><i class="sw target"></i>consigne</span>${demand?html`<span><i class="sw demand"></i>chauffe</span>`:nothing}</div>`;
  }
 
  /* 4 · Le planning */
