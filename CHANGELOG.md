@@ -37,6 +37,7 @@ Le pilote du poêle, « à l’ombre » : Hestia dit ce qu’elle ferait du poê
 - **La carte d’une pièce a ses modes** : Hors gel, Éco, Confort, Boost (ceux que propose son thermostat), en bas de la carte, comme la carte thermostat de Home Assistant. C’est vous qui choisissez : la carte envoie le mode au thermostat depuis votre navigateur. Sur un thermostat recopié d’une autre maison (le labo), les boutons sont grisés.
 - **Un clic sur la carte d’une pièce ouvre son thermostat** (la fenêtre de Home Assistant). Dans les réglages de la carte, « Clic sur la carte » : ouvrir le thermostat, ouvrir la page de la pièce dans l’onglet Chauffage, ou rien. Le « i » ouvre toujours la page de la pièce.
 - La courbe du jour d’une pièce montre aussi, en bas, quand son thermostat a chauffé.
+- La demande du thermostat n’est montrée (carte et page de la pièce) que quand il demande à chauffer : à 0 %, il reste la phrase seule (« Chauffage en pause », « Éco jusqu’à 20 h 30, puis confort »).
 
 ### Corrections
 - **Les courbes du jour restaient vides** (carte et onglet) : la température et la consigne d’un thermostat tombaient toutes à minuit, ou au dernier changement de mode. Elles sont maintenant placées à l’heure où elles ont été lues.
