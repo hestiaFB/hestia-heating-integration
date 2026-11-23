@@ -421,6 +421,24 @@ def weather_listen(hass: HomeAssistant, place: str | None, update: Callable[[], 
         return lambda: None
 
 
+def day_points(rows: list, attribute: str | None, start: datetime, text: bool = False) -> list[tuple]:
+    """[(datetime, value)] of recorded rows. A row is placed when it was written (`last_updated`): a thermostat's
+    temperature and set point are attributes, and an attribute that changes leaves `last_changed` (the state, « heat »)
+    where it was, often days before: every point of the day then fell at midnight and the curve was a vertical line."""
+    points = []
+    for row in rows:
+        raw = row.attributes.get(attribute) if attribute else row.state
+        if text:
+            value = raw
+        else:
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                value = None
+        points.append((dt_util.as_local(max(row.last_updated, start)), value))
+    return points
+
+
 async def day_history(hass: HomeAssistant, start: datetime, end: datetime, wanted: list[tuple[str, str, str | None]],
                       text: tuple[str, ...] = ()) -> dict:
     """{name: [(datetime, value)]} for each (name, entity_id, attribute) since `start`: read in the recorder's executor,
@@ -431,22 +449,9 @@ async def day_history(hass: HomeAssistant, start: datetime, end: datetime, wante
     from . import recorder_history
 
     def read():
-        out = {}
-        for name, entity_id, attribute in wanted:
-            rows = recorder_history.read(hass, start, end, [entity_id], attribute).get(entity_id, [])
-            points = []
-            for row in rows:
-                raw = row.attributes.get(attribute) if attribute else row.state
-                if name in text:
-                    value = raw
-                else:
-                    try:
-                        value = float(raw)
-                    except (TypeError, ValueError):
-                        value = None
-                points.append((dt_util.as_local(max(row.last_changed, start)), value))
-            out[name] = points
-        return out
+        return {name: day_points(recorder_history.read(hass, start, end, [entity_id], attribute).get(entity_id, []),
+                                 attribute, start, name in text)
+                for name, entity_id, attribute in wanted}
 
     try:
         return await get_instance(hass).async_add_executor_job(read)

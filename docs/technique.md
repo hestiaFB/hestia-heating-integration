@@ -69,7 +69,7 @@ Unités : °C, W, %. Une valeur absente est `None`, jamais inventée.
 | --- | --- |
 | `hestia_heating/view` | tout ce que montre l’onglet (`version: 1`) |
 | `hestia_heating/subscribe` | la vue des cartes, entière une fois puis seulement ce qui change (`changes`, `removed`) ; `reload` quand la brique redémarre. Une seule souscription par tableau de bord (`card/src/stream.ts`) |
-| `hestia_heating/day` + `cible` (`poele` ou `piece/<id>`) | les courbes du jour depuis minuit, un point toutes les 5 min au plus, gardées 2 min |
+| `hestia_heating/day` + `cible` (`poele` ou `piece/<id>`) | les courbes du jour depuis minuit, un point toutes les 5 min au plus, gardées 2 min : pour une pièce `temperature`, `consigne` et `demande` de son thermostat principal. Chaque point est placé à l’heure où il a été écrit (`last_updated`) : la température et la consigne d’un thermostat sont des attributs, et `last_changed` ne bouge qu’avec son état (`heat`) |
 | `hestia_heating/settings` | les réglages et ce qu’ils peuvent valoir |
 | `hestia_heating/set_settings` + `reglages` | enregistre les réglages modifiés (`sources`, `extensions`, `poele_thermostat`, `poele_prise`, `weather_place`, `planning`, `pilote`). Un planning illisible est refusé (`invalid`), avec la raison en mots, et rien n’est enregistré |
 
