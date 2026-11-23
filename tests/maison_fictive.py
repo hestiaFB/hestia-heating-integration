@@ -26,6 +26,7 @@ def vt(entity_id, name, room, *, state="heat", action="idle", preset="eco", targ
                   "window_manager": {"window_state": "on" if window else "off"},
                   "vtherm_over_switch": {"underlying_entities": list(under)},
                   "preset_temperatures": {"eco_temp": 17.0, "comfort_temp": 19.0, "boost_temp": 21.0, "frost_temp": 7.0},
+                  "preset_modes": ["none", "frost", "eco", "comfort", "boost"],
                   **extra}
     return {"entity_id": entity_id, "state": state, "attributes": attributes, "platform": "versatile_thermostat",
             "name": name, "room": room}
@@ -100,3 +101,20 @@ def snapshot(**changes):
 
 
 TODAY: date = NOW.date()
+
+
+def home_planning(**changes):
+    """The house's own plannings: the stove and the séjour in trial, the workshop's air conditioner active. The bureau
+    and the guest room stay on Scheduler."""
+    plannings = {
+        "poele": {"nom": "Poêle", "actif": False, "jours": "semaine", "reste": "hors_gel",
+                  "plages": [[["06:30", "08:30", "boost"], ["17:00", "22:30", "boost"]], [["09:00", "21:00", "boost"]]],
+                  "thermostats": ["climate.vt_poele"]},
+        "sejour": {"nom": "Séjour", "actif": False, "jours": "semaine", "reste": "hors_gel",
+                   "plages": [[["06:30", "08:30", "confort"], ["17:00", "22:30", "confort"]], [["08:00", "23:00", "confort"]]],
+                   "thermostats": ["climate.vt_sejour"]},
+        "atelier": {"nom": "Atelier", "actif": True, "jours": "tous", "reste": "eco",
+                    "plages": [[["09:00", "18:00", "confort"]]], "thermostats": ["climate.clim_atelier"]},
+    }
+    plannings.update(changes)
+    return {"plannings": plannings}

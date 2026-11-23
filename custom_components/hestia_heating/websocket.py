@@ -11,7 +11,9 @@ from .const import DOMAIN
 VIEW_VERSION = 1
 # What the cards read: the extensions, the schedules' details and the « à régler » stay out of their view.
 CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning")
-SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place")
+SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning")
+# The planning's parts only the tab needs (the plannings, the editor, Scheduler, the journal).
+PLANNING_TAB_ONLY = ("hestia", "thermostats", "scheduler", "journal")
 
 
 def _coordinator(hass):
@@ -27,7 +29,7 @@ def async_setup_websocket(hass) -> None:
 def card_view(data: dict) -> dict:
     view = {k: data[k] for k in CARD_KEYS if k in data}
     if view.get("planning"):
-        view["planning"] = {k: v for k, v in view["planning"].items() if k != "plannings"}
+        view["planning"] = {k: v for k, v in view["planning"].items() if k not in PLANNING_TAB_ONLY}
     return view
 
 
@@ -110,7 +112,7 @@ def ws_settings(hass, connection, msg):
     disabled = [{"id": k, "nom": (c.hass.states.get(k).attributes.get("friendly_name") if c.hass.states.get(k) else k)}
                 for k, v in (c.settings.get("sources") or {}).items() if v is False]
     connection.send_result(msg["id"], {
-        "reglages": {k: c.settings.get(k) for k in SETTING_KEYS},
+        "reglages": {**{k: c.settings.get(k) for k in SETTING_KEYS}, "planning": c.model},
         "trouve": {
             "thermostats": thermostats,
             "coupes": disabled,
@@ -131,5 +133,9 @@ async def ws_set_settings(hass, connection, msg):
         connection.send_error(msg["id"], "not_ready", "Hestia Chauffage n'est pas activée.")
         return
     changes = {k: v for k, v in msg["reglages"].items() if k in SETTING_KEYS}
-    await c.async_set_settings(changes)
+    try:
+        await c.async_set_settings(changes)
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
     connection.send_result(msg["id"], {"ok": True})

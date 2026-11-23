@@ -4,6 +4,7 @@ entities and its interface, and never calls a service. Skipped without Home Assi
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, time, timedelta
 from pathlib import Path
 import sys
 import tempfile
@@ -25,6 +26,47 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from custom_components.hestia_heating.const import API_KEY, DOMAIN  # noqa: E402
 from custom_components.hestia_heating.websocket import CARD_KEYS, card_view  # noqa: E402
+from homeassistant.util import dt as dt_util  # noqa: E402
+
+
+def eco_between(start, end):
+    """A planning's week, day by day, with éco from `start` to `end` (naive, under a day apart) and confort the rest of
+    the time."""
+    rows = [[] for _ in range(7)]
+    cur = start
+    while cur < end:
+        midnight = datetime.combine(cur.date() + timedelta(days=1), time(0))
+        stop = min(end, midnight)
+        rows[cur.weekday()].append([cur.strftime("%H:%M"), "24:00" if stop == midnight else stop.strftime("%H:%M"), "eco"])
+        cur = stop
+    return rows
+
+
+class SendsThePlanning:
+    """A planning Hestia whose thermostat went to confort two minutes ago (éco for three hours before); the last change
+    dealt with put half an hour back, so that this one is due."""
+
+    async def _planning(self, thermostat, actif=True):
+        hass = self.hass
+        hass.set_state(CoreState.running)
+        self.sent = []
+
+        async def handler(call):
+            self.sent.append((call.service, dict(call.data)))
+        for service in ("set_preset_mode", "set_temperature"):
+            hass.services.async_register("climate", service, handler)
+        entry, c = await self._setup()
+        now = dt_util.now().replace(tzinfo=None, second=0, microsecond=0)
+        week = eco_between(now - timedelta(hours=3), now - timedelta(minutes=2))
+        model = {"plannings": {"essai": {"nom": "Essai", "actif": actif, "jours": "chaque", "reste": "confort",
+                                         "plages": week, "thermostats": [thermostat]}}}
+        await c.async_set_settings({"planning": model})
+        await hass.async_block_till_done()
+        self.assertEqual(self.sent, [], "saving the planning sends nothing at once")
+        c.applied[thermostat] = {"a": (now - timedelta(minutes=30)).isoformat()}
+        c._build()
+        await hass.async_block_till_done()
+        return entry, c
 
 
 def entry_of(domain, title, unique_id=None):
@@ -116,6 +158,51 @@ class HomeAssistantWithAHouse(unittest.IsolatedAsyncioTestCase):
         return s.state if s else None
 
 
+class PlanningHestia(SendsThePlanning, HomeAssistantWithAHouse):
+    """A planning Hestia in the made-up house: a preset sent at its change, and only then."""
+
+    async def test_active_it_sends_the_preset_once(self):
+        entry, c = await self._planning("climate.vt_sejour")
+        self.assertEqual(self.sent, [("set_preset_mode", {"entity_id": "climate.vt_sejour", "preset_mode": "comfort"})])
+        self.assertEqual((c.journal[-1]["planning"], c.journal[-1]["thermostats"], c.journal[-1]["statut"]),
+                         ("Essai", ["Radiateur séjour"], "envoye"))
+        c._build()
+        await self.hass.async_block_till_done()
+        self.assertEqual(len(self.sent), 1, "a change is sent once")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_on_trial_it_only_says_what_it_would_do(self):
+        entry, c = await self._planning("climate.vt_sejour", actif=False)
+        self.assertEqual(self.sent, [])
+        self.assertEqual(c.journal[-1]["statut"], "ombre")
+        self.assertEqual(c.data["planning"]["journal"][-1]["texte"], "en essai, rien envoyé")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_thermostat_switched_off_stays_off(self):
+        attrs = dict(self.hass.states.get("climate.vt_sejour").attributes)
+        self.hass.states.async_set("climate.vt_sejour", "off", attrs)
+        entry, c = await self._planning("climate.vt_sejour")
+        self.assertEqual(self.sent, [])
+        self.assertEqual(c.journal[-1]["statut"], "eteint")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_thermostat_scheduler_still_aims_at_is_never_sent(self):
+        entry, c = await self._planning("climate.vt_poele")
+        self.assertEqual(self.sent, [])
+        self.assertEqual(c.journal[-1]["statut"], "bloque")
+        self.assertIn("Thermostat poêle suit deux plannings", [t["titre"] for t in c.data["a_regler"]])
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_planning_that_cannot_be_read_is_refused_and_nothing_changes(self):
+        entry, c = await self._setup()
+        bad = {"plannings": {"a": {"nom": "A", "jours": "tous", "reste": "eco", "plages": [[["09:00", "08:00", "confort"]]],
+                                   "thermostats": []}}}
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"planning": bad})
+        self.assertEqual(c.model, {"plannings": {}})
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+
 class MadeUpHouse(HomeAssistantWithAHouse):
     """The made-up house with its own integrations: rooms, a stove's device, Versatile Thermostat."""
 
@@ -191,7 +278,8 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         view = card_view(c.data)
         self.assertEqual(set(view), set(CARD_KEYS))
         self.assertNotIn("extensions", view)
-        self.assertNotIn("plannings", view["planning"])
+        self.assertNotIn("thermostats", view["planning"])
+        self.assertNotIn("scheduler", view["planning"])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_a_setting_changes_what_is_read(self):
@@ -205,7 +293,7 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
 
-class CopiedHouse(HomeAssistantWithAHouse):
+class CopiedHouse(SendsThePlanning, HomeAssistantWithAHouse):
     """The same house copied by Remote Home Assistant, as in the lab: no device, no room, no integration of its own.
     The thermostats say they are Versatile Thermostats by their attributes, the stove by the ids of its entities."""
 
@@ -266,6 +354,14 @@ class CopiedHouse(HomeAssistantWithAHouse):
         await asyncio.sleep(1.5)
         await self.hass.async_block_till_done()
         self.assertEqual(c.data["maison"]["titre"], "Le poêle chauffe, flamme 3.")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_copied_thermostat_is_never_sent_anything(self):
+        """A lab copies the home: an order to a copied thermostat could reach the real one."""
+        entry, c = await self._planning("climate.vt_sejour")
+        self.assertEqual(self.sent, [])
+        self.assertEqual(c.journal[-1]["statut"], "recopie")
+        self.assertTrue(c.data["planning"]["labo"])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
 

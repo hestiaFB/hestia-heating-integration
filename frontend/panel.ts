@@ -1,11 +1,13 @@
 import {LitElement,html,svg,nothing,css,type TemplateResult} from 'lit';
 import {customElement,property,state} from 'lit/decorators.js';
-import {hubStyles,modernStyles,pageStyles,listSection,listRow,saveBar,toggle,helpTip,aboutPage,kpis,noteBox,moreRow,SOCLE} from './socle/ui';
+import {hubStyles,modernStyles,pageStyles,listSection,listRow,saveBar,toggle,helpTip,aboutPage,kpis,noteBox,moreRow,segmented,SOCLE} from './socle/ui';
 
 /* The « Chauffage » tab of the Hestia-FB panel, after the v0.1 mock-up validated by Frank on 20 Nov. 2026
-   (Accueil · Poêle), with a room's page, the planning, Réglages, Extensions and À propos.
-   Read only: nothing here commands a thermostat or the stove. Everything shown comes from the integration
-   (hestia_heating/view, day, settings); the tab only puts it into words and drawings. */
+   (Accueil · Poêle), with a room's page, the plannings (the « planning simple » mock-up of 20 Nov.: the list, then one
+   planning's week, its thermostats, « En essai » or « Actif »), Réglages, Extensions and À propos. The tab itself
+   commands nothing: it edits the plannings as a draft, saved with the rest of the settings; the integration sends the
+   presets, and only for the thermostats of a planning « Actif ».
+   Everything shown comes from the integration (hestia_heating/view, day, settings). */
 
 type Hass={callWS:<T>(msg:Record<string,unknown>)=>Promise<T>;states:Record<string,{state:string;attributes:Record<string,unknown>}>;language?:string;themes?:{darkMode?:boolean}};
 type Badge={texte:string;ton:string};
@@ -24,9 +26,19 @@ type Stove={nom:string;fabricant:string|null;modele:string|null;piece:string|nul
  thermostat_nom:string|null;demande_pct:number|null;consigne:number|null;preset:string|null;prise:string|null;prise_w:number|null;prise_tourne:boolean|null;
  entites:Record<string,string>};
 type Segment={de:number;a:number;ton:string};
-type Lane={id:string;nom:string;segments:Segment[];thermostat?:string};
-type Planning={source:string|null;jour:string;jour_nom:string;maintenant_min:number;lignes:Lane[];prochains:{a:string;heure:string;texte:string}[];
- plannings:{id:string;nom:string;actif:boolean;jours:string[];partiel:boolean;cibles:string[]}[]};
+type Lane={id:string;nom:string;segments:Segment[];thermostat?:string;source?:string|null;bloque?:boolean};
+type Range=[string,string,string];
+type Week='tous'|'semaine'|'chaque';
+type Plan={nom:string;actif:boolean;jours:Week;reste:string;plages:Range[][];thermostats:string[]};
+type Model={plannings:Record<string,Plan>};
+type HPlan={id:string;nom:string;actif:boolean;poele:boolean;thermostats:{id:string;nom:string;lu:boolean}[];maintenant:string|null;
+ prochain:{a:string;texte:string}|null;allumages:number|null;bloques:{id:string;nom:string;scheduler:string}[];recopie:boolean};
+type Therm={id:string;nom:string;piece:string|null;poele:boolean;vt:boolean;froid:boolean;recopie:boolean;planning:string|null;
+ scheduler:string[];scheduler_actif:string|null;niveaux:string[];consignes:Record<string,number>|null};
+type Sched={id:string;nom:string;actif:boolean;jours:string[];partiel:boolean;cibles:string[];reprise:Plan|null};
+type Journal={jour:string;heure:string;planning:string;thermostats:string[];niveau:string;statut:string;texte:string};
+type Planning={source:string|null;labo:boolean;essai:boolean;jour:string;jour_nom:string;maintenant_min:number;lignes:Lane[];
+ prochains:{a:string;heure:string;texte:string}[];hestia:HPlan[];thermostats:Therm[];scheduler:Sched[];journal:Journal[]};
 type Todo={titre:string;texte:string;page:string};
 type Ext={id:string;groupe:string;nom:string;installee:boolean;utilisee:boolean;usage:string;sans:string;lien:string|null;trouve:number;
  lieu?:string|null;lieu_nom?:string|null;lieux?:{id:string;nom:string}[]};
@@ -35,12 +47,12 @@ type View={pret:boolean;version:string;maison:House;pieces:Room[];sources:Source
  dehors:{nuit_min:number|null;demain_max:number|null}|null;planning:Planning;a_regler:Todo[];extensions:Ext[];meteo:{etat:string;nom:string|null};
  mis_a_jour:string;calcul_ms:number|null};
 type Day={debut:string;maintenant_min:number;series:Record<string,[number,number|null][]>};
-type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null};
+type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null;planning:Model};
  trouve:{thermostats:{id:string;nom:string;piece:string}[];coupes:{id:string;nom:string}[];poele:boolean;poele_thermostat:string|null;
   prises:{id:string;nom:string;poele:boolean}[];prise:string|null;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null}}};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='0.2.0b1';
+const VERSION='0.3.0b1';
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
 const deg=(v:number|null|undefined)=>v==null?'—':`${num(v)} °C`;
 const watts=(w:number|null|undefined)=>w==null?'—':w>=500?`${num(w/1000)} kW`:`${num(w,0)} W`;
@@ -57,9 +69,47 @@ const STOVE_WORD:Record<string,string>={eteint:'éteint',allumage:'allumage',cha
 const KIND:Record<string,string>={radiateur:'Radiateur',poele:'Poêle',clim:'Clim',pac:'Pompe à chaleur',vanne:'Vanne',autre:'Thermostat'};
 const MODE:Record<string,string>={heat:'chauffage',cool:'froid',heat_cool:'chaud et froid',auto:'automatique',off:'arrêt',dry:'déshumidification',fan_only:'ventilation'};
 const PRESET:Record<string,string>={comfort:'confort',boost:'boost',eco:'éco',frost:'hors gel',away:'absence',activity:'activité',sleep:'nuit',home:'présence'};
-const LANE_WORD:Record<string,string>={poele:'poêle en chauffe',confort:'confort',eco:'éco',hors_gel:'hors gel',arret:'arrêt'};
+// The four levels of a planning, as the mock-up shows them; their colours are the classes lv-<level>.
+const LEVELS=['confort','eco','boost','hors_gel'];
+const LEVEL_LABEL:Record<string,string>={confort:'Confort',eco:'Éco',boost:'Boost',hors_gel:'Hors gel'};
+// What became of a change, for each thermostat, in the journal.
+const FATE_TONE:Record<string,string>={envoye:'calm',deja:'off',ombre:'off',bloque:'alert',recopie:'off',eteint:'act',sans_prereglage:'act'};
+const WEEK_LONG=['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+const ROWS:Record<Week,[string,string][]>={tous:[['Tous les jours','7 jours']],semaine:[['Lundi → vendredi','5 jours'],['Samedi, dimanche','2 jours']],
+ chaque:WEEK_LONG.map(d=>[d[0].toUpperCase()+d.slice(1),''] as [string,string])};
+const ROW_SAY:Record<Week,string[]>={tous:['Tous les jours'],semaine:['Du lundi au vendredi','Samedi et dimanche'],chaque:WEEK_LONG.map(d=>d[0].toUpperCase()+d.slice(1))};
+const EMPTY_MODEL:Model={plannings:{}};
+const minutesOf=(t:string)=>{const [h,m]=t.split(':').map(Number);return h*60+(m||0);};
+const clockOf2=(m:number)=>m>=1440?'24:00':`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+const hourText=(m:number)=>m>=1440?'24 h':m%60?`${Math.floor(m/60)} h ${String(m%60).padStart(2,'0')}`:`${m/60} h`;
+const endOf=(r:Range)=>minutesOf(r[1])||1440;
+/** The ranges of a day of the week (Monday 0), as home_planning.py reads them. */
+function rowOf(p:Plan,wd:number):Range[]{const r=p.plages;return p.jours==='chaque'&&r.length===7?r[wd]:p.jours==='semaine'&&r.length===2?r[wd<5?0:1]:r[0]??[];}
+/** The whole day in segments: each moment takes the range that started last among those covering it, else the rest
+    of the time (as home_planning.day_segments). */
+function daySegments(ranges:Range[],rest:string):Segment[]{
+ const spans=ranges.map((r,i)=>({s:minutesOf(r[0]),e:endOf(r),l:r[2],i})).filter(x=>x.e>x.s);
+ const cuts=[...new Set([0,1440,...spans.flatMap(x=>[x.s,x.e])])].sort((a,b)=>a-b),out:Segment[]=[];
+ for(let k=0;k<cuts.length-1;k++){const a=cuts[k],b=cuts[k+1],cover=spans.filter(x=>x.s<=a&&a<x.e);
+  const l=cover.length?cover.reduce((x,y)=>y.s>x.s||(y.s===x.s&&y.i>x.i)?y:x).l:rest,last=out.at(-1);
+  if(last&&last.ton===l)last.a=b;else out.push({de:a,a:b,ton:l});}
+ return out;
+}
+/** How many times a week the planning steps up to boost: for the stove's thermostat, how many times it would light. */
+function startsPerWeek(p:Plan){const lv=Array.from({length:7},(_,d)=>daySegments(rowOf(p,d),p.reste)).flat().map(s=>s.ton);
+ return new Set(lv).size<2?0:lv.filter((l,i)=>l==='boost'&&lv.at(i-1)!=='boost').length;}
+/** A planning's week in another shape: each new row starts from the day it stands for. */
+function reshape(p:Plan,to:Week):Range[][]{
+ const day=(wd:number)=>rowOf(p,wd).map(x=>[...x] as Range);
+ return to==='tous'?[day(0)]:to==='semaine'?[day(0),day(5)]:Array.from({length:7},(_,wd)=>day(wd));
+}
+/** « Du lundi au vendredi : Confort de 6 h 30 à 8 h 30… Le reste du temps : Éco. » */
+function planSay(p:Plan){
+ return p.plages.map((r,i)=>`${ROW_SAY[p.jours][i]} : ${r.length?r.map(x=>`${LEVEL_LABEL[x[2]]} de ${hourText(minutesOf(x[0]))} à ${hourText(endOf(x))}`).join(', '):'rien de plus'}`).join('. ')
+  +`. Le reste du temps : ${LEVEL_LABEL[p.reste]}.`;
+}
 
-/* ── Drawings: the day's curves and the planning's lanes ── */
+/* ── Drawings: the day's curves ── *//* ── Drawings: the day's curves and the planning's lanes ── */
 const W=400,H=90;
 // A gap (no value) cuts the line; the last run reaches « now » only when the series still has a value at its end.
 function runs(points:[number,number|null][],end?:number){
@@ -85,19 +135,13 @@ function dayChart(lines:{pts:[number,number|null][];cls:string;step?:boolean;fil
    return p.line?svg`${l.fill?svg`<path class=${l.cls+' area'} d=${p.area}></path>`:nothing}<path class=${l.cls} d=${p.line}></path>`:nothing;})}
   <line class="now" x1=${now/1440*W} x2=${now/1440*W} y1="0" y2=${H}></line></svg>`;
 }
-function lanes(p:Planning):TemplateResult{
- const now=p.maintenant_min/14.4;
- return html`<div class="lanes"><div class="hours"><span></span><div>${[0,6,12,18,24].map(h=>html`<span style=${`left:${h/24*100}%`}>${h} h</span>`)}</div></div>
-  ${p.lignes.map(l=>html`<div class="lane"><span class="n">${l.nom}</span><div class="track" role="img" aria-label=${`${l.nom} : `+l.segments.map(s=>`${LANE_WORD[s.ton]??s.ton} de ${Math.floor(s.de/60)} h à ${Math.floor(s.a/60)} h`).join(', ')}>
-   ${l.segments.map(s=>html`<i class=${'t-'+s.ton} style=${`left:${s.de/14.4}%;width:${(s.a-s.de)/14.4}%`}></i>`)}<span class="now" style=${`left:${now}%`}></span></div></div>`)}
-  <div class="legend">${[...new Set(p.lignes.flatMap(l=>l.segments.map(s=>s.ton)))].map(t=>html`<span><i class=${'sw t-'+t}></i>${LANE_WORD[t]??t}</span>`)}</div></div>`;
-}
-
 @customElement('hestia-heating-setup')
 export class HestiaHeatingSetup extends LitElement {
  static styles=[hubStyles,modernStyles,pageStyles,css`
   :host{--hc-heat:oklch(.83 .085 42);--hc-cold:oklch(.85 .05 220);--hc-calm:oklch(.83 .075 150);--hc-act:oklch(.81 .105 64);--hc-alert:oklch(.74 .115 18);
-   --hc-stove:oklch(.86 .1 80);--hc-ink:62%;--hc-tint:40%;--hc-off:color-mix(in srgb,var(--primary-text-color) 30%,transparent)}
+   --hc-stove:oklch(.86 .1 80);--hc-ink:62%;--hc-tint:40%;--hc-off:color-mix(in srgb,var(--primary-text-color) 30%,transparent);
+   --lv-confort:color-mix(in oklab,var(--hc-heat) 88%,var(--nk-surface,#fff));--lv-eco:color-mix(in oklab,var(--hc-cold) 80%,var(--nk-surface,#fff));
+   --lv-boost:color-mix(in oklab,var(--hc-stove) 96%,var(--nk-surface,#fff));--lv-hors_gel:color-mix(in srgb,var(--primary-text-color) 15%,var(--nk-surface,#fff))}
   :host([data-theme=light]){--hc-ink:34%;--hc-tint:24%}
   main{max-width:808px;margin:0 auto}
   .crumb{display:inline-flex;gap:6px;align-items:center;color:var(--nk-muted);font:inherit;font-size:var(--nw-fs-text,14px);margin:0 0 14px;cursor:pointer;background:none;border:0;padding:0;min-height:0}
@@ -141,20 +185,77 @@ export class HestiaHeatingSetup extends LitElement {
   .legend{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 16px;font-size:var(--nw-fs-small,12px);color:var(--nk-muted);margin-top:8px}
   .legend span{display:inline-flex;align-items:center;gap:6px}.sw{width:12px;height:8px;border-radius:2px;display:inline-block}
   .sw.flame{background:var(--hc-stove)}.sw.temp{background:var(--hc-heat)}.sw.salon{background:var(--hc-cold)}.sw.target{background:var(--nk-muted)}
-  .lanes{display:flex;flex-direction:column;gap:8px}
-  .lane,.hours{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center}
-  .lane .n{font-size:var(--nw-fs-small,12px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .hours>div{position:relative;height:14px;font-size:var(--nw-fs-label,11px);color:var(--nk-muted)}.hours>div span{position:absolute;transform:translateX(-50%);white-space:nowrap}
-  .hours>div span:first-child{transform:none}.hours>div span:last-child{transform:translateX(-100%)}
-  .track{position:relative;height:12px;border-radius:6px;background:color-mix(in srgb,var(--primary-text-color) 8%,transparent);overflow:hidden}
-  .track i{position:absolute;top:0;bottom:0}
-  .track .now{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--primary-text-color);border-radius:1px}
-  .t-poele{background:color-mix(in oklab,var(--hc-stove) 90%,transparent)}.t-confort{background:color-mix(in oklab,var(--hc-heat) 85%,transparent)}
-  .t-eco{background:color-mix(in oklab,var(--hc-cold) 70%,transparent)}.t-hors_gel,.t-arret{background:color-mix(in srgb,var(--primary-text-color) 12%,transparent)}
+  .nk-lsec>.card{margin:0}
+  .lv-confort{--lv:var(--lv-confort)}.lv-eco{--lv:var(--lv-eco)}.lv-boost{--lv:var(--lv-boost)}.lv-hors_gel{--lv:var(--lv-hors_gel)}
+  .plan-top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 16px}.plan-top>div{flex:1 1 320px;min-width:0}
+  .plan-top .lead{margin-bottom:0}
+  button.add{display:inline-flex;align-items:center;gap:8px;font-weight:650}
+  .states{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:var(--nw-fs-small,12px);color:var(--nk-muted);margin:14px 0 18px}
+  .states span{display:inline-flex;align-items:center;gap:8px}
+  .st{display:inline-flex;align-items:center;font-size:var(--nw-fs-small,12px);font-weight:650;padding:3px 10px;border-radius:999px;white-space:nowrap;
+   background:color-mix(in oklab,var(--c) var(--hc-tint),transparent);color:color-mix(in oklab,var(--c) var(--hc-ink),var(--primary-text-color))}
+  .st.essai{--c:var(--hc-act)}.st.actif{--c:var(--hc-calm)}
+  .plan{background:var(--nk-surface);border:1px solid var(--nk-border);border-radius:18px;padding:16px 18px;margin:0 0 14px;display:flex;flex-direction:column;gap:14px}
+  .plan-h{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.plan-h h2{margin:0;font-size:var(--nw-fs-title,17px);font-weight:650}
+  .plan-h .grow{flex:1 1 auto}.plan-h button{min-height:40px;padding:6px 16px;font-weight:600}
+  .mini{display:flex;flex-direction:column;gap:5px}
+  .mini .r,.ed .r,.ed .scale{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;align-items:center}
+  .mini .r>b{font-size:var(--nw-fs-label,11px);color:var(--nk-muted)}.mini .r.today>b{color:var(--primary-text-color)}
+  .scale>div{position:relative;height:15px;font-size:var(--nw-fs-label,11px);color:var(--nk-muted)}
+  .scale>div span{position:absolute;transform:translateX(-50%);white-space:nowrap}.scale>div span:first-child{transform:none}.scale>div span:last-child{transform:translateX(-100%)}
+  .bar7{position:relative;height:11px;border-radius:5px;overflow:hidden;background:var(--lv)}
+  .bar7 i{position:absolute;top:0;bottom:0;background:var(--lv)}
+  .bar7 .now,.track .now{position:absolute;top:0;bottom:0;width:2px;background:var(--primary-text-color)}
+  .chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.chips>small{color:var(--nk-muted);margin-right:4px}
+  .tchip{font-size:var(--nw-fs-small,12px);font-weight:600;padding:4px 12px;border-radius:999px;background:var(--nk-selected,var(--nk-surface))}
+  .plan-now{margin:0;border-top:1px solid var(--nk-border);padding-top:12px;font-size:var(--nw-fs-small,12px)}
+  .plan-now.bad{color:color-mix(in oklab,var(--hc-alert) var(--hc-ink),var(--primary-text-color));border-top:0;padding-top:0;margin-top:-8px}
+  .levels{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 18px;font-size:var(--nw-fs-small,12px);color:var(--nk-muted);margin:6px 0 24px}
+  .levels span{display:inline-flex;align-items:center;gap:6px}.levels i{width:16px;height:9px;border-radius:3px;background:var(--lv)}.levels .all{flex-basis:100%;justify-content:center}
+  .field-l{display:block;font-size:var(--nw-fs-label,11px);font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--nk-muted);margin:0 0 6px 4px}
+  .plan-name{max-width:420px;font-size:var(--nw-fs-title,17px);font-weight:650;margin:0 0 22px}
+  .ed{display:flex;flex-direction:column;gap:14px}
+  .ed-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}.ed-h h2,.box h2{margin:0;font-size:var(--nw-fs-title,17px);font-weight:650}
+  .ed .r,.ed .scale{grid-template-columns:132px minmax(0,1fr);gap:12px;align-items:start}
+  .ed .r>div:first-child{display:flex;flex-direction:column;padding-top:6px;min-width:0}.ed .r>div:first-child b{font-size:var(--nw-fs-small,12px)}
+  .ed .r>div:first-child small{font-size:var(--nw-fs-label,11px);color:var(--nk-muted)}
+  .ed .r>div:last-child{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .track{position:relative;height:50px;border-radius:10px;overflow:hidden;background:var(--lv)}
+  .track>i{position:absolute;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--primary-text-color) 12%,transparent)}
+  .track button{position:absolute;top:0;bottom:0;border:0;border-radius:0;margin:0;padding:0 8px;min-height:0;min-width:0;background:var(--lv);color:#1f2328;text-align:left;overflow:hidden;
+   display:flex;flex-direction:column;justify-content:center;align-items:flex-start;white-space:nowrap;line-height:1.3;box-shadow:inset 0 0 0 1px color-mix(in srgb,#1f2328 18%,transparent);container-type:inline-size}
+  @container (max-width:56px){.track button b{display:none}}@container (max-width:92px){.track button span{display:none}}
+  .track button.lv-hors_gel{color:var(--primary-text-color)}
+  .track button b{font-size:var(--nw-fs-small,12px)}.track button span{font-size:var(--nw-fs-label,11px)}
+  .track button[aria-pressed=true]{box-shadow:inset 0 0 0 3px var(--nk-accent,var(--primary-color))}
+  button.more{align-self:flex-start;min-height:32px;padding:0 10px;border-radius:999px;border:1px dashed var(--nk-border);font-weight:600;font-size:var(--nw-fs-small,12px)}
+  .rest{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border-top:1px solid var(--nk-border);padding-top:14px}
+  .rest label{font-weight:600}.rest select{width:auto;margin:0;min-height:40px;padding:6px 12px}.rest small{color:var(--nk-muted);font-size:var(--nw-fs-small,12px)}
+  .selbox{border:1px solid color-mix(in oklab,var(--nk-accent) 45%,var(--nk-border));background:color-mix(in oklab,var(--nk-accent) 7%,var(--nk-surface));border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+  .selbox .times{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.selbox .times label{font-weight:600}
+  .selbox input[type=time]{width:auto;margin:0;min-height:40px;padding:6px 10px;min-width:7.5em}
+  .lvl{display:flex;flex-wrap:wrap;gap:6px}.lvl button{min-height:40px;padding:6px 14px;border-width:2px;font-weight:600;display:inline-flex;align-items:center;gap:8px}
+  .lvl button i{width:14px;height:14px;border-radius:4px;background:var(--lv)}.lvl button[aria-pressed=true]{border-color:var(--nk-accent,var(--primary-color))}
+  .warn{font-size:var(--nw-fs-small,12px);color:color-mix(in oklab,var(--hc-act) var(--hc-ink),var(--primary-text-color))}
+  button.del{align-self:flex-start;min-height:36px;padding:0 12px;color:color-mix(in oklab,var(--hc-alert) var(--hc-ink),var(--primary-text-color));font-weight:600;font-size:var(--nw-fs-small,12px)}
+  .hint{margin:0;font-size:var(--nw-fs-small,12px);color:var(--nk-muted)}
+  .hint.after{margin:-12px 4px 22px}.hint.inline{display:inline}.box>.hint:last-child{margin-top:6px}
+  .stove-say{margin:0;font-size:var(--nw-fs-small,12px);background:color-mix(in oklab,var(--hc-stove) 16%,transparent);border-radius:10px;padding:10px 12px}
+  .box{background:var(--nk-surface);border:1px solid var(--nk-border);border-radius:18px;padding:16px 18px;margin:0 0 22px;display:flex;flex-direction:column;gap:6px}
+  .box>.card{margin:0}
+  .tick{display:flex;align-items:center;gap:12px;min-height:48px;padding:4px;border-top:1px solid var(--nk-border);cursor:pointer}.tick:first-of-type{border-top:0}
+  .tick input{margin:0;flex:0 0 auto}.tick span{flex:1;min-width:0;display:flex;flex-direction:column}.tick small{font-size:var(--nw-fs-small,12px);color:var(--nk-muted)}
+  .tick small.warn{color:color-mix(in oklab,var(--hc-act) var(--hc-ink),var(--primary-text-color))}
+  .modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:6px}
+  .modes button{min-height:76px;text-align:left;padding:12px 14px;border-radius:14px;border-width:2px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;line-height:1.4}
+  .modes button span{font-size:var(--nw-fs-small,12px);color:var(--nk-muted)}
+  .modes button[aria-pressed=true]{border-color:var(--nk-accent,var(--primary-color))}
+  .modes button.essai[aria-pressed=true]{background:color-mix(in oklab,var(--hc-act) 22%,var(--nk-surface))}.modes button.actif[aria-pressed=true]{background:color-mix(in oklab,var(--hc-calm) 26%,var(--nk-surface))}
+  .actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:0 0 22px}.actions .grow{flex:1 1 auto}.actions .primary{min-width:150px}
   .eid{font-family:ui-monospace,monospace;font-size:var(--nw-fs-label,11px);color:var(--nk-muted);word-break:break-all}
   .ext-act{display:inline-flex;align-items:center;min-height:32px;padding:5px 12px;border-radius:999px;background:var(--nk-button,var(--primary-color));color:var(--nk-on-button,#fff);font-weight:600;font-size:var(--nw-fs-small,12px);text-decoration:none;white-space:nowrap}
   select{max-width:220px}
-  @media(max-width:640px){.lane,.hours{grid-template-columns:78px 1fr}.band h1{font-size:var(--nw-fs-case,21px)}.target{text-align:left}}`];
+  @media(max-width:640px){.ed .r,.ed .scale{grid-template-columns:76px minmax(0,1fr);gap:8px}.modes{grid-template-columns:1fr}.band h1{font-size:var(--nw-fs-case,21px)}.target{text-align:left}}`];
  @property({attribute:false}) hass?:Hass;
  @property({attribute:false}) route?:{prefix?:string;path:string};
  @property({type:Boolean}) narrow=false;
@@ -165,6 +266,8 @@ export class HestiaHeatingSetup extends LitElement {
  @state() private error?:string;
  @state() private saving=false;
  @state() private saved=false;
+ @state() private refused?:string;
+ @state() private sel?:{r:number;i:number};
  private timer=0;
 
  connectedCallback(){super.connectedCallback();void this.load();this.timer=window.setInterval(()=>{if(!this.count())void this.load();},30000);}
@@ -196,18 +299,21 @@ export class HestiaHeatingSetup extends LitElement {
   if(changed.has('route')&&this.view){void this.loadDay();}
  }
  private parts(){return (this.route?.path??'').replace(/^\//,'').split('/');}
- private go(path:string){history.pushState(null,'',(this.route?.prefix??'/hestia/chauffage')+(path?'/'+path:''));window.dispatchEvent(new CustomEvent('location-changed'));window.scrollTo(0,0);}
+ private go(path:string){this.sel=undefined;history.pushState(null,'',(this.route?.prefix??'/hestia/chauffage')+(path?'/'+path:''));window.dispatchEvent(new CustomEvent('location-changed'));window.scrollTo(0,0);}
  private openHa(path:string){history.pushState(null,'',path);window.dispatchEvent(new CustomEvent('location-changed'));}
 
  /* ── The draft: one way to save everywhere ── */
  private stored(k:string){return (this.settings?.reglages as Record<string,unknown>|undefined)?.[k];}
  private val<T=unknown>(k:string):T{return (k in this.draft?this.draft[k]:this.stored(k)) as T;}
- private set(k:string,v:unknown){const d={...this.draft};if(JSON.stringify(v??null)===JSON.stringify(this.stored(k)??null))delete d[k];else d[k]=v;this.draft=d;this.saved=false;}
+ private set(k:string,v:unknown){const d={...this.draft};if(JSON.stringify(v??null)===JSON.stringify(this.stored(k)??null))delete d[k];else d[k]=v;this.draft=d;this.saved=false;this.refused=undefined;}
+ /** The plannings as they stand in the draft: a copy to change, then put back whole (they are saved whole). */
+ private plan():Model{return structuredClone(this.val<Model>('planning')??EMPTY_MODEL);}
+ private setPlan(change:(m:Model)=>void){const m=this.plan();change(m);this.set('planning',m);}
  private count(){return Object.keys(this.draft).length;}
  private async save(){
   this.saving=true;
-  try{await this.hass!.callWS({type:'hestia_heating/set_settings',reglages:this.draft});this.draft={};this.saved=true;await this.load();}
-  catch(e){this.error=(e as {message?:string}).message??'Réglages non enregistrés.';}
+  try{await this.hass!.callWS({type:'hestia_heating/set_settings',reglages:this.draft});this.draft={};this.saved=true;this.refused=undefined;await this.load();}
+  catch(e){this.refused=(e as {message?:string}).message??'Réglages non enregistrés.';}
   finally{this.saving=false;}
  }
 
@@ -217,9 +323,10 @@ export class HestiaHeatingSetup extends LitElement {
   if(!v||!v.pret)return html`<main>${this.head('Chauffage',{lead:'Lecture des thermostats…'})}</main>`;
   const [p,sub]=this.parts();
   const pages:Record<string,()=>TemplateResult>={'':()=>this.home(v),poele:()=>this.stovePage(v),pieces:()=>sub?this.roomPage(v,sub):this.home(v),
-   planning:()=>this.planningPage(v),reglages:()=>this.settingsPage(v),extensions:()=>sub?this.extensionPage(v,sub):this.extensionsPage(v),'a-propos':()=>this.aboutPage(v)};
-  return html`<main>${(pages[p]??pages[''])()}</main>
-   ${saveBar({count:this.count(),busy:this.saving,done:this.saved?'Enregistré':undefined,cancel:()=>{this.draft={};},save:()=>void this.save()})}`;
+   planning:()=>sub?this.editorPage(v,decodeURIComponent(sub)):this.planningPage(v),reglages:()=>this.settingsPage(v),
+   extensions:()=>sub?this.extensionPage(v,sub):this.extensionsPage(v),'a-propos':()=>this.aboutPage(v)};
+  return html`<main>${this.refused?noteBox('Pas enregistré',this.refused):nothing}${(pages[p]??pages[''])()}</main>
+   ${p==='planning'&&sub?nothing:saveBar({count:this.count(),busy:this.saving,done:this.saved?'Enregistré':undefined,cancel:()=>{this.draft={};},save:()=>void this.save()})}`;
  }
 
  /* ── Common pieces ── */
@@ -228,7 +335,13 @@ export class HestiaHeatingSetup extends LitElement {
    <div class="lead">${o.pill?html`<span class=${'pill '+o.pill[0]}>${o.pill[1]}</span>`:nothing}${o.chips??nothing}${o.lead?html`<p>${o.lead}</p>`:nothing}${o.help?helpTip(title,o.help,''):nothing}</div>`;
  }
  private chip(b:Badge){return html`<span class=${'chip '+b.ton}>${b.texte}</span>`;}
- private readOnly(){return noteBox('Lecture seule','Hestia Chauffage ne commande rien en v0.1 : ni thermostat, ni poêle. Le planning maison et le pilote du poêle viendront ensuite, d’abord « à l’ombre ».');}
+ /** What Hestia sends, said once at the foot of the pages. */
+ private modeNote(v:View){
+  const p=v.planning,active=(p.hestia??[]).filter(h=>h.actif&&h.thermostats.length);
+  if(p.labo)return noteBox('À l’ombre','Ici, les thermostats sont recopiés d’une autre maison (Remote Home Assistant) : aucun planning ne leur envoie rien, un ordre pourrait atteindre les vrais.');
+  if(!active.length)return noteBox('Lecture seule','Hestia Chauffage lit la maison sans rien commander. Seul un planning « Actif » règle des thermostats, et seulement leur préréglage.');
+  return noteBox(active.length>1?'Plannings actifs':'Un planning actif',`${active.map(h=>`« ${h.nom} »`).join(', ')} : quand une plage commence ou finit, Hestia règle le préréglage de ${active.length>1?'leurs':'ses'} thermostats. Elle n’allume ni n’éteint jamais un thermostat, et ne commande jamais le poêle lui-même.`);
+ }
 
  /* ── Accueil ── */
  private home(v:View){
@@ -250,10 +363,10 @@ export class HestiaHeatingSetup extends LitElement {
      value:html`<span class="t">${deg(r.temperature)}${r.consigne!=null?html`<small>pour ${num(r.consigne)}</small>`:nothing}</span>`,go:()=>this.go('pieces/'+r.id)})),
      {more:html`<span class="nk-def">${vt?`${vt} thermostat${vt>1?'s':''} Versatile`:`${v.sources.length} thermostat${v.sources.length>1?'s':''}`}</span>`})
     :listSection('Pièces',[listRow({label:'Aucun thermostat trouvé',sub:'Hestia Chauffage lit Versatile Thermostat et les thermostats de Home Assistant (climate).'})])}
-   ${v.planning.source?listSection('Planning',[listRow({label:html`<b>Prochains changements</b>`,name:'Planning',
-     sub:v.planning.prochains.slice(0,3).map(n=>`${n.heure} ${n.texte}`).join(' · ')||'Aucun changement prévu.',go:()=>this.go('planning')})],
-     {more:html`<span class="nk-def">lu dans ${v.planning.source}</span>`}):nothing}
-   ${this.readOnly()}`;
+   ${listSection('Planning',[listRow({label:html`<b>${v.planning.prochains.length?'Prochains changements':(v.planning.hestia??[]).length?'Les plannings':'Créer un planning'}</b>`,name:'Planning',
+     sub:v.planning.prochains.slice(0,3).map(n=>`${n.heure} ${n.texte}`).join(' · ')||((v.planning.hestia??[]).length?'Aucun changement prévu.':'Une semaine en couleurs, pour les thermostats que vous choisissez.'),go:()=>this.go('planning')})],
+     {more:v.planning.source?html`<span class="nk-def">${v.planning.source}</span>`:undefined})}
+   ${this.modeNote(v)}`;
  }
 
  /* ── Poêle ── */
@@ -293,7 +406,7 @@ export class HestiaHeatingSetup extends LitElement {
     ...(s.demande_pct!=null?[listRow({label:'Demande du thermostat',sub:'La part du temps où il voudrait chauffer : c’est elle qui donne la flamme.',value:`${s.demande_pct} %`})]:[]),
     ...(room?.planning?[listRow({label:'Le planning',sub:room.prochain?`Puis ${room.prochain.texte} ${when(room.prochain.a)}.`:undefined,value:room.planning,go:()=>this.go('planning')})]:[]),
    ],{more:html`<span class="nk-def">lu, pas décidé</span>`})}
-   ${this.readOnly()}`;
+   ${this.modeNote(v)}`;
  }
 
  /* ── Une pièce ── */
@@ -315,18 +428,138 @@ export class HestiaHeatingSetup extends LitElement {
    ${listSection('',[moreRow('Entités lues',String(srcs.length),srcs.map(s=>listRow({label:html`<span class="eid">${s.entite}</span>`,value:s.integration??''})))])}`;
  }
 
- /* ── Planning ── */
+ /* ── Planning: the list, then one planning ── */
+ private thermName(v:View,id:string){return v.planning.thermostats.find(t=>t.id===id)?.nom??v.sources.find(s=>s.id===id)?.nom??id;}
+ private stoveId(v:View){return v.planning.thermostats.find(t=>t.poele)?.id;}
+ private savedPlans():Record<string,Plan>{return this.settings?.reglages.planning?.plannings??{};}
+ /** A new planning in the draft, from scratch or from a Scheduler schedule; its thermostats leave any other planning. */
+ private create(from?:Plan){
+  const id='p'+Date.now().toString(36);
+  const p:Plan=from?structuredClone(from):{nom:'Nouveau planning',actif:false,jours:'semaine',reste:'eco',
+   plages:[[['06:30','08:30','confort'],['17:00','22:30','confort']],[['08:00','22:30','confort']]],thermostats:[]};
+  this.setPlan(m=>{for(const o of Object.values(m.plannings))o.thermostats=o.thermostats.filter(t=>!p.thermostats.includes(t));m.plannings[id]=p;});
+  this.go('planning/'+id);
+ }
+ private dropPlanningDraft(){const d={...this.draft};delete d.planning;this.draft=d;this.refused=undefined;}
+ /** A planning's seven days, small: the list's picture of it. */
+ private miniWeek(p:Plan,v:View){
+  const today=(new Date(v.planning.jour+'T12:00:00').getDay()+6)%7,now=v.planning.maintenant_min/14.4;
+  return html`<div class="mini" role="img" aria-label=${`${p.nom}. ${planSay(p)}`}>
+   <div class="r scale"><span></span><div>${[0,6,12,18,24].map(h=>html`<span style=${`left:${h/24*100}%`}>${h} h</span>`)}</div></div>
+   ${WEEK_LONG.map((d,wd)=>html`<div class=${'r'+(wd===today?' today':'')}><b>${d[0].toUpperCase()}</b>
+    <div class=${'bar7 lv-'+p.reste}>${daySegments(rowOf(p,wd),p.reste).filter(s=>s.ton!==p.reste).map(s=>html`<i class=${'lv-'+s.ton} style=${`left:${s.de/14.4}%;width:${(s.a-s.de)/14.4}%`}></i>`)}${wd===today?html`<span class="now" style=${`left:${now}%`}></span>`:nothing}</div></div>`)}</div>`;
+ }
  private planningPage(v:View){
-  const p=v.planning;
-  if(!p.source)return html`${this.head('Planning',{lead:'Aucun planning trouvé. Hestia Chauffage lit Scheduler ; le planning maison viendra dans cette page.'})}${this.readOnly()}`;
-  const names=Object.fromEntries(v.sources.map(s=>[s.id,s.nom]));
-  return html`${this.head('Planning',{chips:html`<span class="chip calm">${p.jour_nom}</span>`,lead:`La journée de chaque pièce et du poêle, lue dans ${p.source}.`})}
-   ${p.lignes.length?html`<div class="card">${lanes(p)}</div>`:nothing}
-   ${p.prochains.length?listSection('Prochains changements',p.prochains.map(n=>listRow({label:n.heure,value:n.texte}))):nothing}
-   ${listSection('Plannings lus',p.plannings.map(s=>listRow({label:html`<b>${s.nom}</b>`,name:s.nom,level:s.partiel?'todo':undefined,
-     sub:`${s.jours.map(d=>({daily:'tous les jours',workday:'jours ouvrés',weekend:'week-end'} as Record<string,string>)[d]??d).join(', ')} · ${s.cibles.map(c=>names[c]??c).join(', ')}${s.partiel?' · un créneau au soleil n’est pas lu':''}`,
-     value:html`<span class=${'pill '+(s.actif?'ok':'')}>${s.actif?'actif':'coupé'}</span>`})),{more:html`<span class="nk-def">${p.source}</span>`})}
-   ${this.readOnly()}`;
+  const p=v.planning,m=this.plan(),ids=Object.keys(m.plannings),status=new Map((p.hestia??[]).map(h=>[h.id,h]));
+  const used=new Set(ids.flatMap(id=>{const x=m.plannings[id];return [x.reste,...x.plages.flat().map(r=>r[2])];}));
+  return html`<div class="plan-top"><div>${this.head('Planning',{lead:'Un planning, c’est une semaine en couleurs. Il règle les thermostats que vous lui donnez.'})}</div>
+    <button type="button" class="primary add" @click=${()=>this.create()}>+ Créer un planning</button></div>
+   <div class="states"><span><span class="st essai">En essai</span>Hestia montre ce qu’elle ferait, sans rien envoyer.</span><span><span class="st actif">Actif</span>Hestia règle ces thermostats.</span></div>
+   ${ids.length?ids.map(id=>this.planCard(v,id,m.plannings[id],status.get(id)))
+    :html`<div class="card"><p class="say" style="margin:0">Aucun planning pour l’instant. Créez-en un : une semaine en couleurs, puis les thermostats qu’il règle.</p></div>`}
+   ${ids.length?html`<div class="levels">${LEVELS.filter(l=>used.has(l)).map(l=>html`<span class=${'lv-'+l}><i></i>${LEVEL_LABEL[l]}</span>`)}
+    ${this.stoveId(v)?html`<span class="all">Pour le poêle : Boost l’allume, Hors gel l’éteint.</span>`:nothing}</div>`:nothing}
+   ${(p.scheduler??[]).length?html`${listSection('Plannings de Scheduler',p.scheduler.map(x=>listRow({label:html`<b>${x.nom}</b>`,name:x.nom,level:x.partiel?'todo':undefined,
+     sub:`${x.actif?'Allumé':'Coupé'} · règle ${x.cibles.join(', ')}${x.partiel?' · une plage au lever ou au coucher du soleil n’est pas lue':''}`,
+     value:x.reprise?html`<button type="button" @click=${()=>this.create(x.reprise!)}>Reprendre dans Hestia</button>`:undefined})),{more:html`<span class="nk-def">l’extension, lue sans y toucher</span>`})}
+    <p class="hint after">Un thermostat suit un seul planning. « Reprendre dans Hestia » recopie ce planning ici ; vous coupez ensuite celui de Scheduler.</p>`:nothing}
+   ${(p.journal??[]).length?listSection('',[moreRow('Ce qu’a fait Hestia aujourd’hui',String(p.journal.length),[...p.journal].reverse().map(j=>listRow({label:html`<b>${j.heure}</b> · ${j.planning} : ${j.niveau}`,
+     sub:j.thermostats.join(', '),value:html`<span class=${'chip '+(FATE_TONE[j.statut]??'off')}>${j.texte}</span>`})))]):nothing}
+   ${p.labo?noteBox('Labo','Ici, les thermostats sont recopiés d’une autre maison (Remote Home Assistant) : Hestia ne leur envoie rien, même avec un planning actif. Un ordre pourrait atteindre les vrais.'):nothing}`;
+ }
+ private planCard(v:View,id:string,p:Plan,h:HPlan|undefined){
+  const changed=JSON.stringify(p)!==JSON.stringify(this.savedPlans()[id]);
+  const foot=changed?html`<p class="plan-now">Pas encore enregistré.</p>`
+   :!p.thermostats.length?html`<p class="plan-now">Aucun thermostat : ce planning ne règle rien pour l’instant.</p>`
+   :html`<p class="plan-now">Maintenant : <b>${h?.maintenant??'—'}</b>.${h?.prochain?` ${h.prochain.texte}.`:''}</p>
+    ${h?.bloques.length?html`<p class="plan-now bad">${h.bloques.map(b=>`${b.nom} suit encore « ${b.scheduler} » dans Scheduler : Hestia ne le règle pas.`).join(' ')}</p>`:nothing}`;
+  return html`<article class="plan"><div class="plan-h"><h2>${p.nom}</h2><span class=${'st '+(p.actif?'actif':'essai')}>${p.actif?'Actif':'En essai'}</span><span class="grow"></span>
+    <button type="button" @click=${()=>this.go('planning/'+id)}>Modifier</button></div>
+   ${this.miniWeek(p,v)}
+   ${p.thermostats.length?html`<div class="chips"><small>Thermostats</small>${p.thermostats.map(t=>html`<span class="tchip">${this.thermName(v,t)}</span>`)}</div>`:nothing}
+   ${foot}</article>`;
+ }
+
+ /* ── Un planning ── */
+ private editorPage(v:View,id:string){
+  const m=this.plan(),p=m.plannings[id];
+  if(!p)return this.planningPage(v);
+  const th=v.planning.thermostats??[],stove=this.stoveId(v),hasStove=!!stove&&p.thermostats.includes(stove),saved=this.savedPlans();
+  const edit=(f:(x:Plan)=>void)=>this.setPlan(mm=>{f(mm.plannings[id]);});
+  const rows=ROWS[p.jours],sel=this.sel&&p.plages[this.sel.r]?.[this.sel.i]?this.sel:undefined,cur=sel?p.plages[sel.r][sel.i]:undefined;
+  let reach=-1;
+  const overlap=!!sel&&[...p.plages[sel.r]].sort((a,b)=>minutesOf(a[0])-minutesOf(b[0])).some(x=>{const hit=minutesOf(x[0])<reach;reach=Math.max(reach,endOf(x));return hit;});
+  const setTime=(k:0|1,value:string)=>{if(!sel||!value)return;const t=minutesOf(value);
+   edit(x=>{const r=x.plages[sel.r][sel.i],s=minutesOf(r[0]),e=endOf(r);
+    // A start moved past the end takes the end along (the range keeps its length); an end never comes before the start.
+    if(k===0){const end=t>=e?Math.min(1440,t+e-s):e;r[0]=clockOf2(Math.min(t,end-15));r[1]=clockOf2(end);}else r[1]=clockOf2(Math.max(t===0?1440:t,s+15));});};
+  const add=(ri:number)=>{const slots=p.plages[ri],free=(a:number,b:number)=>slots.every(x=>b<=minutesOf(x[0])||a>=endOf(x));
+   let start=free(720,780)?720:-1;for(let t=0;start<0&&t+60<=1440;t+=30)if(free(t,t+60))start=t;if(start<0)start=720;
+   const lv=hasStove?'boost':p.reste==='confort'?'eco':'confort';
+   edit(x=>{x.plages[ri].push([clockOf2(start),clockOf2(start+60),lv]);});this.sel={r:ri,i:slots.length};};
+  const starts=hasStove?startsPerWeek(p):0;
+  const stoveSay=starts?`Avec ce planning, le poêle s’allumerait ${starts} fois par semaine.`
+   :p.reste==='boost'?'Avec ce planning, le poêle resterait en boost tout le temps.':'Avec ce planning, le poêle ne s’allumerait jamais : aucune plage en boost.';
+  const ownerIn=(plans:Record<string,Plan>,t:string)=>Object.entries(plans).find(([,x])=>x.thermostats.includes(t))?.[0];
+  const tick=(t:string,on:boolean)=>this.setPlan(mm=>{for(const x of Object.values(mm.plannings))x.thermostats=x.thermostats.filter(y=>y!==t);if(on)mm.plannings[id].thermostats.push(t);});
+  const levels=[...new Set([p.reste,...p.plages.flat().map(r=>r[2])])];
+  const note=(t:Therm,on:boolean):[string,boolean]=>{
+   const parts:string[]=[t.piece??'',t.poele?'le thermostat du poêle':''];let warn=false;
+   if(on){
+    const was=ownerIn(saved,t.id);
+    if(was&&was!==id){parts.push(`quitte « ${m.plannings[was]?.nom??saved[was].nom} »`);warn=true;}
+    if(t.scheduler_actif){parts.push(`coupez « ${t.scheduler_actif} » dans Scheduler pour que Hestia le règle`);warn=true;}
+    const missing=levels.filter(l=>!t.niveaux.includes(l));
+    if(missing.length){parts.push(`il n’a pas le préréglage ${missing.map(l=>LEVEL_LABEL[l].toLowerCase()).join(', ')}`);warn=true;}
+    if(t.consignes)parts.push(`pas un Versatile Thermostat : il recevra ${LEVELS.map(l=>`${num(t.consignes![l])} °C en ${LEVEL_LABEL[l].toLowerCase()}`).join(', ')}`);
+   }else{
+    const other=ownerIn(m.plannings,t.id);
+    parts.push(other?`dans « ${m.plannings[other].nom} »`:t.scheduler_actif?`suit « ${t.scheduler_actif} », l’extension`:'sans planning');
+   }
+   if(t.recopie)parts.push('recopié d’une autre maison : jamais commandé');
+   const text=parts.filter(Boolean).join(' · ');
+   return [text[0].toUpperCase()+text.slice(1),warn];
+  };
+  return html`${this.head(id in saved?'Modifier le planning':'Nouveau planning',{back:['planning','Plannings']})}
+   <label class="field-l" for="nom">Nom du planning</label>
+   <input id="nom" class="plan-name" type="text" maxlength="30" .value=${p.nom} @change=${(e:Event)=>{const n=(e.target as HTMLInputElement).value.trim();if(n)edit(x=>{x.nom=n;});}}>
+   <section class="box ed" aria-labelledby="h-semaine">
+    <div class="ed-h"><h2 id="h-semaine">La semaine</h2>${segmented<Week>('Les jours',[['tous','Tous les jours pareils'],['semaine','Semaine et week-end'],['chaque','Jour par jour']],p.jours,
+     w=>{if(w!==p.jours){edit(x=>{x.plages=reshape(x,w);x.jours=w;});this.sel=undefined;}})}</div>
+    <div class="scale"><span></span><div>${[0,6,12,18,24].map(h=>html`<span style=${`left:${h/24*100}%`}>${h} h</span>`)}</div></div>
+    ${p.plages.map((r,ri)=>html`<div class="r"><div><b>${rows[ri][0]}</b>${rows[ri][1]?html`<small>${rows[ri][1]}</small>`:nothing}</div>
+     <div><div class=${'track lv-'+p.reste}><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i>
+      ${r.map((x,i)=>({x,i})).sort((a,b)=>minutesOf(a.x[0])-minutesOf(b.x[0])||a.i-b.i).map(({x,i})=>{const s=minutesOf(x[0]),e=endOf(x),on=sel?.r===ri&&sel.i===i;
+       return html`<button type="button" class=${'lv-'+x[2]} style=${`left:${s/14.4}%;width:${(e-s)/14.4}%`} aria-pressed=${String(on)}
+        aria-label=${`${LEVEL_LABEL[x[2]]} de ${hourText(s)} à ${hourText(e)}, ${rows[ri][0]}`} @click=${()=>{this.sel=on?undefined:{r:ri,i};}}><b>${LEVEL_LABEL[x[2]]}</b><span>${hourText(s)} – ${hourText(e)}</span></button>`;})}</div>
+      ${r.length<12?html`<button type="button" class="more" @click=${()=>add(ri)}>+ Ajouter une plage</button>`:nothing}</div></div>`)}
+    <div class="rest"><label for="reste">Le reste du temps</label><select id="reste" @change=${(e:Event)=>{const l=(e.target as HTMLSelectElement).value;edit(x=>{x.reste=l;});}}>
+     ${LEVELS.map(l=>html`<option value=${l} ?selected=${p.reste===l}>${LEVEL_LABEL[l]}</option>`)}</select>
+     ${stove?html`<small>Pour le poêle : Boost l’allume, Hors gel l’éteint.</small>`:nothing}</div>
+    ${cur&&sel?html`<div class="selbox"><div><b>Plage choisie</b> <span class="hint inline">${rows[sel.r][0]} · ${LEVEL_LABEL[cur[2]]} de ${hourText(minutesOf(cur[0]))} à ${hourText(endOf(cur))}</span></div>
+      <div class="times"><label for="de">De</label><input id="de" type="time" step="900" .value=${cur[0]} @change=${(e:Event)=>setTime(0,(e.target as HTMLInputElement).value)}>
+       <label for="a">à</label><input id="a" type="time" step="900" .value=${cur[1]==='24:00'?'00:00':cur[1]} @change=${(e:Event)=>setTime(1,(e.target as HTMLInputElement).value)}></div>
+      <div class="lvl" role="group" aria-label="Niveau">${LEVELS.map(l=>html`<button type="button" class=${'lv-'+l} aria-pressed=${String(cur[2]===l)} @click=${()=>edit(x=>{x.plages[sel.r][sel.i][2]=l;})}><i></i>${LEVEL_LABEL[l]}</button>`)}</div>
+      ${overlap?html`<span class="warn">Deux plages se chevauchent sur cette ligne : Hestia gardera la plus tardive.</span>`:nothing}
+      <button type="button" class="del" @click=${()=>{edit(x=>{x.plages[sel.r].splice(sel.i,1);});this.sel=undefined;}}>Supprimer cette plage</button></div>`
+     :html`<p class="hint">Touchez une plage pour changer ses heures ou son niveau.</p>`}
+    ${hasStove?html`<p class="stove-say">${stoveSay}</p>`:nothing}
+   </section>
+   <section class="box" aria-labelledby="h-thermo"><h2 id="h-thermo">Les thermostats de ce planning</h2>
+    ${th.length?th.map(t=>{const on=p.thermostats.includes(t.id),[say,warn]=note(t,on);
+     return html`<label class="tick"><input type="checkbox" .checked=${on} @change=${(e:Event)=>tick(t.id,(e.target as HTMLInputElement).checked)}>
+      <span><b>${t.nom}</b><small class=${warn?'warn':''}>${say}</small></span></label>`;}):html`<p class="hint">Aucun thermostat lu.</p>`}
+    ${p.thermostats.filter(t=>!th.some(x=>x.id===t)).map(t=>html`<label class="tick"><input type="checkbox" checked @change=${()=>tick(t,false)}>
+     <span><b>${t}</b><small class="warn">Pas lu en ce moment : coupé dans Réglages, ou absent de Home Assistant.</small></span></label>`)}
+    <p class="hint">Un thermostat suit un seul planning. En le cochant ici, il quitte l’autre.</p></section>
+   <section class="box" aria-labelledby="h-mode"><h2 id="h-mode">Ce que fait Hestia</h2><div class="modes">
+    ${([[false,'essai','En essai','Hestia montre ce qu’elle ferait, sans rien envoyer.'],[true,'actif','Actif','Hestia règle ces thermostats à chaque plage.']] as [boolean,string,string,string][])
+     .map(([a,c,l,t])=>html`<button type="button" class=${c} aria-pressed=${String(p.actif===a)} @click=${()=>edit(x=>{x.actif=a;})}><b>${l}</b><span>${t}</span></button>`)}</div>
+    ${p.actif?html`<p class="hint">${v.planning.labo?'Ici, les thermostats sont recopiés d’une autre maison : même actif, Hestia ne leur enverra rien.'
+     :'Hestia change le préréglage de ces thermostats quand une plage commence ou finit. Elle ne les allume ni ne les éteint jamais. Un réglage fait à la main tient jusqu’au changement suivant.'}</p>`:nothing}</section>
+   <div class="actions"><button type="button" class="primary" ?disabled=${this.saving} @click=${async()=>{if(this.count())await this.save();if(!this.refused)this.go('planning');}}>Enregistrer</button>
+    <button type="button" class="link" @click=${()=>{this.dropPlanningDraft();this.go('planning');}}>Annuler</button><span class="grow"></span>
+    <button type="button" class="del" @click=${()=>{this.setPlan(mm=>{delete mm.plannings[id];});this.go('planning');}}>Supprimer ce planning</button></div>`;
  }
 
  /* ── Réglages ── */

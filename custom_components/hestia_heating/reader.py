@@ -26,6 +26,7 @@ SCHEDULER = "scheduler"
 PELLETS = "suivi_stock_pellet"
 PELLET_KEY = "suivi_stock_pellet_key"
 WORKDAY = "workday"
+REMOTE = "remote_homeassistant"
 WEATHER_API = "hestia_weather_api"
 WEATHER_API_VERSION = 1      # the version of Hestia Weather's interface this brick speaks
 BRICK = "hestia_heating"     # said to Hestia Weather when listening, so that its settings show this brick linked
@@ -279,6 +280,8 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
         "pellets": pellets,
         "schedules": schedules,
         "workday": workday,
+        # Copied from another Home Assistant (Remote Home Assistant, a lab): read, never sent anything.
+        "copies": [c["entity_id"] for c in found.climates if c["platform"] == REMOTE],
         "room_names": found.room_names,
         "hourly": hourly,
     }

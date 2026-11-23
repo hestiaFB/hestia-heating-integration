@@ -130,6 +130,7 @@ def read(climate: dict) -> dict:
         "prereglages": {k.removesuffix("_temp"): _number(v) for k, v in presets.items()
                         if k.endswith("_temp") and "_away" not in k and _number(v) is not None},
         "sous_jacents": underlying(attrs) if vt else [],
+        "prereglages_dispo": [str(m) for m in attrs.get("preset_modes") or [] if m not in (None, "none")],
         "vt": vt,
         "energie_stat": climate.get("energie"),
         "granules_stat": None,

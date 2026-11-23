@@ -1,15 +1,15 @@
 # Hestia Chauffage — fonctionnement technique
 
-Version 0.2.0b1 (lecture seule). Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
+Version 0.3.0b1. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
 
 ## Les fichiers
 
 | Fichier | Rôle |
 | --- | --- |
 | `reader.py` | Tout ce qui touche Home Assistant : registres, états, historique, l’interface d’Hestia Weather. Ne fait que lire. |
-| `engine/` | Python pur, testé sans Home Assistant : `sources.py` (un thermostat → une source), `stove.py` (le poêle et les granulés), `planning.py` (Scheduler), `house.py` (la maison en une phrase), `phrases.py` (les mots), `profiles.py` (les profils de poêle), `legacy.py` (anciens noms du panneau, lus par le socle). |
+| `engine/` | Python pur, testé sans Home Assistant : `sources.py` (un thermostat → une source), `stove.py` (le poêle et les granulés), `planning.py` (Scheduler), `home_planning.py` (les plannings Hestia), `house.py` (la maison en une phrase), `phrases.py` (les mots), `profiles.py` (les profils de poêle), `legacy.py` (anciens noms du panneau, lus par le socle). |
 | `profiles/*.json` | Un profil par intégration de poêle, sans code. |
-| `coordinator.py` | Écoute les entités trouvées, recalcule, prévient les abonnés. Garde les réglages (`.storage/hestia_heating.reglages`). |
+| `coordinator.py` | Écoute les entités trouvées, recalcule, prévient les abonnés, envoie les changements des plannings Hestia actifs. Garde les réglages (`.storage/hestia_heating.reglages`) et le dernier changement traité de chaque thermostat (`.storage/hestia_heating.planning_etat`). |
 | `api.py` | L’interface pour les autres briques, `hass.data["hestia_heating_api"]`. |
 | `websocket.py` | Les commandes du panneau et de la carte. |
 | `sensor.py`, `binary_sensor.py` | Les quelques entités publiées. |
@@ -32,7 +32,7 @@ Version 0.2.0b1 (lecture seule). Ce document décrit ce que la brique lit, ce qu
 - **Le planning** : les interrupteurs de Scheduler (sinon les `switch.schedule_*` qui ont des `timeslots`) qui visent un thermostat. Le premier planning allumé qui s’applique au jour et vise le thermostat donne la journée. « Jours ouvrés » suit le capteur Workday quand il existe, sinon du lundi au vendredi.
 - **Le temps** : `hestia_weather_api` version 1 (`places()`, `hourly(lieu)`, `add_listener(lieu, update, brick="hestia_heating")`). Le lieu est celui choisi dans Extensions, sinon le premier. Sans Hestia Weather, le froid à venir n’est pas dit.
 
-Rien n’est écrit ailleurs : aucun appel de service, aucun réglage d’une autre intégration. Un test le vérifie (`tests/test_coordinator_ha.py`).
+La brique n’écrit qu’une chose : le préréglage (ou la consigne) des thermostats d’un planning Hestia « Actif » (voir plus bas). Aucun autre appel de service, aucun réglage d’une autre intégration. Des tests le vérifient (`tests/test_coordinator_ha.py`).
 
 ## Ce qui est publié
 
@@ -71,7 +71,44 @@ Unités : °C, W, %. Une valeur absente est `None`, jamais inventée.
 | `hestia_heating/subscribe` | la vue des cartes, entière une fois puis seulement ce qui change (`changes`, `removed`) ; `reload` quand la brique redémarre. Une seule souscription par tableau de bord (`card/src/stream.ts`) |
 | `hestia_heating/day` + `cible` (`poele` ou `piece/<id>`) | les courbes du jour depuis minuit, un point toutes les 5 min au plus, gardées 2 min |
 | `hestia_heating/settings` | les réglages et ce qu’ils peuvent valoir |
-| `hestia_heating/set_settings` + `reglages` | enregistre les réglages modifiés (`sources`, `extensions`, `poele_thermostat`, `poele_prise`, `weather_place`) |
+| `hestia_heating/set_settings` + `reglages` | enregistre les réglages modifiés (`sources`, `extensions`, `poele_thermostat`, `poele_prise`, `weather_place`, `planning`). Un planning illisible est refusé (`invalid`), avec la raison en mots, et rien n’est enregistré |
+
+## Le planning Hestia
+
+Depuis la 0.3, la brique a ses propres plannings (`engine/home_planning.py`, Python pur), d’après la maquette « planning simple » validée par Frank le 20 novembre. Ils sont enregistrés entiers avec les réglages (`planning`) :
+
+```
+{"plannings": {"p1a2b3": {"nom": "Chambres", "actif": false, "jours": "semaine", "reste": "eco",
+                          "plages": [[["17:00", "20:30", "confort"]], [["17:00", "20:30", "confort"]]],
+                          "thermostats": ["climate.chambre_1", "climate.chambre_2"]}}}
+```
+
+- `jours` : `tous` (une ligne de plages pour tous les jours), `semaine` (deux lignes : du lundi au vendredi, puis samedi et dimanche) ou `chaque` (sept lignes, du lundi au dimanche).
+- `plages` : sur chaque ligne, des plages `[début, fin, niveau]`, de `00:00` à `24:00`, 12 au plus par ligne. Niveaux : `confort`, `eco`, `hors_gel`, `boost`. Quand deux plages se chevauchent, celle qui commence le plus tard l’emporte.
+- `reste` : le niveau du reste du temps.
+- `thermostats` : les thermostats que le planning règle. **Un thermostat suit un seul planning** : le même dans deux plannings est refusé.
+- `actif` : `false` par défaut (« En essai » : le planning montre ce qu’il ferait, sans rien envoyer). `true` : « Actif ».
+- 20 plannings au plus. Un planning illisible est refusé avec la raison en mots. Le planning à journées types de la première préparation de la 0.3 (jamais publiée) n’est pas repris : il n’a jamais été qu’à l’ombre.
+
+Pour le poêle : son thermostat se met dans un planning comme les autres. Boost l’allume, Hors gel l’éteint (ce sont les automatisations du poêle, ou plus tard le pilote, qui le font). L’éditeur dit combien de fois par semaine le poêle s’allumerait (`starts_per_week()`).
+
+**Le dessin de chaque thermostat** : son planning Hestia ; s’il n’en a pas, ou si un planning Scheduler allumé le vise encore, celui de Scheduler (c’est lui qui le règle vraiment).
+
+**Envoyer** : à chaque calcul (au plus chaque minute), pour chaque thermostat d’un planning, le changement de niveau commencé depuis le dernier traité est « dû » (`due()`). Un changement, c’est le début ou la fin d’une plage. Après un arrêt de Home Assistant, seul le dernier changement manqué est rattrapé. Des plannings enregistrés, ou un thermostat vu pour la première fois, posent un repère : rien n’est envoyé tout de suite. Rien n’est envoyé avant que Home Assistant ait fini de démarrer. Le dernier changement traité de chaque thermostat est gardé dans `.storage/hestia_heating.planning_etat`.
+
+Ce que devient un changement dû, pour chaque thermostat (le journal du jour, 60 lignes au plus, et le journal de Home Assistant pour ce qui part) :
+
+| Statut | Quand |
+| --- | --- |
+| `bloque` | un planning Scheduler allumé vise encore le thermostat (« suit deux plannings », dans À régler, quand le planning est actif) |
+| `recopie` | le thermostat est une copie d’une autre maison (`remote_homeassistant`) : jamais rien envoyé |
+| `ombre` | le planning est « En essai » |
+| `eteint` | le thermostat est éteint ou absent : il reste éteint |
+| `sans_prereglage` | le préréglage n’existe pas sur ce Versatile Thermostat |
+| `deja` | il est déjà sur ce préréglage (ou cette consigne) |
+| `envoye` | `climate.set_preset_mode` pour un Versatile Thermostat, `climate.set_temperature` pour un autre (confort 20 °C, éco 17, hors gel 7, boost 21 ; une clim : 25, 27, 30, 24), sans attendre la réponse |
+
+**La vue** (`planning` dans `hestia_heating/view`) : `source` (« Hestia », « Scheduler » ou les deux), `labo` (tous les thermostats sont recopiés), `essai` (un dessin vient d’un planning en essai), `lignes` (la journée de chaque pièce et du poêle, avec sa `source` et `bloque` quand deux plannings la visent), `prochains`, puis pour l’onglet seulement : `hestia` (chaque planning : maintenant, prochain changement, thermostats bloqués par Scheduler, allumages du poêle par semaine), `thermostats` (chacun : sa pièce, son planning, Scheduler, ses niveaux possibles, ses consignes s’il n’est pas un Versatile Thermostat), `scheduler` (chaque planning Scheduler, et `reprise` : le même en planning Hestia, pour « Reprendre dans Hestia ») et `journal`. Les cartes ne reçoivent pas ces quatre-là.
 
 ## Le profil de poêle
 
@@ -90,7 +127,7 @@ Ajouter un poêle, c’est ajouter un fichier : aucun code.
 - La brique écoute seulement les entités trouvées. Un changement est regroupé 1 s avant le recalcul ; un changement des registres, 5 s.
 - Le recalcul de toute la maison prend moins d’une milliseconde sur une maison de 6 thermostats (mesuré hors labo, sur la machine de développement) ; il est mesuré à chaque fois (`calcul_ms`, affiché dans À propos).
 - Les commandes du panneau répondent avec ce qui est déjà calculé. Seules les courbes du jour lisent l’historique, dans l’exécuteur du Recorder, gardées 2 min.
-- Une minuterie d’une minute fait avancer « maintenant » dans le planning.
+- Une minuterie d’une minute fait avancer « maintenant » dans le planning et envoie les changements dus. Chaque planning Hestia se calcule sur 4 jours (la veille et les 3 suivants), dans le même calcul.
 
 À mesurer au labo avant la bêta publique : `hestia-labo/mesurer-hub.py` sur l’onglet Chauffage.
 
