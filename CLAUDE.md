@@ -1,10 +1,11 @@
 # Hestia Chauffage — consignes pour Claude
 
-Intégration Home Assistant (domaine `hestia_heating`, onglet `chauffage` du panneau) : le chauffage et la clim de la maison, sur les thermostats existants (Versatile Thermostat d'abord), le poêle à granulés par un profil, et un planning. Une des briques Hestia-FB. **En préparation, pas publiée.** Lire d'abord `docs/CAHIER-DES-CHARGES.md`.
+Intégration Home Assistant (domaine `hestia_heating`, onglet `chauffage` du panneau) : le chauffage et la clim de la maison, sur les thermostats existants (Versatile Thermostat d'abord), le poêle à granulés par un profil, et un planning. Une des briques Hestia-FB. **En bêta 0.1, pas publiée.** Lire d'abord `docs/CAHIER-DES-CHARGES.md`.
 
 ## Où est quoi
 - Dépôt : `hestiaFB/hestia-heating-integration`. Sur le PC de Frank : `~/Documents/Hestia-FB/hestia-heating`.
-- À venir (sur le modèle d'Énergie) : `custom_components/hestia_heating/` (le Python : `reader.py` touche Home Assistant, `engine/` est du Python pur, `profiles/*.json` les profils de poêle) ; `frontend/` (le panneau, TypeScript) ; `card/` ; `tests/` ; `docs/`.
+- `custom_components/hestia_heating/` : le Python. `reader.py` touche Home Assistant (lecture seule), `engine/` est du Python pur, `profiles/*.json` les profils de poêle, `api.py` l'interface v1. Son dossier `frontend/` est **compilé** (ne pas l'éditer).
+- `frontend/` : l'onglet Chauffage (TypeScript). `card/` : la carte. `tests/` : tests Python, avec une maison inventée (`maison_fictive.py`). `docs/` : `CAHIER-DES-CHARGES.md`, `technique.md`.
 - Ce dépôt n'a pas de `RELEASES.md` : appliquer celui de `hestia-ecosysteme`.
 
 ## Règles à ne pas enfreindre
@@ -16,6 +17,15 @@ Intégration Home Assistant (domaine `hestia_heating`, onglet `chauffage` du pan
 6. Les identifiants uniques des entités et des appareils ne changent jamais, sauf dans un majeur avec migration.
 7. **Performance** : petits matériels (HA Green). Ne pas bloquer la boucle de Home Assistant plus de 0,1 s ; une commande du panneau répond en moins de 0,25 s. Mesurer avant et après (`hestia-labo`).
 8. Aucune donnée réelle de la maison dans le dépôt : états, noms des pièces, adresses IP, coordonnées GPS, jetons, `.storage`.
+
+## Tester (comme la CI)
+```
+pip install -r requirements-test.txt                      # Home Assistant épinglé, Python 3.14
+python -m unittest discover -s tests -p 'test_*.py'
+cd frontend && npm ci && npm run validate
+cd card && npm ci && npm run validate
+```
+Node 22. La CI lance aussi `hassfest` et la validation HACS. `card/scripts/test-loading.mjs` (copie du socle) ne connaît encore que les cartes de Weather et Confort : ne pas le lancer ici.
 
 ## Publier
 - **Pas de tag, de release ni de push sur `main` sans l'accord de Frank.** Travailler sur une branche, ouvrir une PR.

@@ -1,0 +1,21 @@
+{
+  "name": "hestia-heating-card",
+  "version": "0.1.0b1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "node scripts/build_card.mjs",
+    "validate": "npm run check && npm run build",
+    "test:loading": "node scripts/test-loading.mjs"
+  },
+  "dependencies": {
+    "lit": "3.3.3"
+  },
+  "devDependencies": {
+    "@webcomponents/scoped-custom-element-registry": "0.0.10",
+    "esbuild": "0.25.12",
+    "playwright": "1.63.0",
+    "typescript": "5.9.3"
+  }
+}
