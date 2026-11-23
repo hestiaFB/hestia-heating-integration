@@ -23,7 +23,10 @@ type: custom:hestia-heating-card
 card: maison      # maison, poele, piece ou planning
 # piece: bureau   # pour card: piece, l’id de la pièce Home Assistant
 # court: true     # une pièce sur une ligne
+# tap_action: page  # clic sur une pièce : thermostat (par défaut), page ou none
 ```
+
+La carte d’une pièce a les modes de son thermostat (Hors gel, Éco, Confort, Boost) : c’est vous qui choisissez, la carte les envoie depuis votre navigateur, comme la carte thermostat de Home Assistant.
 
 Elle publie aussi quelques entités (l’état de la maison, de chaque pièce et du poêle, la flamme, l’alarme, les jours de granulés, les kilos brûlés, l’énergie du poêle à déclarer dans la page Énergie, le brasier à nettoyer) pour vos automatisations. Le détail est dans [docs/technique.md](docs/technique.md).
 
