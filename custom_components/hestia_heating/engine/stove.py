@@ -17,8 +17,38 @@ def _number(value) -> float | None:
         return None
 
 
-def _role(roles: dict, name: str) -> dict:
-    return roles.get(name) or {}
+def _role(roles: dict, name: str | None) -> dict:
+    return (roles.get(name) if name else None) or {}
+
+
+def _same(current, wanted) -> bool:
+    try:
+        return abs(float(current) - float(wanted)) < 0.05
+    except (TypeError, ValueError):
+        return str(current).casefold() == str(wanted).casefold()
+
+
+def _orders(profile: Profile, roles: dict) -> dict:
+    """What the whole pilot (0.7) needs to know of the stove: whether it can be lit and stopped (the profile says how,
+    and the entities are there), whether it took the order to light, and its settings to set before a start, each
+    with whether it must change (only a known value that differs: an unavailable stove is not written to)."""
+    orders = profile.orders or {}
+    can = all(_role(roles, (orders.get(g) or {}).get("role")).get("entity_id") for g in ("allumer", "eteindre"))
+    lit_spec = orders.get("allume_si") or {}
+    lit_role = _role(roles, lit_spec.get("role"))
+    lit_state = lit_role.get("state")
+    lit = None if lit_state in (None, "unknown", "unavailable") or not lit_spec else lit_state == lit_spec.get("etat")
+    settings = []
+    for s in orders.get("reglages") or ():
+        r = _role(roles, s.get("role"))
+        if not r.get("entity_id"):
+            continue
+        current = (r.get("attributes") or {}).get(s["attribut"]) if s.get("attribut") else r.get("state")
+        known = current not in (None, "unknown", "unavailable") and r.get("state") not in ("unknown", "unavailable")
+        settings.append({"nom": s.get("nom") or s["role"], "role": s["role"], "reserve": s.get("reserve"),
+                         "a_changer": known and not _same(current, s.get("valeur"))})
+    return {"pilotable": bool(orders) and can, "allume": lit, "reglages": settings,
+            "rechargeable": bool(orders.get("recharger"))}
 
 
 def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = None, plug: dict | None = None,
@@ -83,6 +113,7 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "prise_tourne": None if plug_w is None else plug_w >= PLUG_RUNNING_W,
         "entites": {role: r.get("entity_id") for role, r in roles.items() if r.get("entity_id")},
         "granules": pellets,
+        **_orders(profile, roles),
     }
 
 

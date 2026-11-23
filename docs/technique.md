@@ -7,7 +7,7 @@ Version 0.4.0b1. Ce document décrit ce que la brique lit, ce qu’elle publie e
 | Fichier | Rôle |
 | --- | --- |
 | `reader.py` | Tout ce qui touche Home Assistant : registres, états, historique, l’interface d’Hestia Weather. Ne fait que lire. |
-| `engine/` | Python pur, testé sans Home Assistant : `sources.py` (un thermostat → une source), `stove.py` (le poêle et les granulés), `planning.py` (Scheduler), `home_planning.py` (les plannings Hestia), `pilot.py` (le pilote du poêle : à l’ombre, ou la flamme), `granules.py` (les granulés comptés par Hestia et le brasier, depuis la 0.6), `house.py` (la maison en une phrase), `phrases.py` (les mots), `profiles.py` (les profils de poêle), `legacy.py` (anciens noms du panneau, lus par le socle). |
+| `engine/` | Python pur, testé sans Home Assistant : `sources.py` (un thermostat → une source), `stove.py` (le poêle et les granulés), `planning.py` (Scheduler), `home_planning.py` (les plannings Hestia), `pilot.py` (le pilote du poêle : à l’ombre, ou la flamme), `driver.py` (le pilote entier : démarrage, arrêt, sécurités, depuis la 0.7), `granules.py` (les granulés comptés par Hestia et le brasier, depuis la 0.6), `house.py` (la maison en une phrase), `phrases.py` (les mots), `profiles.py` (les profils de poêle), `legacy.py` (anciens noms du panneau, lus par le socle). |
 | `profiles/*.json` | Un profil par intégration de poêle, sans code. |
 | `coordinator.py` | Écoute les entités trouvées, recalcule, prévient les abonnés, envoie les changements des plannings Hestia actifs. Garde les réglages (`.storage/hestia_heating.reglages`) et le dernier changement traité de chaque thermostat (`.storage/hestia_heating.planning_etat`). |
 | `api.py` | L’interface pour les autres briques, `hass.data["hestia_heating_api"]`. |
@@ -75,8 +75,9 @@ Unités : °C, W, %. Une valeur absente est `None`, jamais inventée.
 | `hestia_heating/subscribe` | la vue des cartes, entière une fois puis seulement ce qui change (`changes`, `removed`) ; `reload` quand la brique redémarre. Une seule souscription par tableau de bord (`card/src/stream.ts`) |
 | `hestia_heating/day` + `cible` (`poele` ou `piece/<id>`) | les courbes du jour depuis minuit, un point toutes les 5 min au plus, gardées 2 min : pour une pièce `temperature`, `consigne` et `demande` de son thermostat principal. Chaque point est placé à l’heure où il a été écrit (`last_updated`) : la température et la consigne d’un thermostat sont des attributs, et `last_changed` ne bouge qu’avec son état (`heat`) |
 | `hestia_heating/settings` | les réglages et ce qu’ils peuvent valoir |
-| `hestia_heating/set_settings` + `reglages` | enregistre les réglages modifiés (`sources`, `extensions`, `poele_thermostat`, `poele_prise`, `weather_place`, `planning`, `pilote`, `pilote_thermometre`, `planning_autorises`, `pilote_flamme_basse`, et depuis la 0.6 `brasier_kg` de 5 à 60, `granules_prix_sac` de 0,5 à 50 €, `granules_poids_sac` de 5 à 30 kg, vides pour « comme trouvé »). Un réglage illisible est refusé (`invalid`), avec la raison en mots, et rien n’est enregistré |
-| `hestia_heating/brasier_nettoye` | « J’ai nettoyé » : le compteur du brasier repart de zéro, écrit tout de suite. Rien n’est envoyé au poêle (0.6) |
+| `hestia_heating/set_settings` + `reglages` | enregistre les réglages modifiés (`sources`, `extensions`, `poele_thermostat`, `poele_prise`, `weather_place`, `planning`, `pilote`, `pilote_thermometre`, `planning_autorises`, `pilote_flamme_basse`, et depuis la 0.6 `brasier_kg` de 5 à 60, `granules_prix_sac` de 0,5 à 50 €, `granules_poids_sac` de 5 à 30 kg, vides pour « comme trouvé », et depuis la 0.7 `pilote_notifier` (un service `notify.…`, vide pour aucun), `poele_prise_switch` (un `switch.…`, vide pour « trouvé seul ») et `couper_prise` (oui ou non)). Un réglage illisible est refusé (`invalid`), avec la raison en mots, et rien n’est enregistré |
+| `hestia_heating/brasier_nettoye` | « J’ai nettoyé » : le compteur du brasier repart de zéro, écrit tout de suite. Rien n’est envoyé au poêle (0.6). Avec le pilote entier, c’est aussi la réponse `nettoye` (0.7) |
+| `hestia_heating/repondre` + `reponse` | une réponse au pilote entier depuis la page Poêle, comme sur le téléphone : `oui`, `non`, `couper`, `ignorer`, `nettoye` (0.7). Une autre réponse est refusée (`invalid`) |
 
 ## Les granulés comptés par Hestia
 
@@ -131,7 +132,7 @@ Ce que devient un changement dû, pour chaque thermostat (le journal du jour, 60
 
 ## Le pilote du poêle
 
-Depuis la 0.4 (`engine/pilot.py`, Python pur). Le thermostat du poêle décide combien chauffer (sa demande, en %) ; le pilote en tire les gestes du poêle. **À l’ombre, il n’envoie rien** : il calcule à chaque calcul de la maison ce qu’il ferait et le compare à ce que fait la maison, vu de dehors (l’état du poêle et sa flamme réglée). Réglage `pilote` : `ombre` (par défaut), `flamme` (depuis la 0.5, voir plus bas) ou `eteint`.
+Depuis la 0.4 (`engine/pilot.py`, Python pur). Le thermostat du poêle décide combien chauffer (sa demande, en %) ; le pilote en tire les gestes du poêle. **À l’ombre, il n’envoie rien** : il calcule à chaque calcul de la maison ce qu’il ferait et le compare à ce que fait la maison, vu de dehors (l’état du poêle et sa flamme réglée). Réglage `pilote` : `ombre` (par défaut), `flamme` (depuis la 0.5, voir plus bas), `entier` (depuis la 0.7, plus bas aussi) ou `eteint`.
 
 Ses règles reprennent celles des automatisations qui pilotent déjà un vrai poêle (démarrage, modulation, arrêt, vérification de l’arrêt, sécurités et leur veille), pour que les deux se comparent geste par geste. La « température de la maison » est celle du capteur choisi dans Réglages (`pilote_thermometre`, un `sensor` de température : prendre celui que lisent les automatisations du poêle), sinon la moyenne des pièces que Hestia voit (`maison.temperature`). Un capteur choisi qui ne donne rien compte comme une maison assez chaude : pas de démarrage sur une supposition, comme les automatisations. Réglages propose les capteurs de température, ceux dont le nom dit la maison ou une moyenne d’abord, jamais ceux du poêle.
 
@@ -160,15 +161,40 @@ Réglage `pilote` = `flamme`. Le pilote décide comme à l’ombre ; **Hestia n�
 
 La vue ajoute `poele.pilote.commande` : `envois`, `max`, `attente` (la flamme demandée, en attente de vérification), `lache`, `copie`, et `texte`. Les ordres, leur vérification et les lâchers vont au journal du pilote. La mémoire de la flamme (`envoi`, `envois_jour`, `echecs`, `lache`) est gardée avec celle du pilote.
 
+### Le pilote entier (0.7)
+
+Réglage `pilote` = `entier`. Hestia règle la flamme comme en mode « Flamme », et fait aussi ce que font les automatisations du poêle de la maison d’essai : démarrer, arrêter, tenir les sécurités, reprendre la main après un redémarrage (cahier des charges, « Démarrer », « Arrêter », « Les sécurités »). Il faut d’abord couper ces automatisations : deux pilotes en même temps se contrediraient.
+
+`pilot.decide()` dit ce qu’il faut (le passage en boost, l’arrêt, la coupure…) ; `driver.drive()` (Python pur, appelé par `house.py`) en fait des séquences qui survivent aux retards du cloud, une à la fois, et rend les gestes à faire maintenant et dans combien de secondes regarder de nouveau. Le coordinateur fait les gestes dans l’ordre, dans une seule tâche (30 s au plus chacun), et se rappelle à l’heure demandée (`async_call_later`, sous la minute ; au-delà, la minuterie d’une minute suffit).
+
+| Geste | Service |
+| --- | --- |
+| `thermostat` | `climate.<service>` sur le thermostat du poêle (le Versatile Thermostat) : `turn_off` (un verrou), `turn_on`, `set_preset_mode` (hors gel, boost), `set_hvac_mode` (chauffe, à la reprise) |
+| `allumer`, `eteindre` | ceux des `ordres` du profil (Micronova : `climate.set_hvac_mode` `heat` ou `off` sur son thermostat interne) |
+| `reglage` | un réglage des `ordres` du profil avant un démarrage, seulement s’il a changé (`poele.reglages[].a_changer`) |
+| `recharger` | `homeassistant.reload_config_entry` sur l’entrée de l’intégration du poêle |
+| `prise` | `switch.turn_off` sur l’interrupteur de la prise (`poele_prise_switch`, sinon celui de l’appareil de la prise mesurée, sinon celui qui porte son nom) |
+| `notifier` | `persistent_notification.create` quand elle dure, et le service `pilote_notifier` avec `data.tag` = `hestia_poele_<sujet>` et ses boutons (`data.actions`) |
+| `effacer` | `persistent_notification.dismiss`, et `clear_notification` au téléphone quand elle avait des boutons |
+
+Les boutons du téléphone arrivent par l’événement `mobile_app_notification_action` : `HESTIA_POELE_OUI`, `HESTIA_POELE_NON`, `HESTIA_POELE_NETTOYE`, `HESTIA_POELE_COUPER`, `HESTIA_POELE_IGNORER`. La page Poêle a les mêmes (`hestia_heating/repondre`). Une réponse vaut pour le calcul suivant seulement.
+
+**Jamais** : rien tant que Home Assistant démarre ; rien à un poêle recopié, ni à un poêle dont le thermostat est recopié (`remote_homeassistant`), ni ordre ni notification (le labo) ; rien si le profil n’a pas d’`ordres` (`poele.pilotable`) ; jamais plus de 3 démarrages par jour ; chaque geste vers une entité est revérifié juste avant l’envoi (entité présente, pas recopiée).
+
+La vue ajoute `poele.pilote.conduite` : `actif`, `copie`, `pilotable`, `demarrages`, `max_demarrages`, `sequence` (`allumage`, `arret` ou rien), `texte`, `question` (`sujet`, `texte`, `reste_min`, `reponses`) ou rien, `verrou` (`brasier`, `surchauffe`, `alarme`, `muet`) et `injoignable`. Le poêle donne `pilotable`, `allume` (son thermostat interne en chauffe) et `reglages`. Le journal dit ce que Hestia fait, plus ce qu’elle ferait ; un démarrage ou un arrêt qu’elle a demandé y est le sien (« Le poêle s’allume, comme Hestia l’a demandé »). La mémoire du pilote entier (`conduite`) est gardée avec celle du pilote ; seuls le compte des démarrages du jour et le verrou passent un redémarrage, les séquences en cours repartent de l’état du poêle.
+
 ## Le profil de poêle
 
 Un fichier JSON par intégration (`profiles/micronova_agua_iot.json`) :
 
 - `profil`, `nom`, `integration`, `lien` ;
-- `roles` : pour chaque rôle, `domaine` et `fin` de l’identifiant (sans `fin` : l’entité principale du domaine). Rôles lus en 0.1 : `etat`, `alarme`, `fumees`, `air`, `flamme` (avec `min` et `max`), `flamme_reelle`, `ecritures`, `eco_stop`, `thermostat` ;
+- `roles` : pour chaque rôle, `domaine` et `fin` de l’identifiant (sans `fin` : l’entité principale du domaine). Rôles lus en 0.1 : `etat`, `alarme`, `fumees`, `air`, `flamme` (avec `min` et `max`), `flamme_reelle`, `ecritures`, `eco_stop`, `thermostat` ; depuis la 0.7, `ventilation` ;
 - `etats` : les mots du poêle pour chaque état de la brique. Un mot inconnu donne `inconnu`, reste affiché et est marqué « à traduire » ;
 - `alarme_ok` : les textes d’alarme qui veulent dire « pas d’alarme » ;
 - `limites` : `ecritures_par_jour` (la valeur par défaut de l’extension du poêle), `option_ecritures` (l’option de l’extension qui donne le vrai plafond, lue dans son entrée : `max_eeprom_writes_per_day` pour Agua IOT ; le poêle donne alors `ecritures_lues`), `cloud`.
+
+- `debits` (0.6) : les kilos par heure à l’allumage et pour chaque flamme ;
+- `ordres` (0.7) : `allumer` et `eteindre` (`role`, `service`, `donnees`), `allume_si` (`role`, `etat` : ce qui dit que le poêle a pris l’ordre d’allumage), `recharger` (oui si l’intégration peut être rechargée), `reglages` (`nom`, `role`, `attribut` ou l’état, `valeur`, `service`, `donnees`, `reserve`).
 
 Ajouter un poêle, c’est ajouter un fichier : aucun code.
 

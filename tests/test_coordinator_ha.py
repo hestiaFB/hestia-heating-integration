@@ -92,6 +92,39 @@ class SetsTheFlame:
         return entry, c
 
 
+class DrivesTheStove:
+    """« Entier » mode (0.7): the stove off, its thermostat steps up to boost in a mild house; Hestia asks first, then
+    lights the stove when the phone says yes."""
+
+    async def _whole_mode(self, status, stove_climate):
+        hass = self.hass
+        hass.set_state(CoreState.running)
+        self.sent = []
+
+        async def handler(call):
+            self.sent.append((call.domain, call.service, dict(call.data)))
+        for domain, services in (("climate", ("set_hvac_mode", "set_preset_mode", "set_temperature", "set_fan_mode",
+                                               "turn_on", "turn_off")),
+                                 ("switch", ("turn_on", "turn_off")), ("number", ("set_value",)),
+                                 ("homeassistant", ("reload_config_entry",)), ("notify", ("telephones",)),
+                                 ("persistent_notification", ("create", "dismiss"))):
+            for service in services:
+                hass.services.async_register(domain, service, handler)
+        hass.states.async_set(status, "Éteindre", {})
+        hass.states.async_set(stove_climate, "off", {"current_temperature": 19.5, "temperature": 21,
+                                                     "hvac_modes": ["off", "heat"]})
+        hass.states.async_set("climate.vt_poele", "heat", {**hass.states.get("climate.vt_poele").attributes,
+                                                           "preset_mode": "eco"})
+        entry, c = await self._setup()
+        await c.async_set_settings({"pilote": "entier", "pilote_notifier": "notify.telephones"})
+        await hass.async_block_till_done()
+        hass.states.async_set("climate.vt_poele", "heat", {**hass.states.get("climate.vt_poele").attributes,
+                                                           "preset_mode": "boost"})
+        await asyncio.sleep(1.5)
+        await hass.async_block_till_done()
+        return entry, c
+
+
 def entry_of(domain, title, unique_id=None):
     return ConfigEntry(domain=domain, title=title, data={}, options={}, unique_id=unique_id, version=1, minor_version=1,
                        source="user", discovery_keys={}, subentries_data=None)
@@ -239,7 +272,7 @@ class PlanningHestia(SendsThePlanning, HomeAssistantWithAHouse):
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
 
-class MadeUpHouse(SetsTheFlame, HomeAssistantWithAHouse):
+class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
     """The made-up house with its own integrations: rooms, a stove's device, Versatile Thermostat."""
 
     async def test_it_finds_the_house_and_says_it(self):
@@ -384,6 +417,61 @@ class MadeUpHouse(SetsTheFlame, HomeAssistantWithAHouse):
             await c.async_set_settings({"pilote_flamme_basse": "switch.poele"})
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
+    async def test_in_whole_mode_hestia_asks_then_lights_the_stove(self):
+        entry, c = await self._whole_mode("sensor.poele_status", "climate.poele")
+        hass = self.hass
+        p = c.data["poele"]["pilote"]
+        self.assertEqual((p["mode"], p["action"]), ("entier", "demander"))
+        self.assertTrue(c.data["poele"]["pilotable"])
+        # The question, on the phones (with its buttons) and in Home Assistant's notifications.
+        asked = [s for s in self.sent if s[0] == "notify"]
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(asked[0][2]["data"], {"tag": "hestia_poele_saison", "actions": [
+            {"action": "HESTIA_POELE_OUI", "title": "Oui, allumer"}, {"action": "HESTIA_POELE_NON", "title": "Non"}]})
+        self.assertIn(("persistent_notification", "create"), [s[:2] for s in self.sent])
+        self.assertEqual(p["conduite"]["question"]["reponses"], ["oui", "non"])
+        self.assertFalse([s for s in self.sent if s[0] in ("climate", "switch", "number")], "nothing to the stove yet")
+        # « Oui » on the phone: the question goes, the stove's own set point to 25 °C, then the order to light 2 s later.
+        self.sent.clear()
+        hass.bus.async_fire("mobile_app_notification_action", {"action": "HESTIA_POELE_OUI"})
+        await hass.async_block_till_done()
+        self.assertIn(("notify", "telephones", {"message": "clear_notification", "data": {"tag": "hestia_poele_saison"}}),
+                      self.sent)
+        self.assertIn(("climate", "set_temperature", {"entity_id": "climate.poele", "temperature": 25}), self.sent)
+        self.assertNotIn("set_hvac_mode", [s[1] for s in self.sent])
+        await asyncio.sleep(2.5)
+        await hass.async_block_till_done()
+        self.assertEqual([s for s in self.sent if s[1] == "set_hvac_mode"],
+                         [("climate", "set_hvac_mode", {"entity_id": "climate.poele", "hvac_mode": "heat"})])
+        said = [j["texte"] for j in c.data["poele"]["pilote"]["journal"]]
+        self.assertIn("Hestia allume le poêle (vous avez dit oui).", said)
+        self.assertEqual(c.data["poele"]["pilote"]["conduite"]["demarrages"], 1)
+        # The stove takes it: Hestia's start, said so; nothing sent to its thermostat, nor to the flame.
+        hass.states.async_set("climate.poele", "heat", {"current_temperature": 19.5, "temperature": 25})
+        hass.states.async_set("sensor.poele_status", "Allumage", {})
+        await asyncio.sleep(1.5)
+        await hass.async_block_till_done()
+        said = [j["texte"] for j in c.data["poele"]["pilote"]["journal"]]
+        self.assertIn("Le poêle s’allume, comme Hestia l’a demandé.", said)
+        self.assertNotIn("La maison a démarré le poêle.", said)
+        self.assertFalse([s for s in self.sent if s[2].get("entity_id") == "climate.vt_poele"])
+        self.assertIsNone(c.data["poele"]["pilote"]["conduite"]["sequence"])
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"pilote_notifier": "phone"})
+        with self.assertRaises(ValueError):
+            await c.async_answer("peut-etre")
+        self.assertTrue(await hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_whole_mode_survives_a_restart_without_its_sequences(self):
+        entry, c = await self._whole_mode("sensor.poele_status", "climate.poele")
+        self.assertIsNotNone(c.pilot_memory["conduite"].get("question"))
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+        await self.hass.async_block_till_done()
+        entry, c = await self._setup()
+        self.assertNotIn("question", c.pilot_memory["conduite"])
+        self.assertEqual(c.pilot_memory["conduite"]["demarrages"], 0)
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
     async def test_a_low_flame_switch_asks_for_flame_one(self):
         self.hass.states.async_set("input_boolean.flamme_minimum", "off", {"friendly_name": "Flamme minimum"})
         entry, c = await self._setup()
@@ -508,7 +596,7 @@ class MadeUpHouse(SetsTheFlame, HomeAssistantWithAHouse):
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
 
-class CopiedHouse(SendsThePlanning, SetsTheFlame, HomeAssistantWithAHouse):
+class CopiedHouse(SendsThePlanning, SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
     """The same house copied by Remote Home Assistant, as in the lab: no device, no room, no integration of its own.
     The thermostats say they are Versatile Thermostats by their attributes, the stove by the ids of its entities."""
 
@@ -545,6 +633,18 @@ class CopiedHouse(SendsThePlanning, SetsTheFlame, HomeAssistantWithAHouse):
         self.assertEqual(self.sent, [])
         self.assertTrue(c.data["poele"]["pilote"]["commande"]["copie"])
         self.assertTrue(c.found.stove["copie"])
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_a_copied_stove_is_never_driven(self):
+        """The lab copies the home: the whole pilot sends nothing, not even a notice."""
+        entry, c = await self._whole_mode("sensor.essai_status", "climate.essai")
+        self.hass.bus.async_fire("mobile_app_notification_action", {"action": "HESTIA_POELE_OUI"})
+        await asyncio.sleep(2.5)
+        await self.hass.async_block_till_done()
+        self.assertEqual(self.sent, [])
+        conduite = c.data["poele"]["pilote"]["conduite"]
+        self.assertTrue(conduite["copie"])
+        self.assertEqual(conduite["texte"], "Ce poêle est recopié d’une autre maison : Hestia ne lui envoie rien.")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_it_finds_the_house_and_says_it(self):

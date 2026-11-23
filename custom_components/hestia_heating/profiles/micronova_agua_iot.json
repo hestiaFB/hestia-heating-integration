@@ -12,7 +12,8 @@
     "flamme": {"domaine": "number", "fin": "_power", "min": 1, "max": 5},
     "flamme_reelle": {"domaine": "sensor", "fin": "_real_power"},
     "ecritures": {"domaine": "sensor", "fin": "_eeprom_writes_today"},
-    "eco_stop": {"domaine": "switch", "fin": "_eco_stop"}
+    "eco_stop": {"domaine": "switch", "fin": "_eco_stop"},
+    "ventilation": {"domaine": "climate", "fin": "_vent_front"}
   },
   "etats": {
     "eteint": ["Off", "Éteindre", "Stand-by", "Standby"],
@@ -24,5 +25,18 @@
   },
   "alarme_ok": ["OK", "0", "None", "Aucune"],
   "limites": {"ecritures_par_jour": 20, "option_ecritures": "max_eeprom_writes_per_day", "cloud": true},
-  "debits": {"allumage": 1.2, "flammes": [0.55, 0.81, 1.07, 1.34, 1.60]}
+  "debits": {"allumage": 1.2, "flammes": [0.55, 0.81, 1.07, 1.34, 1.60]},
+  "ordres": {
+    "allumer": {"role": "thermostat", "service": "climate.set_hvac_mode", "donnees": {"hvac_mode": "heat"}},
+    "eteindre": {"role": "thermostat", "service": "climate.set_hvac_mode", "donnees": {"hvac_mode": "off"}},
+    "allume_si": {"role": "thermostat", "etat": "heat"},
+    "recharger": true,
+    "reglages": [
+      {"nom": "Consigne interne à 25 °C", "role": "thermostat", "attribut": "temperature", "valeur": 25,
+       "service": "climate.set_temperature", "donnees": {"temperature": 25}},
+      {"nom": "ECO Stop", "role": "eco_stop", "valeur": "on", "service": "switch.turn_on"},
+      {"nom": "Ventilation en AUTO", "role": "ventilation", "attribut": "fan_mode", "valeur": "AUTO",
+       "service": "climate.set_fan_mode", "donnees": {"fan_mode": "AUTO"}, "reserve": 6}
+    ]
+  }
 }

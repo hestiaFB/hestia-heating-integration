@@ -13,7 +13,9 @@ VIEW_VERSION = 1
 CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning")
 SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote",
                 "pilote_thermometre", "planning_autorises", "pilote_flamme_basse", "brasier_kg", "granules_prix_sac",
-                "granules_poids_sac")
+                "granules_poids_sac", "pilote_notifier", "poele_prise_switch", "couper_prise")
+# The notify services that are not a phone or a group of phones.
+NOT_PHONES = ("send_message", "persistent_notification")
 # The planning's parts only the tab needs (the plannings, the editor, Scheduler, the journal).
 PLANNING_TAB_ONLY = ("hestia", "thermostats", "scheduler", "journal")
 
@@ -24,7 +26,7 @@ def _coordinator(hass):
 
 
 def async_setup_websocket(hass) -> None:
-    for command in (ws_view, ws_subscribe, ws_day, ws_settings, ws_set_settings, ws_fire_pot_cleaned):
+    for command in (ws_view, ws_subscribe, ws_day, ws_settings, ws_set_settings, ws_fire_pot_cleaned, ws_answer):
         websocket_api.async_register_command(hass, command)
 
 
@@ -128,6 +130,11 @@ def ws_settings(hass, connection, msg):
             "prise": found.plug,
             "thermometres": [{"id": t["entity_id"], "nom": t["nom"], "maison": t["maison"]} for t in found.thermometers],
             "interrupteurs": [{"id": t["entity_id"], "nom": t["nom"]} for t in found.switches],
+            "notifieurs": sorted(f"notify.{name}" for name in c.hass.services.async_services().get("notify", {})
+                                 if name not in NOT_PHONES),
+            "coupures": [{"id": s["entity_id"], "nom": s["nom"], "poele": s["poele"]} for s in found.plug_switches],
+            "coupure": found.plug_switch,
+            "pilotable": bool((c.data.get("poele") or {}).get("pilotable")),
             "poele_copie": bool((found.stove or {}).get("copie")),
             "meteo": {k: c.weather.get(k) for k in ("etat", "lieu", "nom", "lieux")},
         },
@@ -162,4 +169,21 @@ async def ws_fire_pot_cleaned(hass, connection, msg):
         connection.send_error(msg["id"], "no_stove", "Pas de poêle trouvé.")
         return
     await c.async_fire_pot_cleaned()
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "hestia_heating/repondre", vol.Required("reponse"): str})
+@websocket_api.async_response
+async def ws_answer(hass, connection, msg):
+    """An answer to the whole pilot from the Poêle page (Oui, Non, Couper la prise, Ignorer, J'ai nettoyé), as on the
+    phone."""
+    c = _coordinator(hass)
+    if c is None:
+        connection.send_error(msg["id"], "not_ready", "Hestia Chauffage n'est pas activée.")
+        return
+    try:
+        await c.async_answer(msg["reponse"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
     connection.send_result(msg["id"], {"ok": True})

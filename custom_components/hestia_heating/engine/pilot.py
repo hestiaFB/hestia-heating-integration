@@ -1,14 +1,16 @@
 """The stove's pilot: what Hestia would do with the stove, next to what the house does. Plain Python: it says what to
 send, the coordinator sends it, or not (docs/technique.md, « Le pilote du poêle »). « À l'ombre » (0.4) it sends
 nothing. « Flamme » (0.5, an option the user switches on) it sets the stove's flame, and only that: starting,
-stopping and the safeties stay with the house's own automations. Its rules follow the stove automations that already run a real house (start manager, modulation, stop,
+stopping and the safeties stay with the house's own automations. « Entier » (0.7, an option too) it also starts and
+stops the stove and keeps its safeties: engine/driver.py turns these decisions into the gestures. Its rules follow the stove automations that already run a real house (start manager, modulation, stop,
 stop check, safeties and their watch), so that the two can be compared gesture by gesture.
 
 The thermostat of the stove decides how much to heat (its demand, in %); the pilot turns it into the stove's gestures:
 
 - Start: when the stove's thermostat steps up to boost (or turns on to heat while in boost) and the stove is off. A
   step, not a state: the stove never relights on its own. Refused when the thermostat is off, the stove's room is
-  over 28 °C, the stove is in alarm or silent, or the house is already at the thermostat's set point. In the mild
+  over 28 °C, the fire pot must be cleaned, the stove is in alarm or silent, or the house is already at the
+  thermostat's set point. In the mild
   season (the house at 18 °C or more, until it falls under 18 °C; then allowed up to 19 °C) it asks first.
 - Flame, in every burning state: the demand gives the flame (85 % → 5, 65 % → 4, 45 % → 3, else 2); the stove's
   current flame holds while it stays within the steps of the demand ± 7 points. Flame 1 when the room, carried 15
@@ -50,7 +52,7 @@ GAP_C = 1.0                     # the house must be this much under the set poin
 MILD_ON_C, MILD_OFF_C = 18.0, 19.0
 STOP_SMOKE_C, STOP_PLUG_W, HOT_PLUG_W = 60, 70, 60
 BURNING = ("allumage", "chauffe", "nettoyage")
-MODES = ("ombre", "flamme", "eteint")
+MODES = ("ombre", "flamme", "entier", "eteint")
 # « Flamme » mode: an order is checked after CONFIRM; one not followed is sent again after RESEND at the earliest;
 # GAP between two orders; HESTIA_WRITES orders a day at most; FAILS orders not followed and Hestia lets go for the day.
 CONFIRM, RESEND, GAP = timedelta(minutes=5), timedelta(minutes=10), timedelta(minutes=3)
@@ -155,6 +157,8 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     off_since = _held(mem, "arret_a", mode == "off" and bool(mem.get("arret_vrai")), None, now)
     wants_off = preset == "frost" or bool(off_since and now - off_since >= OFF_HELD)
     overheat = room is not None and room > OVERHEAT_C
+    # The fire pot, counted by Hestia (engine/granules.py): full, the next start waits for « J'ai nettoyé ».
+    fire_pot = (stove.get("conso") or {}).get("brasier") or {}
     warm = warm_enough(house_c, target_c, preset)
     warm_since = _held(mem, "assez_chaud", warm, None, now)
     mild = not (house_c is not None and house_c < (MILD_OFF_C if not mem.get("saison_douce", True) else MILD_ON_C))
@@ -173,6 +177,9 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
         elif overheat:
             refusal = (f"la pièce du poêle est à {degrees(room)}, au-dessus de {degrees(OVERHEAT_C)} : il éteindrait "
                        "son thermostat")
+        elif fire_pot.get("a_nettoyer"):
+            refusal = (f"le brasier est à nettoyer ({number(fire_pot.get('kg') or 0, 1)} kg brûlés depuis le dernier "
+                       "nettoyage) : il éteindrait son thermostat")
         elif alarm:
             refusal = (f"le poêle est en alarme ({stove.get('alarme_texte') or 'alarme'}) : il éteindrait son "
                        "thermostat")
@@ -212,8 +219,10 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
                 else " Sa prise est au repos.")
         decision = _decision("alerter", "Poêle injoignable", "Le poêle ne répond plus depuis 15 minutes : le pilote "
                              "vous préviendrait." + tail, None, stove)
-    # 3. Stop: the thermostat says hors gel or is off, or the house is warm enough.
-    elif burning and (wants_off or (warm and warm_since and now - warm_since >= HELD)):
+    # 3. Stop: the thermostat says hors gel or is off, or the house is warm enough. A stove that burnt at the last word
+    #    it said counts as burning (the house's stop waits 2 minutes for its state, then sends anyway).
+    elif (burning or (silent and known_before in BURNING)) and (
+            wants_off or (warm and warm_since and now - warm_since >= HELD)):
         why = ("Le thermostat est passé hors gel." if preset == "frost" else "Le thermostat est éteint." if wants_off
                else f"Assez chaud : {house_text} pour {degrees(target_c)} visés. Le pilote passerait le thermostat "
                     "hors gel.")

@@ -1,8 +1,9 @@
 """Stove profiles: one data file per stove integration (profiles/*.json), no code.
 
 A profile says where each role sits among the stove's entities (by domain and by the end of the entity id, or of its
-unique id when the entity was renamed) and how to translate the stove's words into the brick's states. Version 0.1 reads
-only; the writing roles (start, flame, quota) are described already for the pilot of 0.4.
+unique id when the entity was renamed) and how to translate the stove's words into the brick's states. Since 0.7 it
+also says how the whole pilot speaks to the stove (`ordres`): the service that lights it and the one that stops it,
+what says it took the order, whether its integration can be reloaded, and the settings set before each start.
 """
 from __future__ import annotations
 
@@ -29,6 +30,10 @@ class Profile:
     # Pellets burnt per hour: {"allumage": kg/h, "flammes": [kg/h at flame 1, 2…]} (orders of magnitude, scaled by a
     # factor learnt on the bags).
     rates: dict = field(default_factory=dict)
+    # How the whole pilot speaks to the stove (0.7): {"allumer": {role, service, donnees}, "eteindre": {…},
+    # "allume_si": {role, etat}, "recharger": bool, "reglages": [{nom, role, attribut?, valeur, service, donnees?,
+    # reserve?}]}. Empty: the stove cannot be driven whole.
+    orders: dict = field(default_factory=dict)
 
     def translate(self, text: str | None) -> tuple[str, bool]:
         """The brick's state for the stove's text, and whether the profile knows it. An unknown text is never guessed:
@@ -52,7 +57,7 @@ def parse(data: dict) -> Profile:
     return Profile(id=data["profil"], name=data.get("nom") or data["profil"], integration=data["integration"],
                    roles=dict(data.get("roles") or {}), states={k: list(v) for k, v in (data.get("etats") or {}).items()},
                    alarm_ok=tuple(data.get("alarme_ok") or ()), limits=dict(data.get("limites") or {}),
-                   link=data.get("lien"), rates=dict(data.get("debits") or {}))
+                   link=data.get("lien"), rates=dict(data.get("debits") or {}), orders=dict(data.get("ordres") or {}))
 
 
 def load_all(folder: Path) -> list[Profile]:
