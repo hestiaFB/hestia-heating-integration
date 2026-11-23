@@ -208,11 +208,12 @@ class HestiaHeatingCard extends LitElement {
   if(this._config.court)return html`<div class="short" role=${tap?'button':nothing} tabindex=${tap?0:nothing} aria-label=${tap?what:nothing}
     @keydown=${tap?(e:KeyboardEvent)=>this._key(e,r):nothing}>
     <div class="temp">${r.temperature!=null?num(r.temperature):'—'}<sup>°C</sup></div><div><b>${name}</b><span class="nw-say">${r.raison??(r.consigne!=null?`Consigne ${deg(r.consigne)}`:'')}</span></div>${this._chip(r.badge)}</div>`;
+  // The thermostat's demand only when it asks for heat: at 0 % the band said nothing more than the sentence under it.
   const d=this._day,slope=r.pente!=null&&Math.abs(r.pente)>=.05?`${r.pente>0?'↗':'↘'} ${r.pente>0?'+':''}${num(r.pente)} °C par heure`:null;
   return html`<div class="head"><h2 class="nw-title">${name}</h2>${this._chip(r.badge)}${this._info('pieces/'+r.id,'Ouvrir la page de la pièce')}</div>
    <div class="reading"><div role=${tap?'button':nothing} tabindex=${tap?0:nothing} aria-label=${tap?what:nothing} @keydown=${tap?(e:KeyboardEvent)=>this._key(e,r):nothing}><div class="temp">${r.temperature!=null?num(r.temperature):'—'}<sup>°C</sup></div>${slope?html`<div class="slope">${slope}</div>`:nothing}</div>
     ${r.consigne!=null?html`<div class="target"><span class="nw-label">Consigne</span><b>${deg(r.consigne)}</b><span class="nw-say">${r.planning??''}${r.prochain?` jusqu’à ${when(r.prochain.a)}`:''}</span></div>`:nothing}</div>
-   ${r.demande_pct!=null&&!r.poele?html`<div class="nw-panel"><div class="flame-row"><span class="nw-label">Demande du thermostat</span><b>${r.demande_pct} %</b></div>
+   ${r.demande_pct&&!r.poele?html`<div class="nw-panel"><div class="flame-row"><span class="nw-label">Demande du thermostat</span><b>${r.demande_pct} %</b></div>
     <div class="bar"><i style=${`width:${r.demande_pct}%`}></i></div><div class="nw-say">${r.raison??''}</div></div>`:r.raison?html`<div class="nw-say">${r.raison}</div>`:nothing}
    ${d&&d.series.temperature?.length?this._roomDay(r,d):nothing}
    ${this._modes(r)}`;
