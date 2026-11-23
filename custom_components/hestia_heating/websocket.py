@@ -11,7 +11,8 @@ from .const import DOMAIN
 VIEW_VERSION = 1
 # What the cards read: the extensions, the schedules' details and the « à régler » stay out of their view.
 CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning")
-SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning")
+SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote",
+                "pilote_thermometre", "planning_autorises")
 # The planning's parts only the tab needs (the plannings, the editor, Scheduler, the journal).
 PLANNING_TAB_ONLY = ("hestia", "thermostats", "scheduler", "journal")
 
@@ -30,6 +31,10 @@ def card_view(data: dict) -> dict:
     view = {k: data[k] for k in CARD_KEYS if k in data}
     if view.get("planning"):
         view["planning"] = {k: v for k, v in view["planning"].items() if k not in PLANNING_TAB_ONLY}
+    if (view.get("poele") or {}).get("pilote"):
+        # The pilot's journal is the tab's: the cards say only what Hestia would do now.
+        view["poele"] = {**view["poele"], "pilote": {k: v for k, v in view["poele"]["pilote"].items()
+                                                     if k not in ("journal", "accord_semaine")}}
     return view
 
 
@@ -120,6 +125,7 @@ def ws_settings(hass, connection, msg):
             "poele_thermostat": (c.data.get("poele") or {}).get("thermostat"),
             "prises": [{"id": p["entity_id"], "nom": p["nom"], "poele": p["poele"]} for p in found.plugs],
             "prise": found.plug,
+            "thermometres": [{"id": t["entity_id"], "nom": t["nom"], "maison": t["maison"]} for t in found.thermometers],
             "meteo": {k: c.weather.get(k) for k in ("etat", "lieu", "nom", "lieux")},
         },
     })

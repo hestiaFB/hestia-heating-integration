@@ -46,7 +46,7 @@ class SendsThePlanning:
     """A planning Hestia whose thermostat went to confort two minutes ago (éco for three hours before); the last change
     dealt with put half an hour back, so that this one is due."""
 
-    async def _planning(self, thermostat, actif=True):
+    async def _planning(self, thermostat, actif=True, allowed=True):
         hass = self.hass
         hass.set_state(CoreState.running)
         self.sent = []
@@ -60,7 +60,7 @@ class SendsThePlanning:
         week = eco_between(now - timedelta(hours=3), now - timedelta(minutes=2))
         model = {"plannings": {"essai": {"nom": "Essai", "actif": actif, "jours": "chaque", "reste": "confort",
                                          "plages": week, "thermostats": [thermostat]}}}
-        await c.async_set_settings({"planning": model})
+        await c.async_set_settings({"planning": model, "planning_autorises": [thermostat] if allowed else []})
         await hass.async_block_till_done()
         self.assertEqual(self.sent, [], "saving the planning sends nothing at once")
         c.applied[thermostat] = {"a": (now - timedelta(minutes=30)).isoformat()}
@@ -178,6 +178,19 @@ class PlanningHestia(SendsThePlanning, HomeAssistantWithAHouse):
         self.assertEqual(c.data["planning"]["journal"][-1]["texte"], "en essai, rien envoyé")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
+    async def test_active_it_sends_nothing_to_a_thermostat_not_allowed(self):
+        """The lock of Réglages, « Ce que Hestia peut régler »: none at first, so an « Actif » planning sends nothing."""
+        entry, c = await self._planning("climate.vt_sejour", allowed=False)
+        self.assertEqual(self.sent, [])
+        self.assertEqual(c.journal[-1]["statut"], "verrou")
+        self.assertEqual(c.data["planning"]["journal"][-1]["texte"], "pas autorisé dans Réglages, rien envoyé")
+        self.assertIn("Hestia n’a pas le droit de régler Radiateur séjour", [t["titre"] for t in c.data["a_regler"]])
+        self.assertEqual(c.data["planning"]["hestia"][0]["verrouilles"], [{"id": "climate.vt_sejour", "nom": "Radiateur séjour"}])
+        self.assertEqual(c.settings["planning_autorises"], [])
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"planning_autorises": ["switch.radiateur"]})
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
     async def test_a_thermostat_switched_off_stays_off(self):
         attrs = dict(self.hass.states.get("climate.vt_sejour").attributes)
         self.hass.states.async_set("climate.vt_sejour", "off", attrs)
@@ -229,7 +242,7 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         self.assertEqual(self.state("binary_sensor.hestia_heating_piece_bureau_en_chauffe"), "on")
         unique = {e.unique_id for e in er.async_entries_for_config_entry(er.async_get(self.hass), entry.entry_id)}
         self.assertIn(f"{entry.entry_id}_piece_bureau_en_chauffe", unique)
-        self.assertEqual(self.calls, [], "Hestia Chauffage 0.1 never calls a service")
+        self.assertEqual(self.calls, [], "nothing is sent while the planning Hestia does not command")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_a_change_of_a_thermostat_is_followed(self):
@@ -280,6 +293,96 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         self.assertNotIn("extensions", view)
         self.assertNotIn("thermostats", view["planning"])
         self.assertNotIn("scheduler", view["planning"])
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_stove_pilot_in_the_shade_only_watches(self):
+        """0.4: the pilot says what Hestia would do and what the house did; it never calls a service."""
+        entry, c = await self._setup()
+        self.assertEqual(c.data["poele"]["pilote"]["action"], "garder")
+        hass = self.hass
+
+        async def change(entity_id, state, **attrs):
+            hass.states.async_set(entity_id, state, {**hass.states.get(entity_id).attributes, **attrs})
+            await asyncio.sleep(1.5)
+            await hass.async_block_till_done()
+        await change("climate.vt_poele", "heat", preset_mode="frost")
+        self.assertEqual(c.data["poele"]["pilote"]["action"], "arreter")
+        await change("sensor.poele_status", "Éteindre")
+        await change("climate.vt_poele", "heat", preset_mode="boost")
+        # The house is at 20 °C, the mild season: Hestia would ask before starting the stove.
+        self.assertEqual(c.data["poele"]["pilote"]["action"], "demander")
+        said = [(j["qui"], j["texte"], j["accord"]) for j in c.data["poele"]["pilote"]["journal"]]
+        self.assertEqual(said, [("hestia", "Hestia arrêterait le poêle.", None), ("maison", "La maison a éteint le poêle.", True),
+                                ("hestia", "Hestia demanderait votre accord pour démarrer le poêle (saison douce).", None)])
+        self.assertEqual(c.data["poele"]["pilote"]["accord_jour"], {"oui": 1, "sur": 1})
+        self.assertTrue(c.pilot_memory["saison_douce"])
+        self.assertNotIn("journal", card_view(c.data)["poele"]["pilote"])
+        self.assertEqual(self.calls, [], "the pilot in the shade never calls a service")
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"pilote": "actif"})
+        await c.async_set_settings({"pilote": "eteint"})
+        await hass.async_block_till_done()
+        self.assertEqual(c.data["poele"]["pilote"], {"mode": "eteint"})
+        self.assertTrue(await hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_pilot_reads_the_house_on_the_thermometer_chosen(self):
+        """The pilot weighs the house on the automations' own sensor once chosen, else on the rooms' average."""
+        hass = self.hass
+        hass.states.async_set("sensor.temperature_moyenne_maison", "17.2", {"device_class": "temperature",
+                              "unit_of_measurement": "°C", "friendly_name": "Température moyenne maison"})
+        hass.states.async_set("sensor.cave", "12", {"device_class": "temperature", "unit_of_measurement": "°C",
+                                                    "friendly_name": "Cave"})
+        # The stove's own temperatures are never offered.
+        hass.states.async_set("sensor.poele_smoke_temperature", "140", {"device_class": "temperature"})
+        entry, c = await self._setup()
+        offered = [t["entity_id"] for t in c.found.thermometers]
+        self.assertEqual(offered[:2], ["sensor.temperature_moyenne_maison", "sensor.cave"])
+        self.assertNotIn("sensor.poele_smoke_temperature", offered)
+        average = c.data["poele"]["pilote"]["maison_c"]
+        self.assertEqual(average, c.data["maison"]["temperature"])
+        self.assertIsNone(c.data["poele"]["pilote"]["thermometre"])
+        await c.async_set_settings({"pilote_thermometre": "sensor.temperature_moyenne_maison"})
+        await hass.async_block_till_done()
+        p = c.data["poele"]["pilote"]
+        self.assertEqual((p["maison_c"], p["thermometre"], p["thermometre_lu"]), (17.2, "Température moyenne maison", True))
+        # Listened to: a change of the sensor is weighed at once.
+        hass.states.async_set("sensor.temperature_moyenne_maison", "unavailable", {"device_class": "temperature",
+                              "friendly_name": "Température moyenne maison"})
+        await asyncio.sleep(1.5)
+        await hass.async_block_till_done()
+        p = c.data["poele"]["pilote"]
+        self.assertEqual((p["maison_c"], p["thermometre_lu"]), (None, False))
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"pilote_thermometre": "climate.vt_poele"})
+        await c.async_set_settings({"pilote_thermometre": None})
+        await hass.async_block_till_done()
+        self.assertEqual(c.data["poele"]["pilote"]["maison_c"], average)
+        self.assertEqual(self.calls, [])
+        self.assertTrue(await hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_pilot_keeps_its_journal_a_week_through_a_restart(self):
+        """The pilot's journal of the last 7 days is kept in the planning's state: a restart loses nothing."""
+        from homeassistant.helpers.storage import Store
+        from custom_components.hestia_heating.const import PLANNING_STATE_KEY
+        today = dt_util.now().date()
+        day = lambda n: (today - timedelta(days=n)).isoformat()  # noqa: E731
+        old = [
+            {"jour": day(8), "heure": "07:00", "qui": "maison", "texte": "La maison a démarré le poêle.", "accord": False},
+            {"jour": day(2), "heure": "07:00", "qui": "hestia", "texte": "Hestia démarrerait le poêle.", "accord": None},
+            {"jour": day(2), "heure": "07:01", "qui": "maison", "texte": "La maison a démarré le poêle.", "accord": True},
+            {"jour": day(1), "heure": "21:00", "qui": "hestia", "texte": "Hestia garderait la flamme 3.", "accord": None},
+            {"jour": day(1), "heure": "21:05", "qui": "maison", "texte": "La maison a mis la flamme 2.", "accord": False},
+        ]
+        await Store(self.hass, 1, PLANNING_STATE_KEY).async_save({"thermostats": {}, "pilote": {}, "journal_pilote": old})
+        entry, c = await self._setup()
+        week = c.data["poele"]["pilote"]["accord_semaine"]
+        self.assertEqual((week["oui"], week["sur"], week["depuis"]), (1, 2, day(2)), "the 8-day-old gesture is dropped")
+        self.assertEqual(week["ecarts"], [{"jour": day(1), "heure": "21:05", "texte": "La maison a mis la flamme 2.",
+                                           "hestia": "Hestia garderait la flamme 3."}])
+        self.assertEqual(c.data["poele"]["pilote"]["accord_jour"], {"oui": 0, "sur": 0})
+        self.assertTrue(all(j["jour"] == today.isoformat() for j in c.data["poele"]["pilote"]["journal"]))
+        self.assertEqual(len(c.pilot_journal), 4 + sum(1 for j in c.pilot_journal if j["jour"] == today.isoformat()))
+        self.assertNotIn("accord_semaine", card_view(c.data)["poele"]["pilote"])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_a_setting_changes_what_is_read(self):
@@ -340,11 +443,13 @@ class CopiedHouse(SendsThePlanning, HomeAssistantWithAHouse):
         self.assertEqual(ids, {"climate.vt_poele", "climate.vt_sejour", "climate.vt_bureau"})
         self.assertEqual({s["id"]: s["type"] for s in d["sources"]}["climate.vt_poele"], "poele")
         self.assertEqual(len(d["pieces"]), 3)
+        # The card's mode buttons stay greyed out: a press would reach the other house.
+        self.assertTrue(all(r["recopie"] for r in d["pieces"]))
         self.assertTrue(d["maison"]["titre"].startswith("Le poêle chauffe, flamme 3."), d["maison"]["titre"])
         vt = next(e for e in d["extensions"] if e["id"] == "versatile_thermostat")
         self.assertEqual((vt["trouve"], vt["installee"]), (3, True))
         self.assertEqual(d["granules"]["jours"], 50)
-        self.assertEqual(self.calls, [], "Hestia Chauffage 0.1 never calls a service")
+        self.assertEqual(self.calls, [], "nothing is sent while the planning Hestia does not command")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_a_change_of_a_thermostat_is_followed(self):

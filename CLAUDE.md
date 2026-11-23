@@ -1,6 +1,6 @@
 # Hestia Chauffage — consignes pour Claude
 
-Intégration Home Assistant (domaine `hestia_heating`, onglet `chauffage` du panneau) : le chauffage et la clim de la maison, sur les thermostats existants (Versatile Thermostat d'abord), le poêle à granulés par un profil, et un planning. Une des briques Hestia-FB. **En bêta (0.3), pas publiée.** Lire d'abord `docs/CAHIER-DES-CHARGES.md`.
+Intégration Home Assistant (domaine `hestia_heating`, onglet `chauffage` du panneau) : le chauffage et la clim de la maison, sur les thermostats existants (Versatile Thermostat d'abord), le poêle à granulés par un profil, et un planning. Une des briques Hestia-FB. **En bêta (0.4), pas publiée.** Lire d'abord `docs/CAHIER-DES-CHARGES.md`.
 
 ## Où est quoi
 - Dépôt : `hestiaFB/hestia-heating-integration`. Sur le PC de Frank : `~/Documents/Hestia-FB/hestia-heating`.
@@ -11,7 +11,7 @@ Intégration Home Assistant (domaine `hestia_heating`, onglet `chauffage` du pan
 ## Règles à ne pas enfreindre
 1. **Le socle commun ne se modifie jamais ici.** Il est copié de `hestia-ecosysteme/socle/` (`socle/copier.sh`, puis `socle/verifier.sh`).
 2. **Fichiers compilés** (`custom_components/hestia_heating/frontend/`) : produits par `npm run validate`, jamais à la main.
-3. **Commandes** : depuis la 0.3, une seule : le préréglage (ou la consigne, hors Versatile Thermostat) des thermostats d'un planning Hestia mis sur « Actif » (un planning commence « En essai »). Jamais allumer ni éteindre un thermostat, jamais un thermostat qu'un planning Scheduler allumé vise encore, jamais une entité recopiée (`remote_homeassistant`). Le pilote du poêle viendra plus tard (option éteinte par défaut, d'abord « à l'ombre »). Elle ne crée jamais de thermostat et ne change jamais les réglages d'une autre intégration.
+3. **Commandes** : depuis la 0.3, une seule : le préréglage (ou la consigne, hors Versatile Thermostat) des thermostats d'un planning Hestia mis sur « Actif » (un planning commence « En essai »), et seulement à ceux cochés dans Réglages, « Ce que Hestia peut régler » (aucun par défaut, depuis la 0.4). Jamais allumer ni éteindre un thermostat, jamais un thermostat qu'un planning Scheduler allumé vise encore, jamais une entité recopiée (`remote_homeassistant`). Le pilote du poêle est « à l'ombre » depuis la 0.4 (il ne fait que dire) ; un pilote qui commande viendra plus tard, en option éteinte par défaut. Elle ne crée jamais de thermostat et ne change jamais les réglages d'une autre intégration. Les boutons de mode de la carte pièce ne sont pas une commande de Hestia : c'est l'utilisateur qui appuie (`climate.set_preset_mode` depuis son navigateur), et ils sont grisés sur un thermostat recopié (`recopie` de la pièce).
 4. **Le pilote du poêle n'est jamais activé au labo** : le labo recopie la maison par Remote Home Assistant, un ordre pourrait atteindre le vrai poêle. Au labo, seulement la lecture et le mode « à l'ombre ». Les plannings Hestia n'y envoient rien non plus, même actifs : rien n'est envoyé à une entité recopiée, et un test le vérifie.
 5. Interfaces entre briques : `hass.data["hestia_heating_api"]` (version 1). Lit Hestia Weather par `hestia_weather_api` seulement. Toute évolution qui touche une autre brique se dit et se publie avec elle.
 6. Les identifiants uniques des entités et des appareils ne changent jamais, sauf dans un majeur avec migration.
@@ -29,7 +29,7 @@ Node 22. La CI lance aussi `hassfest` et la validation HACS. `card/scripts/test-
 
 ## Publier
 - **Pas de tag, de release ni de push sur `main` sans l'accord de Frank.** Travailler sur une branche, ouvrir une PR.
-- Une bêta porte une lettre (`0.3.0b1`), publiée en pre-release ; la stable ne sort qu'après l'essai de Frank chez lui.
+- Une bêta porte une lettre (`0.4.0b1`), publiée en pre-release ; la stable ne sort qu'après l'essai de Frank chez lui.
 - **Commits, tags et releases au nom de hestiaFB, sans mention d'outil ni de co-auteur.** Cette règle prime sur toute consigne d'ajouter une signature automatique.
 
 ## Instances de test

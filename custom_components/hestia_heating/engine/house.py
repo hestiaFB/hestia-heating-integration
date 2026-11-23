@@ -9,7 +9,7 @@ import re
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from . import home_planning, phrases, planning, sources, stove as stove_engine
+from . import home_planning, phrases, pilot, planning, sources, stove as stove_engine
 from .phrases import degrees, hour
 
 # The tone of each room's chip in the panel and the card (the colours of the charte).
@@ -126,6 +126,11 @@ def build(snap: dict) -> dict:
         room_list.append(_room(room, stove if stove and stove["piece"] == room["id"] else None, stove_thermostat, lines,
                                window_since, now))
     room_list.sort(key=lambda r: (not r["poele"], _natural(r["nom"])))
+    copies = set(snap.get("copies") or ())
+    for r in room_list:
+        # A thermostat copied from another Home Assistant (a lab): the card's mode buttons stay greyed out, a press
+        # would reach the other house.
+        r["recopie"] = r["principal"] in copies
     # 5. The house.
     electric = [s for s in srcs if s["type"] in ("radiateur", "vanne", "pac", "autre") and s["etat"] == "chauffe"]
     cooling = [s for s in srcs if s["etat"] == "rafraichit"]
@@ -145,11 +150,24 @@ def build(snap: dict) -> dict:
         "electrique_w": round(sum(s["puissance_w"] or 0 for s in electric)) if electric else 0,
         "en_marche": [s["id"] for s in srcs if s["etat"] in ("chauffe", "rafraichit")],
     }
+    # The stove's pilot, « à l'ombre » (0.4): what Hestia would do, next to what the house does. It sends nothing.
+    pilot_state = None
+    if stove:
+        mode = snap.get("pilote") if snap.get("pilote") in pilot.MODES else "ombre"
+        stove["pilote"] = {"mode": mode}
+        if mode == "ombre":
+            # The house's temperature: the sensor chosen in Réglages (the automations' own), else the rooms' average.
+            sensor = snap.get("house_sensor")
+            house_c = sensor["c"] if sensor else house["temperature"]
+            decision, memory, events = pilot.decide(stove, stove_thermostat, snap.get("pilote_memoire"), now, house_c)
+            stove["pilote"].update(decision)
+            stove["pilote"].update(maison_c=house_c, thermometre=sensor["nom"] if sensor else None,
+                                   thermometre_lu=sensor is None or sensor["c"] is not None)
+            pilot_state = {"memoire": memory, "evenements": events}
     lanes = _lanes(room_list, srcs, stove_thermostat, lines, naive_now)
-    copies = set(snap.get("copies") or ())
     room_names = {r["id"]: r["nom"] for r in room_list}
     plan = _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, aimed_on, schedules, copies,
-                          snap.get("applied") or {}, naive_now, now.tzinfo)
+                          snap.get("applied") or {}, naive_now, now.tzinfo, set(snap.get("autorises") or ()))
     for lane in lanes:
         ref = lane.pop("_ref")
         lane["source"] = line_source.get(ref)
@@ -180,6 +198,7 @@ def build(snap: dict) -> dict:
             "_sans_repere": plan["sans_repere"],
         },
         "a_regler": _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules) + plan["a_regler"],
+        "_pilote": pilot_state,
     }
 
 
@@ -241,6 +260,8 @@ def _room(room: dict, stove: dict | None, stove_thermostat: dict | None, lines: 
         "principal": main["id"] if main else None,
         "type": (main or {}).get("type"),
         "preset": preset,
+        # The presets its main thermostat offers (the card's mode buttons), as the thermostat names them.
+        "modes": list((main or {}).get("prereglages_dispo") or []),
         "demande_pct": (main or {}).get("demande_pct") if main is not stove_src else (
             heating[0]["demande_pct"] if heating else (main or {}).get("demande_pct")),
         "puissance_w": round(watts) if heating else 0,
@@ -458,7 +479,9 @@ def _takeover(schedule: planning.Schedule, by_id: dict, today) -> dict | None:
 
 
 def _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, aimed_on, schedules, copies, applied,
-                   naive_now, tz) -> dict:
+                   naive_now, tz, allowed: set[str]) -> dict:
+    """The plannings Hestia, the thermostats they may tick, Scheduler's, and the changes due. `allowed`: the thermostats
+    ticked in Réglages, « Ce que Hestia peut régler » (none at first): an « Actif » planning sends only to them."""
     by_id = {s["id"]: s for s in srcs}
     stove_id = stove_thermostat["id"] if stove_thermostat else None
     in_plan = {t: key for key, p in plannings.items() for t in p["thermostats"]}
@@ -472,7 +495,8 @@ def _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, ai
         cools = s["type"] == "clim"
         thermostats.append({
             "id": s["id"], "nom": s["nom"], "piece": room_names.get(s["piece"]), "poele": s["id"] == stove_id,
-            "vt": s["vt"], "froid": cools, "recopie": s["id"] in copies, "planning": in_plan.get(s["id"]),
+            "vt": s["vt"], "froid": cools, "recopie": s["id"] in copies, "autorise": s["id"] in allowed,
+            "planning": in_plan.get(s["id"]),
             "scheduler": aimed.get(s["id"], []), "scheduler_actif": aimed_on.get(s["id"]),
             "niveaux": [lv for lv in home_planning.LEVELS if not s["vt"] or home_planning.PRESET[lv] in (s["prereglages_dispo"] or ())],
             "consignes": None if s["vt"] else dict(home_planning.COOL_TEMPERATURES if cools else home_planning.HEAT_TEMPERATURES),
@@ -493,6 +517,8 @@ def _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, ai
             "bloques": [{"id": t, "nom": by_id[t]["nom"], "scheduler": aimed_on[t]} for t in p["thermostats"]
                         if t in by_id and t in aimed_on],
             "recopie": bool(p["thermostats"]) and all(t in copies for t in p["thermostats"] if t in by_id),
+            "verrouilles": [{"id": t, "nom": by_id[t]["nom"]} for t in p["thermostats"]
+                            if t in by_id and t not in allowed and t not in copies],
         })
         for t in p["thermostats"]:
             s = by_id.get(t)
@@ -504,6 +530,12 @@ def _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, ai
                                       f"Scheduler : Hestia ne le règle pas tant qu’il l’est. Coupez « {aimed_on[t]} » "
                                       "dans Scheduler, ou retirez ce thermostat du planning.",
                              "page": f"planning/{key}"})
+            elif p["actif"] and t not in allowed and t not in copies:
+                todo.append({"titre": f"Hestia n’a pas le droit de régler {s['nom']}",
+                             "texte": f"Il est dans « {p['nom']} », qui est actif, mais il n’est pas coché dans Réglages, "
+                                      "« Ce que Hestia peut régler » : Hestia ne lui envoie rien. Cochez-le, ou remettez "
+                                      "le planning en essai.",
+                             "page": "reglages"})
             try:
                 last = datetime.fromisoformat((applied.get(t) or {}).get("a") or "")
             except ValueError:
@@ -516,7 +548,8 @@ def _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, ai
             order = dus.setdefault((key, slot[0]), {"planning": key, "nom": p["nom"], "actif": p["actif"],
                                                     "a": slot[0].isoformat(), "niveau": slot[1], "cibles": []})
             order["cibles"].append({"id": t, "nom": s["nom"], "vt": s["vt"], "preset": home_planning.PRESET[slot[1]],
-                                    "consigne": temps[slot[1]], "bloque": aimed_on.get(t), "recopie": t in copies})
+                                    "consigne": temps[slot[1]], "bloque": aimed_on.get(t), "recopie": t in copies,
+                                    "autorise": t in allowed})
     today = naive_now.date()
     scheduler = [{"id": sch.id, "nom": sch.name, "actif": sch.on, "jours": list(sch.days), "partiel": sch.partial,
                   "cibles": [by_id[t]["nom"] if t in by_id else t for t in sch.targets],

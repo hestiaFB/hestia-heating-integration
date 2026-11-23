@@ -2,7 +2,7 @@
 
 Version du 20 novembre 2026. Document vivant : il suit la brique à chaque version.
 
-**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute les plannings Hestia, simples, d’après la maquette « planning simple » validée le 20 novembre : une liste de plannings, chacun une semaine en couleurs et les thermostats qu’il règle, « En essai » d’abord. La 0.4 (pilote du poêle « à l’ombre ») suit, décrite plus bas. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
+**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute les plannings Hestia, simples, d’après la maquette « planning simple » validée le 20 novembre : une liste de plannings, chacun une semaine en couleurs et les thermostats qu’il règle, « En essai » d’abord. La 0.4 ajoute le pilote du poêle « à l’ombre » : il dit ce qu’il ferait, à côté de ce que font les automatisations de la maison, sans rien envoyer. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
 
 ## Place dans l’écosystème
 
@@ -47,7 +47,7 @@ Un onglet **Chauffage** dans le panneau Hestia-FB (adresse `/hestia/chauffage`) 
 | Planning | En v0.1, la journée lue dans Scheduler. Depuis la 0.3, la liste des plannings Hestia (une semaine en couleurs, ses thermostats, En essai ou Actif), un éditeur par planning, et les plannings de Scheduler, lus et repris en un clic |
 | Réglages et Extensions | Les sources trouvées et leurs interrupteurs, le lien poêle ↔ thermostat, le lieu d’Hestia Weather |
 
-La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce (longue ou courte) et le planning du jour. Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire pour la première bêta publique.
+La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce (longue ou courte) et le planning du jour. La carte d’une pièce a aussi, depuis le 23 novembre (demande de Frank), les modes de son thermostat en bas (Hors gel, Éco, Confort, Boost, ceux qu’il propose) et un clic qui ouvre le thermostat (au choix dans ses réglages : le thermostat, la page de la pièce, ou rien). Le mode est choisi par l’utilisateur et envoyé depuis son navigateur, comme avec la carte thermostat de Home Assistant : ce n’est pas une commande de Hestia, et jamais vers un thermostat recopié (boutons grisés). Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire pour la première bêta publique.
 
 ## Ce qu’elle publie
 

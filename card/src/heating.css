@@ -42,8 +42,25 @@ ha-card { padding:18px; display:flex; flex-direction:column; gap:12px; container
 .chart .flame { stroke:var(--hc-stove); } .chart .flame.area { fill:color-mix(in oklab, var(--hc-stove) 22%, transparent); stroke:none; }
 .chart .temp { stroke:var(--nw-heat); } .chart .salon { stroke:var(--nw-cold); stroke-dasharray:4 4; }
 .chart .target { stroke:var(--nw-fg2); stroke-dasharray:3 3; stroke-width:1.5; }
+.chart .temp.area { fill:color-mix(in oklab, var(--nw-heat) 16%, transparent); stroke:none; }
+.chart .demand { stroke:none; } .chart .demand.area { fill:color-mix(in oklab, var(--nw-act) 80%, transparent); }
 .sw { width:12px; height:8px; border-radius:2px; display:inline-block; }
-.sw.flame { background:var(--hc-stove); } .sw.temp { background:var(--nw-heat); } .sw.salon { background:var(--nw-cold); } .sw.target { background:var(--nw-fg2); }
+.sw.flame { background:var(--hc-stove); } .sw.demand { background:color-mix(in oklab, var(--nw-act) 80%, transparent); } .sw.temp { background:var(--nw-heat); } .sw.salon { background:var(--nw-cold); } .sw.target { background:var(--nw-fg2); }
+/* A room's card opens its thermostat on a tap (« Clic sur la carte »); its modes are the thermostat's presets. */
+ha-card.tap { cursor:pointer; }
+.reading [role="button"], .short[role="button"] { border-radius:8px; }
+.reading [role="button"]:focus-visible, .short[role="button"]:focus-visible { outline:2px solid var(--nw-accent); outline-offset:2px; }
+.modes { display:grid; grid-template-columns:repeat(var(--n, 4), minmax(0, 1fr)); gap:8px; margin-top:4px; cursor:default; }
+.mode { --c:var(--nw-heat); min-width:0; padding:10px 6px; border-radius:12px; border:1px solid var(--nw-line); background:var(--nw-surface);
+  font-size:var(--nw-fs-text); font-weight:600; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  transition:background .2s, border-color .2s; }
+.mode.cold { --c:var(--nw-cold); } .mode.off { --c:var(--hc-off); } .mode.act { --c:var(--nw-act); }
+.mode:hover:not(:disabled) { border-color:color-mix(in srgb, var(--nw-fg) 30%, transparent); }
+.mode.on { background:color-mix(in oklab, var(--c) var(--nw-chip-tint), var(--nw-bg)); border-color:color-mix(in oklab, var(--c) 75%, var(--nw-fg) 10%);
+  color:color-mix(in oklab, var(--c) var(--nw-ink), var(--nw-fg)); }
+.mode:disabled { cursor:not-allowed; opacity:.55; }
+.note.bad { color:color-mix(in oklab, var(--nw-alert) 70%, var(--nw-fg)); }
+@media (prefers-reduced-motion:reduce) { .mode { transition:none; } }
 .short { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; }
 .short .temp { font-size:40px; padding-right:20px; }
 .short b { display:block; font-size:var(--nw-fs-text); font-weight:650; }

@@ -126,6 +126,8 @@ def read(climate: dict) -> dict:
         "delestage": power.get("overpowering_state") == "on" or attrs.get("overpowering_state") == "on",
         "securite": safety.get("safety_state") == "on" or attrs.get("security_state") is True,
         "pente": _number(specific.get("temperature_slope", attrs.get("temperature_slope"))),
+        # Versatile Thermostat's smoothed temperature: a puff of hot air on the probe does not move it.
+        "temperature_lissee": _number(specific.get("ema_temp", attrs.get("ema_temp"))),
         "raison_arret": specific.get("hvac_off_reason"),
         "prereglages": {k.removesuffix("_temp"): _number(v) for k, v in presets.items()
                         if k.endswith("_temp") and "_away" not in k and _number(v) is not None},

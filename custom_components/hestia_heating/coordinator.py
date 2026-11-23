@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
@@ -21,7 +21,7 @@ from homeassistant.util import dt as dt_util
 
 from . import reader
 from .const import API_KEY, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
-from .engine import home_planning, house, phrases, profiles
+from .engine import home_planning, house, phrases, pilot, profiles
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,12 +34,19 @@ TICK = timedelta(minutes=1)
 # A day's curve read from the recorder is kept this long.
 DAY_CACHE_S = 120
 DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
-            "planning": None}
+            "planning": None, "pilote": "ombre", "pilote_thermometre": None,
+            "planning_autorises": []}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en essai, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
-        "sans_prereglage": "préréglage absent du thermostat"}
+        "sans_prereglage": "préréglage absent du thermostat", "verrou": "pas autorisé dans Réglages, rien envoyé"}
 JOURNAL_MAX = 60
+# The stove's pilot « à l'ombre »: its journal says what Hestia would have done and what the house did. Kept a week,
+# through a restart, so that several days can be weighed (« d'accord 46 fois sur 48 »).
+PILOT_SHOWN = 20
+PILOT_DAYS = 7
+PILOT_KEEP = 500
+PILOT_GAPS = 5
 
 
 class HeatingCoordinator:
@@ -52,6 +59,9 @@ class HeatingCoordinator:
         self.state_store = Store(hass, 1, PLANNING_STATE_KEY)
         self.applied: dict[str, dict] = {}
         self.journal: list[dict] = []
+        # The stove's pilot: its memory and its journal of the week (kept with the planning's state).
+        self.pilot_memory: dict = {}
+        self.pilot_journal: list[dict] = []
         self.settings: dict = dict(DEFAULTS)
         self.model: dict = home_planning.default()
         self.profiles: list[profiles.Profile] = []
@@ -98,7 +108,10 @@ class HeatingCoordinator:
         stored = await self.store.async_load() or {}
         self.settings = {**DEFAULTS, **{k: v for k, v in stored.items() if k in DEFAULTS}}
         self.model = home_planning.loaded(self.settings.get("planning"))
-        self.applied = (await self.state_store.async_load() or {}).get("thermostats") or {}
+        state = await self.state_store.async_load() or {}
+        self.applied = state.get("thermostats") or {}
+        self.pilot_memory = state.get("pilote") or {}
+        self.pilot_journal = [j for j in state.get("journal_pilote") or [] if isinstance(j, dict) and j.get("jour") and j.get("qui")]
         folder = Path(__file__).parent / "profiles"
         self.profiles = await self.hass.async_add_executor_job(profiles.load_all, folder)
         self._discover()
@@ -185,7 +198,9 @@ class HeatingCoordinator:
             snap = reader.snapshot(self.hass, self.found, self.settings, hourly)
             today = snap["now"].date().isoformat()
             self.journal = [j for j in self.journal if j.get("jour") == today]
-            snap.update(home_planning=self.model, applied=self.applied, journal=self.journal)
+            snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
+                        pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory,
+                        autorises=self.settings.get("planning_autorises") or [])
             view = house.build(snap)
             due, waiting = view["planning"].pop("_dus"), view["planning"].pop("_sans_repere")
             # Orders only once Home Assistant runs: a thermostat that loads after this brick is not yet there.
@@ -194,6 +209,7 @@ class HeatingCoordinator:
                 view = house.build(snap)
                 view["planning"].pop("_dus")
                 view["planning"].pop("_sans_repere")
+            self._pilot(view.pop("_pilote", None), view.get("poele"), today)
         except Exception:  # noqa: BLE001 - a strange state never stops the brick: the last good view stays
             _LOGGER.exception("Hestia Chauffage n'a pas pu lire la maison")
             return
@@ -205,6 +221,29 @@ class HeatingCoordinator:
         self.data = view
         self.last_build_ms = round((time.perf_counter() - started) * 1000, 2)
         self._notify()
+
+    def _pilot(self, state: dict | None, stove: dict | None, today: str) -> None:
+        """Keep the pilot's memory and its journal of the week, and put today's journal and the week's tally in the
+        stove's view. Nothing is sent."""
+        if state is not None:
+            since = (date.fromisoformat(today) - timedelta(days=PILOT_DAYS - 1)).isoformat()
+            kept = [j for j in self.pilot_journal if j["jour"] >= since]
+            new = [{"jour": today, **e} for e in state["evenements"]]
+            changed = state["memoire"] != self.pilot_memory or bool(new) or len(kept) != len(self.pilot_journal)
+            self.pilot_memory = state["memoire"]
+            self.pilot_journal = (kept + new)[-PILOT_KEEP:]
+            if changed:
+                self._save_state()
+        if stove and stove.get("pilote", {}).get("mode") == "ombre":
+            day = [j for j in self.pilot_journal if j["jour"] == today]
+            stove["pilote"]["journal"] = day[-PILOT_SHOWN:]
+            stove["pilote"]["accord_jour"] = _tally(day)
+            stove["pilote"]["accord_semaine"] = {**_tally(self.pilot_journal), "depuis": min(
+                (j["jour"] for j in self.pilot_journal), default=today), "ecarts": _gaps(self.pilot_journal)}
+
+    def _save_state(self) -> None:
+        self.state_store.async_delay_save(lambda: {"thermostats": self.applied, "pilote": self.pilot_memory,
+                                                   "journal_pilote": self.pilot_journal}, 5)
 
     def _extensions(self) -> list[dict]:
         """What the brick reads, installed or not, and switched on or off in Extensions."""
@@ -267,6 +306,8 @@ class HeatingCoordinator:
                     fate = "recopie"
                 elif not order["actif"]:
                     fate = "ombre"
+                elif not target["autorise"]:
+                    fate = "verrou"
                 else:
                     fate = self._send(target)
                 fates.setdefault(fate, []).append(target["nom"])
@@ -279,7 +320,7 @@ class HeatingCoordinator:
                     _LOGGER.info("Planning Hestia « %s », %s pour %s : %s", order["nom"], order["niveau"],
                                  ", ".join(names), FATE[fate])
         self.journal = self.journal[-JOURNAL_MAX:]
-        self.state_store.async_delay_save(lambda: {"thermostats": self.applied}, 5)
+        self._save_state()
 
     def _send(self, target: dict) -> str:
         """One thermostat: its preset (a Versatile Thermostat), else its set point. Never switched on or off, never
@@ -314,6 +355,14 @@ class HeatingCoordinator:
     async def async_set_settings(self, changes: dict) -> None:
         """Raises ValueError (in French) when the planning sent is not readable: nothing is saved then."""
         settings = dict(self.settings)
+        if "pilote" in changes and changes["pilote"] not in pilot.MODES:
+            raise ValueError("mode du pilote inconnu")
+        allowed = changes.get("planning_autorises", [])
+        if not isinstance(allowed, list) or not all(isinstance(t, str) and t.startswith("climate.") for t in allowed):
+            raise ValueError("thermostats autorisés illisibles")
+        sensor = changes.get("pilote_thermometre")
+        if sensor is not None and not (isinstance(sensor, str) and sensor.startswith("sensor.")):
+            raise ValueError("thermomètre de la maison illisible")
         if "planning" in changes:
             model = home_planning.clean(changes["planning"])
             changes = {**changes, "planning": model}
@@ -351,7 +400,8 @@ class HeatingCoordinator:
             room = next((r for r in self.data.get("pieces") or [] if r["id"] == target[6:]), None)
             if room and room.get("principal"):
                 wanted += [("temperature", room["principal"], "current_temperature"),
-                           ("consigne", room["principal"], "temperature")]
+                           ("consigne", room["principal"], "temperature"),
+                           ("demande", room["principal"], "power_percent")]
         series = await reader.day_history(self.hass, start, now, wanted) if wanted else {}
         view = {"debut": start.isoformat(), "maintenant_min": now.hour * 60 + now.minute,
                 "series": {name: _minutes(points, start) for name, points in series.items()}}
@@ -371,3 +421,20 @@ def _minutes(points: list[tuple[datetime, float | None]], start: datetime, step:
             continue
         out.append([minute, None if value is None else round(value, 2)])
     return out
+
+
+def _tally(journal: list[dict]) -> dict:
+    """How many gestures of the house were the ones Hestia would have made."""
+    house = [j for j in journal if j["qui"] == "maison" and j.get("accord") is not None]
+    return {"oui": sum(1 for j in house if j["accord"]), "sur": len(house)}
+
+
+def _gaps(journal: list[dict]) -> list[dict]:
+    """The last gestures of the house Hestia would not have made, newest first, each with what Hestia said before."""
+    out, said = [], {}
+    for j in journal:
+        if j["qui"] == "hestia":
+            said[j["jour"]] = j.get("texte")
+        elif j.get("accord") is False:
+            out.append({"jour": j["jour"], "heure": j.get("heure"), "texte": j.get("texte"), "hestia": said.get(j["jour"])})
+    return out[::-1][:PILOT_GAPS]

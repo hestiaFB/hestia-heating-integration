@@ -2,14 +2,17 @@ import {LitElement,html,css,nothing} from 'lit';
 
 /* The card's editor: what the card shows, as tiles (an icon, a name, what it shows), the room for a room's card, an
    optional title. Everything else is set in the « Chauffage » tab. */
-type Config={type:string;card?:string;piece?:string;court?:boolean;name?:string};
+type Config={type:string;card?:string;piece?:string;court?:boolean;name?:string;tap_action?:string};
 type Room={id:string;nom:string};
 type Hass={language?:string;callWS?:<T>(msg:Record<string,unknown>)=>Promise<T>};
+
+/** A tap on a room's card (the default, its thermostat, is not written). */
+export const TAP_CHOICES:[string,string][]=[['thermostat','Ouvrir le thermostat'],['page','Ouvrir la page de la pièce (onglet Chauffage)'],['none','Rien']];
 
 export const FORMATS:[string,string,string,string][]=[
  ['maison','mdi:home-thermometer-outline','La maison','qui chauffe, chaque pièce, le froid de la nuit'],
  ['poele','mdi:fireplace','Le poêle','sa flamme, sa journée, ses fumées, le stock'],
- ['piece','mdi:thermometer','Une pièce','sa température, sa consigne, sa journée'],
+ ['piece','mdi:thermometer','Une pièce','sa température, sa consigne, sa journée, ses modes'],
  ['planning','mdi:calendar-clock','Le planning','la journée de chaque pièce et du poêle'],
 ];
 
@@ -40,8 +43,9 @@ export class HeatingEditor extends LitElement {
   const next:Config={...this.config!,...change};
   if(!next.name)delete next.name;
   if(next.card==='maison')delete next.card;      // the default card is not written
-  if(next.card!=='piece'){delete next.piece;delete next.court;}
+  if(next.card!=='piece'){delete next.piece;delete next.court;delete next.tap_action;}
   if(!next.court)delete next.court;
+  if(next.tap_action==='thermostat')delete next.tap_action;
   this.config=next;
   this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:next},bubbles:true,composed:true}));
  }
@@ -54,7 +58,9 @@ export class HeatingEditor extends LitElement {
      class=${value===card?'on':''} @click=${()=>{if(value!==card)this.set({card:value,...(value==='piece'&&!this.config!.piece&&this.rooms[0]?{piece:this.rooms[0].id}:{})});}}><ha-icon icon=${icon}></ha-icon><b>${name}</b><span>${text}</span></button>`)}</div>
    ${card==='piece'?html`<label>Pièce <select @change=${(e:Event)=>this.set({piece:(e.target as HTMLSelectElement).value})}>
      ${this.rooms.map(r=>html`<option value=${r.id} ?selected=${this.config!.piece===r.id}>${r.nom}</option>`)}</select></label>
-    <label><input type="checkbox" .checked=${!!this.config.court} @change=${(e:Event)=>this.set({court:(e.target as HTMLInputElement).checked})}> Version courte, sur une ligne</label>`:nothing}
+    <label><input type="checkbox" .checked=${!!this.config.court} @change=${(e:Event)=>this.set({court:(e.target as HTMLInputElement).checked})}> Version courte, sur une ligne</label>
+    <label>Clic sur la carte <select @change=${(e:Event)=>this.set({tap_action:(e.target as HTMLSelectElement).value})}>
+     ${TAP_CHOICES.map(([value,text])=>html`<option value=${value} ?selected=${(this.config!.tap_action??'thermostat')===value}>${text}</option>`)}</select></label>`:nothing}
    <ha-form .hass=${this.hass} .data=${{name:this.config.name??''}} .schema=${[{name:'name',selector:{text:{}}}]}
      .computeLabel=${()=>'Titre facultatif'} .computeHelper=${()=>'Vide : le titre de la carte.'}
      @value-changed=${(e:CustomEvent<{value:{name?:string}}>)=>{e.stopPropagation();this.set({name:(e.detail.value.name??'').trim()});}}></ha-form>`;

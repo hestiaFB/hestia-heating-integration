@@ -8,6 +8,7 @@ only the states of what was found, on every change.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -27,6 +28,8 @@ PELLETS = "suivi_stock_pellet"
 PELLET_KEY = "suivi_stock_pellet_key"
 WORKDAY = "workday"
 REMOTE = "remote_homeassistant"
+# A sensor that gives the temperature of the whole house (the stove's automations often have one).
+HOUSE_NAME = re.compile(r"maison|moyenne|logement|house|home|average|mean", re.I)
 WEATHER_API = "hestia_weather_api"
 WEATHER_API_VERSION = 1      # the version of Hestia Weather's interface this brick speaks
 BRICK = "hestia_heating"     # said to Hestia Weather when listening, so that its settings show this brick linked
@@ -39,6 +42,8 @@ class Found:
     stove: dict | None = None                                # {profile, device, roles: {role: entity_id}, entities}
     plug: str | None = None
     plugs: list[dict] = field(default_factory=list)          # every power sensor that could be the stove's plug
+    thermometers: list[dict] = field(default_factory=list)   # every temperature sensor the pilot could read the house on
+    house_sensor: str | None = None                          # the one chosen in Réglages (else: the average of the rooms)
     pellets: dict[str, str] = field(default_factory=dict)    # {role: entity_id}
     schedules: list[str] = field(default_factory=list)
     workday: str | None = None
@@ -51,7 +56,7 @@ class Found:
         if self.stove:
             out |= set(self.stove["roles"].values())
         out |= set(self.pellets.values()) | set(self.schedules)
-        out |= {e for e in (self.plug, self.workday) if e}
+        out |= {e for e in (self.plug, self.workday, self.house_sensor) if e}
         return out | set(extra or [])
 
 
@@ -133,7 +138,17 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
         a = state.attributes
         if PELLET_KEY in a and PELLETS not in off_ext and a[PELLET_KEY] not in found.pellets:
             found.pellets[str(a[PELLET_KEY])] = state.entity_id
-        if a.get("device_class") != "power" or not found.stove:
+        if not found.stove:
+            continue
+        if a.get("device_class") == "temperature":
+            entry = entities.async_get(state.entity_id)
+            if state.entity_id in stove_ids or stove_device and entry is not None and entry.device_id == stove_device:
+                continue
+            label = f"{state.entity_id} {a.get('friendly_name') or ''}"
+            found.thermometers.append({"entity_id": state.entity_id, "nom": a.get("friendly_name") or state.entity_id,
+                                       "maison": bool(HOUSE_NAME.search(label))})
+            continue
+        if a.get("device_class") != "power":
             continue
         entry = entities.async_get(state.entity_id)
         if state.entity_id in stove_ids or stove_device and entry is not None and entry.device_id == stove_device:
@@ -144,6 +159,9 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
         label = " ".join(x for x in (state.entity_id, a.get("friendly_name"), device and (device.name_by_user or device.name)) if x)
         found.plugs.append({"entity_id": state.entity_id, "nom": a.get("friendly_name") or state.entity_id,
                             "poele": bool(sources.STOVE_NAME.search(label)), "prise": bool(sources.PLUG_NAME.search(label))})
+    found.thermometers.sort(key=lambda t: (not t["maison"], t["nom"].casefold()))
+    # The house's temperature for the pilot: the sensor chosen in Réglages (the one the stove's automations read).
+    found.house_sensor = settings.get("pilote_thermometre") if found.stove else None
     chosen = settings.get("poele_prise")
     if found.stove:
         named = [p for p in found.plugs if p["poele"]]
@@ -225,6 +243,17 @@ def _stove_by_ids(hass: HomeAssistant, profile: Profile) -> dict | None:
     return None
 
 
+def _celsius(state) -> float | None:
+    """A temperature sensor's value in °C, or None when it says nothing readable."""
+    try:
+        value = float(state.state)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if state.attributes.get("unit_of_measurement") == "°F":
+        value = (value - 32) / 1.8
+    return round(value, 1) if -40 <= value <= 60 else None
+
+
 def _state(hass: HomeAssistant, entity_id: str | None) -> dict | None:
     state = hass.states.get(entity_id) if entity_id else None
     if state is None:
@@ -257,6 +286,11 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
             plug = {"entity_id": found.plug, "w": float(p.state)}
         except (TypeError, ValueError):
             plug = {"entity_id": found.plug, "w": None}
+    house_sensor = None
+    if found.house_sensor:
+        t = hass.states.get(found.house_sensor)
+        house_sensor = {"entity_id": found.house_sensor, "nom": (t.attributes.get("friendly_name") if t else None)
+                        or found.house_sensor, "c": _celsius(t)}
     pellets = {role: s for role, e in found.pellets.items() if (s := _state(hass, e)) is not None}
     schedules = []
     for entity_id in found.schedules:
@@ -277,6 +311,7 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
         "stove_thermostat": settings.get("poele_thermostat"),
         "disabled": [k for k, v in (settings.get("sources") or {}).items() if v is False],
         "plug": plug,
+        "house_sensor": house_sensor,
         "pellets": pellets,
         "schedules": schedules,
         "workday": workday,
@@ -338,6 +373,24 @@ def weather_listen(hass: HomeAssistant, place: str | None, update: Callable[[], 
         return lambda: None
 
 
+def day_points(rows: list, attribute: str | None, start: datetime, text: bool = False) -> list[tuple]:
+    """[(datetime, value)] of recorded rows. A row is placed when it was written (`last_updated`): a thermostat's
+    temperature and set point are attributes, and an attribute that changes leaves `last_changed` (the state, « heat »)
+    where it was, often days before: every point of the day then fell at midnight and the curve was a vertical line."""
+    points = []
+    for row in rows:
+        raw = row.attributes.get(attribute) if attribute else row.state
+        if text:
+            value = raw
+        else:
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                value = None
+        points.append((dt_util.as_local(max(row.last_updated, start)), value))
+    return points
+
+
 async def day_history(hass: HomeAssistant, start: datetime, end: datetime, wanted: list[tuple[str, str, str | None]]) -> dict:
     """{name: [(datetime, value)]} for each (name, entity_id, attribute) since `start`: read in the recorder's executor,
     compacted by the socle's recorder_history (one day of one entity at a time)."""
@@ -346,19 +399,9 @@ async def day_history(hass: HomeAssistant, start: datetime, end: datetime, wante
     from . import recorder_history
 
     def read():
-        out = {}
-        for name, entity_id, attribute in wanted:
-            rows = recorder_history.read(hass, start, end, [entity_id], attribute).get(entity_id, [])
-            points = []
-            for row in rows:
-                raw = row.attributes.get(attribute) if attribute else row.state
-                try:
-                    value = float(raw)
-                except (TypeError, ValueError):
-                    value = None
-                points.append((dt_util.as_local(max(row.last_changed, start)), value))
-            out[name] = points
-        return out
+        return {name: day_points(recorder_history.read(hass, start, end, [entity_id], attribute).get(entity_id, []),
+                                 attribute, start)
+                for name, entity_id, attribute in wanted}
 
     try:
         return await get_instance(hass).async_add_executor_job(read)

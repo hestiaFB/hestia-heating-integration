@@ -41,6 +41,23 @@ class House(unittest.TestCase):
         self.assertEqual(self.rooms["atelier"]["etat"], "rafraichit")
         self.assertEqual(self.rooms["atelier"]["badge"]["ton"], "cold")
 
+    def test_each_room_gives_its_modes_for_the_card(self):
+        # The card's mode buttons: the presets its main thermostat offers, « none » left out, and the one it is on.
+        bureau = self.rooms["bureau"]
+        self.assertEqual(bureau["principal"], "climate.vt_bureau")
+        self.assertEqual(bureau["modes"], ["frost", "eco", "comfort", "boost"])
+        self.assertEqual(bureau["preset"], "comfort")
+        self.assertFalse(bureau["recopie"])
+        # The air conditioner offers no preset: no button.
+        self.assertEqual(self.rooms["atelier"]["modes"], [])
+
+    def test_a_copied_thermostat_greys_out_the_card_s_modes(self):
+        # A lab copies the home: a press on a mode would reach the other house.
+        view = house.build(m.snapshot(copies=["climate.vt_bureau"]))
+        rooms = {r["id"]: r for r in view["pieces"]}
+        self.assertTrue(rooms["bureau"]["recopie"])
+        self.assertFalse(rooms["amis"]["recopie"])
+
     def test_the_stove_and_its_pellets(self):
         s = self.view["poele"]
         self.assertEqual((s["etat"], s["en_feu"], s["flamme"], s["flamme_max"]), ("chauffe", True, 3, 5))
@@ -52,6 +69,13 @@ class House(unittest.TestCase):
         g = self.view["granules"]
         # 90 kg in 30 days of use: 3 kg a day, 150 kg left.
         self.assertEqual((g["kg_par_jour"], g["jours"], g["stock_sacs"]), (3.0, 50, 10.0))
+
+    def test_the_smoothed_temperature_of_a_versatile_thermostat(self):
+        from engine import sources
+        read = lambda **extra: sources.read(m.vt("climate.vt_x", "X", "sejour", **extra))["temperature_lissee"]
+        self.assertEqual(read(specific_states={"ema_temp": 20.4}), 20.4)
+        self.assertEqual(read(ema_temp=20.6), 20.6)
+        self.assertIsNone(read())
 
     def test_the_cold_to_come(self):
         self.assertEqual(self.view["dehors"]["nuit_min"], -3.0)
