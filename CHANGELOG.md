@@ -1,10 +1,24 @@
 # Changements
 
-## À venir — 0.7.0b1
+## 0.7.0b1 — Première bêta : le chauffage de la maison, le poêle et vos plannings
 
-Le pilote du poêle peut le conduire entier, en option : démarrer, arrêter, tenir les sécurités. Il reste « à l’ombre » tant que vous ne l’avez pas choisi.
+**Hestia Chauffage explique le chauffage de la maison, pièce par pièce, suit le poêle à granulés, et a ses propres plannings.**
+**Au départ, elle ne commande rien** : les plannings commencent « En essai », le pilote du poêle est « à l’ombre », et aucun thermostat n’est coché dans « Ce que Hestia peut régler ».
+
+C’est la première bêta publiée. Les versions 0.1 à 0.6, plus bas, n’ont jamais été publiées seules : elle les réunit toutes.
 
 ### Nouveautés
+- **L’onglet Chauffage** du panneau Hestia-FB : la maison en une phrase, chaque pièce (sa température, sa consigne, pourquoi elle chauffe ou non), le poêle, le planning, les réglages et les extensions trouvées.
+- **Une carte** pour vos tableaux de bord, sous quatre formes : la maison, le poêle, une pièce (longue ou courte) et le planning du jour. La carte d’une pièce a les modes de son thermostat (Hors gel, Éco, Confort, Boost), sa courbe du jour, et un clic ouvre son thermostat.
+- **Vos thermostats** : Versatile Thermostat d’abord, et tout thermostat ou clim de Home Assistant. Hestia ne crée aucun thermostat.
+- **Vos plannings** : chacun est une semaine en couleurs et les thermostats qu’il règle. « En essai », il montre ce qu’il ferait. « Actif », il règle le préréglage, et seulement des thermostats cochés dans Réglages. Les plannings de Scheduler sont lus, et se reprennent dans Hestia en un clic.
+- **Le poêle à granulés** (Micronova par Agua IOT) : son état, sa flamme, ses fumées, sa prise, ses ordres du jour et sa journée.
+- **Le pilote du poêle, à l’ombre** : ce que Hestia ferait, face à ce que font vos automatisations, avec un journal de 7 jours. En option, il règle la flamme seulement (« Flamme »), ou conduit le poêle entier (« Entier ») à la place de vos automatisations.
+- **Les granulés et le brasier** : ce que brûle le poêle, en kilos, en chaleur et en euros, calé sur vos sacs, et quand nettoyer le brasier.
+- **Pour Hestia Énergie** : le chauffage de chaque thermostat et l’énergie du poêle, prêts à être lus.
+- Quelques entités pour vos automatisations : l’état de la maison, de chaque pièce et du poêle, la flamme, l’alarme, les granulés, le brasier.
+
+### Le pilote entier, nouveau dans cette version
 - **Dans Réglages, « Le pilote de Hestia » a un quatrième choix : « Entier »**. Hestia fait alors ce que font vos automatisations du poêle : elle le démarre au passage de son thermostat en boost, règle sa flamme, l’arrête en hors gel, vérifie l’arrêt, et tient les sécurités. Coupez d’abord vos automatisations du poêle : deux pilotes en même temps se contrediraient.
 - **Le démarrage** : les réglages du poêle qui ont changé (consigne interne à 25 °C, ECO Stop, ventilation en AUTO s’il reste assez d’ordres), puis l’ordre d’allumage. Pas pris en 3 minutes : Hestia recharge l’intégration du poêle et renvoie l’ordre ; toujours rien, elle vous prévient. 3 démarrages par jour au plus.
 - **Les refus qui verrouillent** : la pièce trop chaude, le brasier à nettoyer, une alarme ou un poêle muet éteignent le thermostat du poêle, comme le fait la maison. « J’ai nettoyé » le rallume, en hors gel, pour le brasier.
@@ -12,14 +26,13 @@ Le pilote du poêle peut le conduire entier, en option : démarrer, arrêter, te
 - **La saison douce** : Hestia vous demande avant d’allumer, Oui ou Non, sur le téléphone et sur la page Poêle. Sans réponse en 15 minutes, le thermostat repasse hors gel, sauf si le poêle est déjà en route.
 - **Après un redémarrage de Home Assistant** : un poêle qui brûle avec son thermostat éteint retrouve son thermostat, en boost.
 - **Dans Réglages** : le service de vos téléphones pour les notifications (avec leurs boutons), l’interrupteur de la prise du poêle (trouvé seul quand c’est possible), et « Couper la prise sans réponse ».
-
-### Ce qui change
 - À l’ombre aussi, le pilote refuse un démarrage quand le brasier est à nettoyer.
 - Un arrêt demandé pendant que le poêle ne dit plus son état attend 2 minutes qu’il le dise, puis l’envoie quand même, comme la maison.
 
-### Ce qui ne change pas
+### Ce qui protège la maison
 - Au labo, rien n’est jamais envoyé : ni ordre, ni notification, à un poêle ou un thermostat recopié d’une autre maison.
 - « À l’ombre » reste le choix de départ, et le retour arrière en un clic.
+- Hestia n’allume ni n’éteint jamais un thermostat de pièce, et ne touche jamais un thermostat qu’un planning Scheduler allumé règle encore.
 
 ## 0.6.0b1
 

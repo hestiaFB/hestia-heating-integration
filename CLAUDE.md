@@ -1,6 +1,6 @@
 # Hestia Chauffage — consignes pour Claude
 
-Intégration Home Assistant (domaine `hestia_heating`, onglet `chauffage` du panneau) : le chauffage et la clim de la maison, sur les thermostats existants (Versatile Thermostat d'abord), le poêle à granulés par un profil, et un planning. Une des briques Hestia-FB. **En bêta (0.7), pas publiée.** Lire d'abord `docs/CAHIER-DES-CHARGES.md`.
+Intégration Home Assistant (domaine `hestia_heating`, onglet `chauffage` du panneau) : le chauffage et la clim de la maison, sur les thermostats existants (Versatile Thermostat d'abord), le poêle à granulés par un profil, et un planning. Une des briques Hestia-FB. **En bêta : 0.7.0b1 publiée en pre-release le 23 novembre 2026 (dépôt privé).** Lire d'abord `docs/CAHIER-DES-CHARGES.md`.
 
 ## Où est quoi
 - Dépôt : `hestiaFB/hestia-heating-integration`. Sur le PC de Frank : `~/Documents/Hestia-FB/hestia-heating`.
