@@ -473,42 +473,42 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_a_low_flame_switch_asks_for_flame_one(self):
-        self.hass.states.async_set("input_boolean.flamme_minimum", "off", {"friendly_name": "Flamme minimum"})
+        self.hass.states.async_set("input_boolean.flamme_au_plus_bas", "off", {"friendly_name": "Flamme au plus bas"})
         entry, c = await self._setup()
-        self.assertEqual(c.found.switches[0]["entity_id"], "input_boolean.flamme_minimum")
-        await c.async_set_settings({"pilote_flamme_basse": "input_boolean.flamme_minimum"})
+        self.assertEqual(c.found.switches[0]["entity_id"], "input_boolean.flamme_au_plus_bas")
+        await c.async_set_settings({"pilote_flamme_basse": "input_boolean.flamme_au_plus_bas"})
         await self.hass.async_block_till_done()
-        self.hass.states.async_set("input_boolean.flamme_minimum", "on", {"friendly_name": "Flamme minimum"})
+        self.hass.states.async_set("input_boolean.flamme_au_plus_bas", "on", {"friendly_name": "Flamme au plus bas"})
         await asyncio.sleep(1.5)
         await self.hass.async_block_till_done()
         p = c.data["poele"]["pilote"]
-        self.assertEqual((p["action"], p["flamme"], p["flamme_basse"]), ("flamme", 1, "Flamme minimum"))
+        self.assertEqual((p["action"], p["flamme"], p["flamme_basse"]), ("flamme", 1, "Flamme au plus bas"))
         self.assertEqual(self.calls, [], "in the shade, nothing is sent")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_the_pilot_reads_the_house_on_the_thermometer_chosen(self):
         """The pilot weighs the house on the automations' own sensor once chosen, else on the rooms' average."""
         hass = self.hass
-        hass.states.async_set("sensor.temperature_moyenne_maison", "17.2", {"device_class": "temperature",
-                              "unit_of_measurement": "°C", "friendly_name": "Température moyenne maison"})
+        hass.states.async_set("sensor.moyenne_des_pieces", "17.2", {"device_class": "temperature",
+                              "unit_of_measurement": "°C", "friendly_name": "Moyenne des pièces"})
         hass.states.async_set("sensor.cave", "12", {"device_class": "temperature", "unit_of_measurement": "°C",
                                                     "friendly_name": "Cave"})
         # The stove's own temperatures are never offered.
         hass.states.async_set("sensor.poele_smoke_temperature", "140", {"device_class": "temperature"})
         entry, c = await self._setup()
         offered = [t["entity_id"] for t in c.found.thermometers]
-        self.assertEqual(offered[:2], ["sensor.temperature_moyenne_maison", "sensor.cave"])
+        self.assertEqual(offered[:2], ["sensor.moyenne_des_pieces", "sensor.cave"])
         self.assertNotIn("sensor.poele_smoke_temperature", offered)
         average = c.data["poele"]["pilote"]["maison_c"]
         self.assertEqual(average, c.data["maison"]["temperature"])
         self.assertIsNone(c.data["poele"]["pilote"]["thermometre"])
-        await c.async_set_settings({"pilote_thermometre": "sensor.temperature_moyenne_maison"})
+        await c.async_set_settings({"pilote_thermometre": "sensor.moyenne_des_pieces"})
         await hass.async_block_till_done()
         p = c.data["poele"]["pilote"]
-        self.assertEqual((p["maison_c"], p["thermometre"], p["thermometre_lu"]), (17.2, "Température moyenne maison", True))
+        self.assertEqual((p["maison_c"], p["thermometre"], p["thermometre_lu"]), (17.2, "Moyenne des pièces", True))
         # Listened to: a change of the sensor is weighed at once.
-        hass.states.async_set("sensor.temperature_moyenne_maison", "unavailable", {"device_class": "temperature",
-                              "friendly_name": "Température moyenne maison"})
+        hass.states.async_set("sensor.moyenne_des_pieces", "unavailable", {"device_class": "temperature",
+                              "friendly_name": "Moyenne des pièces"})
         await asyncio.sleep(1.5)
         await hass.async_block_till_done()
         p = c.data["poele"]["pilote"]
