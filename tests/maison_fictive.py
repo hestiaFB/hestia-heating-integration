@@ -57,8 +57,12 @@ def stove(status="On", flame="3", since=NOW - timedelta(hours=3)):
 
 
 def pellets():
-    return {"stock": {"entity_id": "sensor.granules_stock", "state": "150", "attributes": {"poids_sac_kg": 15}},
-            "consomme_kg": {"entity_id": "sensor.granules_saison", "state": "90", "attributes": {}},
+    """Suivi Stock Pellet as it shows itself: 6 bags declared burnt, 16 bought for 88 €, a season from October."""
+    return {"stock": {"entity_id": "sensor.granules_stock", "state": "150",
+                      "attributes": {"poids_sac_kg": 15, "stock_sacs": 10, "saison": "2026-2027", "mois_debut_saison": 10}},
+            "consomme_kg": {"entity_id": "sensor.granules_saison", "state": "90", "attributes": {"consomme_sacs": 6.0}},
+            "achete_kg": {"entity_id": "sensor.granules_achetes", "state": "240", "attributes": {"achete_sacs": 16.0}},
+            "depense": {"entity_id": "sensor.granules_depense", "state": "88", "attributes": {}},
             "jours_utilisation": {"entity_id": "sensor.granules_jours", "state": "30", "attributes": {}}}
 
 

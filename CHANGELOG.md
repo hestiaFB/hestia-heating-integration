@@ -1,6 +1,25 @@
 # Changements
 
-## À venir — 0.5.0b1
+## À venir — 0.6.0b1
+
+Hestia compte les granulés du poêle et dit quand nettoyer le brasier. Elle n’envoie rien au poêle pour ça.
+
+### Nouveautés
+- **Sur la page Poêle, « Granulés »** : ce que le poêle brûle en ce moment (kg/h), aujourd’hui et cette saison, en kilos, en chaleur (kWh) et en euros. Le débit se lit sur l’état du poêle et sa flamme, jamais sur la flamme seule.
+- **Le calage sur vos sacs** : à chaque sac déclaré dans Suivi Stock Pellet (un réservoir vide), Hestia ajuste ses débits sur le poids réel du sac, entre 0,7 et 1,6 fois. Pas au premier sac qu’elle voit.
+- **« Le brasier »** : les kilos brûlés depuis le dernier nettoyage, sur 15 kg par défaut, avec « bientôt » à 4 kg du seuil, et un bouton « J’ai nettoyé » qui demande une confirmation. Avec Suivi Stock Pellet, le compte se fait sur les sacs versés.
+- **Quatre entités** : `sensor.hestia_heating_poele_granules_brules` (kg), `sensor.hestia_heating_poele_energie` (kWh, à déclarer dans la page Énergie de Home Assistant), `sensor.hestia_heating_poele_brasier` (kg depuis le nettoyage) et `binary_sensor.hestia_heating_poele_brasier_a_nettoyer`.
+- **Dans Réglages, « Les granulés »** : le seuil du brasier, le prix et le poids d’un sac. Laissés vides, ils viennent de Suivi Stock Pellet (le prix : la dépense ÷ les sacs achetés).
+
+### Ce qui change
+- Pour Hestia Énergie, l’énergie du poêle est maintenant celle comptée par Hestia sur les kilos (4,176 kWh utiles par kg), jamais le compteur de son thermostat, qui ne mesure que le temps d’un interrupteur.
+- La saison des granulés va du 1er septembre au 31 août, ou commence le mois où Suivi Stock Pellet commence la sienne.
+
+### Ce qui ne change pas
+- Rien n’est envoyé au poêle pour compter. « J’ai nettoyé » remet seulement le compteur à zéro : le blocage du prochain démarrage viendra avec le pilote entier.
+- Un arrêt de Home Assistant ne compte rien : plutôt rien qu’une supposition.
+
+## 0.5.0b1
 
 Le pilote du poêle peut régler la flamme, en option. Il reste « à l’ombre » tant que vous ne l’avez pas choisi.
 

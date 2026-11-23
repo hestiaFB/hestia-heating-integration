@@ -25,6 +25,19 @@ ALARM = HeatingBinaryDescription(
     exists=lambda d: bool(d.get("poele")))
 
 
+def _fire_pot(d: dict) -> dict:
+    return ((d.get("poele") or {}).get("conso") or {}).get("brasier") or {}
+
+
+# The fire pot to clean (0.6): on past its threshold, unknown until Hestia was told of a cleaning.
+FIRE_POT = HeatingBinaryDescription(
+    key="poele_brasier_a_nettoyer", translation_key="poele_brasier_a_nettoyer", device_class=BinarySensorDeviceClass.PROBLEM,
+    value=lambda d: None if _fire_pot(d).get("kg") is None else bool(_fire_pot(d).get("a_nettoyer")),
+    attributes=lambda d: {"kg": _fire_pot(d).get("kg"), "seuil_kg": _fire_pot(d).get("seuil_kg"),
+                          "texte": _fire_pot(d).get("texte")},
+    exists=lambda d: bool(d.get("poele")))
+
+
 def _room(d: dict, room_id: str) -> dict | None:
     return next((r for r in d.get("pieces") or [] if r["id"] == room_id), None)
 
@@ -50,7 +63,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 out.append(HeatingRoom(coordinator, room_description(room["id"]), room["nom"]))
         return out
 
-    entities = [HeatingBinary(coordinator, ALARM)] if ALARM.exists(coordinator.data) else []
+    entities = [HeatingBinary(coordinator, d) for d in (ALARM, FIRE_POT) if d.exists(coordinator.data)]
     async_add_entities(entities + new_rooms())
 
     @callback

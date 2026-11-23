@@ -19,12 +19,16 @@ type Source={id:string;nom:string;type:string;piece:string;etat:string;mode:stri
  demande_pct:number|null;puissance_w:number|null;fenetre:boolean;delestage:boolean;securite:boolean;pente:number|null;humidite:number|null;
  integration:string|null;entite:string};
 type Pellets={stock_kg:number|null;stock_sacs:number|null;sac_kg:number|null;saison_kg:number|null;saison:string|null;jours_utilisation:number|null;
- kg_par_jour:number|null;jours:number|null;depense:number|null};
+ kg_par_jour:number|null;jours:number|null;depense:number|null;consomme_sacs?:number|null;prix_sac?:number|null};
+/** The pellets counted by Hestia (0.6), from the stove's state, set on the bags declared in Suivi Stock Pellet. */
+type FirePot={seuil_kg:number;kg:number|null;nettoye_le:string|null;a_nettoyer:boolean;bientot:boolean;par_les_sacs:boolean;texte:string};
+type Conso={debit_kg_h:number;kg_jour:number;kg_saison:number;saison:string|null;total_kg:number;energie_kwh:number;kwh_jour:number;correction:number;
+ prix_kg:number|null;prix_kwh:number|null;cout_jour:number|null;cout_heure:number|null;prix_source:string|null;brasier:FirePot};
 type Stove={nom:string;fabricant:string|null;modele:string|null;piece:string|null;profil:string;profil_nom:string;cloud:boolean;etat:string;texte:string|null;
  a_traduire:boolean;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_min:number;flamme_max:number;fumees:number|null;
  air:number|null;alarme:boolean|null;alarme_texte:string|null;eco_stop:boolean|null;ecritures:number|null;ecritures_max:number|null;ecritures_lues?:boolean;thermostat:string|null;
  thermostat_nom:string|null;demande_pct:number|null;consigne:number|null;preset:string|null;prise:string|null;prise_w:number|null;prise_tourne:boolean|null;
- entites:Record<string,string>;pilote?:Pilot};
+ entites:Record<string,string>;pilote?:Pilot;conso?:Conso};
 type Pilot={mode:string;action?:string;titre?:string;texte?:string;ton?:string;flamme?:number|null;maison?:string;accord?:boolean|null;
  journal?:{heure:string;qui:string;texte:string;accord:boolean|null}[];accord_jour?:{oui:number;sur:number};
  accord_semaine?:{oui:number;sur:number;depuis:string;ecarts:{jour:string;heure:string;texte:string;hestia:string|null}[]};
@@ -52,17 +56,19 @@ type View={pret:boolean;version:string;maison:House;pieces:Room[];sources:Source
  dehors:{nuit_min:number|null;demain_max:number|null}|null;planning:Planning;a_regler:Todo[];extensions:Ext[];meteo:{etat:string;nom:string|null};
  mis_a_jour:string;calcul_ms:number|null};
 type Day={debut:string;maintenant_min:number;series:Record<string,[number,number|null][]>};
-type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null;planning:Model;pilote:string;pilote_thermometre:string|null;planning_autorises:string[];pilote_flamme_basse:string|null};
+type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null;planning:Model;pilote:string;pilote_thermometre:string|null;planning_autorises:string[];pilote_flamme_basse:string|null;
+  brasier_kg?:number|null;granules_prix_sac?:number|null;granules_poids_sac?:number|null};
  trouve:{thermostats:{id:string;nom:string;piece:string}[];coupes:{id:string;nom:string}[];poele:boolean;poele_thermostat:string|null;
   prises:{id:string;nom:string;poele:boolean}[];prise:string|null;thermometres:{id:string;nom:string;maison:boolean}[];interrupteurs?:{id:string;nom:string}[];poele_copie?:boolean;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null}}};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='0.5.0b1';
+const VERSION='0.6.0b1';
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
 const deg=(v:number|null|undefined)=>v==null?'—':`${num(v)} °C`;
 /** « 2026-11-21 » → « 21 nov. ». */
 const dayOf=(iso:string)=>new Date(iso+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
 const watts=(w:number|null|undefined)=>w==null?'—':w>=500?`${num(w/1000)} kW`:`${num(w,0)} W`;
+const euros=(v:number)=>`${v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} €`;
 const hm=(d:Date)=>d.getMinutes()?`${d.getHours()} h ${String(d.getMinutes()).padStart(2,'0')}`:`${d.getHours()} h`;
 const clockOf=(iso:string|null|undefined)=>iso?hm(new Date(iso)):'—';
 const DAYS=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
@@ -262,6 +268,9 @@ export class HestiaHeatingSetup extends LitElement {
   .eid{font-family:ui-monospace,monospace;font-size:var(--nw-fs-label,11px);color:var(--nk-muted);word-break:break-all}
   .ext-act{display:inline-flex;align-items:center;min-height:32px;padding:5px 12px;border-radius:999px;background:var(--nk-button,var(--primary-color));color:var(--nk-on-button,#fff);font-weight:600;font-size:var(--nw-fs-small,12px);text-decoration:none;white-space:nowrap}
   select{max-width:220px}
+  .pot{height:8px;border-radius:999px;background:color-mix(in srgb,var(--nk-muted) 22%,transparent);margin:4px 16px 12px;overflow:hidden}
+  .pot i{display:block;height:100%;border-radius:inherit;background:var(--hc-stove)}.pot i.soon{background:var(--hc-act)}.pot i.full{background:var(--hc-alert)}
+  .nk-row-val input.num{width:88px;flex:0 0 88px}.pot-ask{display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.pot-ask button,.nk-row-val>button{min-height:38px;padding:6px 14px}
   @media(max-width:640px){.ed .r,.ed .scale{grid-template-columns:76px minmax(0,1fr);gap:8px}.modes{grid-template-columns:1fr}.band h1{font-size:var(--nw-fs-case,21px)}.target{text-align:left}}`];
  @property({attribute:false}) hass?:Hass;
  @property({attribute:false}) route?:{prefix?:string;path:string};
@@ -275,6 +284,8 @@ export class HestiaHeatingSetup extends LitElement {
  @state() private saved=false;
  @state() private refused?:string;
  @state() private sel?:{r:number;i:number};
+ /** « J'ai nettoyé » asks once more before the fire pot's count starts again. */
+ @state() private cleaning=false;
  private timer=0;
 
  connectedCallback(){super.connectedCallback();void this.load();this.timer=window.setInterval(()=>{if(!this.count())void this.load();},30000);}
@@ -404,10 +415,12 @@ export class HestiaHeatingSetup extends LitElement {
     ...(writes?[listRow({label:'Ordres reçus aujourd’hui',sub:s.ecritures_max?`L’extension du poêle en laisse passer ${s.ecritures_max} par jour${s.ecritures_lues?' (lu dans ses options)':''}, pour ménager sa mémoire.`:undefined,value:writes})]:[]),
    ],{more:html`<span class="nk-def">profil ${s.profil_nom}${s.cloud?' · par le cloud':''}</span>`})}
    ${this.pilotPart(s)}
-   ${g?listSection('Granulés',[
-    listRow({label:'Stock',sub:g.jours!=null?`Au rythme de la saison, environ ${g.jours} jours.`:undefined,value:html`<span class="t">${g.stock_sacs!=null?`${num(g.stock_sacs,1)} sacs`:'—'}${g.stock_kg!=null?html`<small>${num(g.stock_kg,0)} kg</small>`:nothing}</span>`}),
-    ...(g.saison_kg!=null?[listRow({label:'Cette saison',sub:g.jours_utilisation!=null?`${g.jours_utilisation} jours de chauffe${g.kg_par_jour!=null?`, ${num(g.kg_par_jour)} kg par jour`:''}.`:undefined,value:`${num(g.saison_kg,0)} kg`})]:[]),
-   ],{more:html`<span class="nk-def">Suivi Stock Pellet</span>`}):nothing}
+   ${s.conso?this.firePot(s.conso.brasier):nothing}
+   ${s.conso||g?listSection('Granulés',[
+    ...(s.conso?this.burnt(s,s.conso,!!g):[]),
+    ...(g?[listRow({label:'Stock',sub:g.jours!=null?`Au rythme de la saison, environ ${g.jours} jours.`:undefined,value:html`<span class="t">${g.stock_sacs!=null?`${num(g.stock_sacs,1)} sacs`:'—'}${g.stock_kg!=null?html`<small>${num(g.stock_kg,0)} kg</small>`:nothing}</span>`})]:[]),
+    ...(g&&g.saison_kg!=null?[listRow({label:'Déclarés cette saison',sub:g.jours_utilisation!=null?`${g.jours_utilisation} jours de chauffe${g.kg_par_jour!=null?`, ${num(g.kg_par_jour)} kg par jour`:''}, dans Suivi Stock Pellet.`:'Dans Suivi Stock Pellet.',value:`${num(g.saison_kg,0)} kg`})]:[]),
+   ],{more:html`<span class="nk-def">${s.conso?'compté par Hestia':''}${s.conso&&g?' · ':''}${g?'Suivi Stock Pellet':''}</span>`}):nothing}
    ${listSection('Pourquoi il chauffe',[
     listRow({label:'Son thermostat',sub:s.thermostat_nom??'Aucun : choisissez-le dans Réglages.',level:s.thermostat?undefined:'todo',
      value:s.thermostat?`${s.preset?PRESET[s.preset]??s.preset:'—'} · ${deg(s.consigne)}`:undefined,go:s.thermostat?undefined:()=>this.go('reglages')}),
@@ -416,6 +429,30 @@ export class HestiaHeatingSetup extends LitElement {
    ],{more:html`<span class="nk-def">lu, pas décidé</span>`})}
    ${s.pilote?.mode==='ombre'?noteBox('À l’ombre','Le pilote du poêle ne commande rien : il calcule ce qu’il ferait et le compare à ce que font vos automatisations. Dans Réglages, il peut régler la flamme, et seulement elle.')
      :s.pilote?.mode==='flamme'?noteBox('La flamme','Hestia règle la flamme du poêle, et seulement elle : le démarrage, l’arrêt et les sécurités restent à vos automatisations. Si la flamme change sans elle, elle la laisse jusqu’au lendemain.'):this.modeNote(v)}`;
+ }
+ /** The pellets counted by Hestia: the rate now, today, the season, the factor learnt on the bags, the price. */
+ private burnt(s:Stove,c:Conso,bags:boolean){
+  return [
+   ...(s.en_feu||c.debit_kg_h?[listRow({label:'En ce moment',sub:`D’après l’état du poêle et sa flamme${c.cout_heure!=null?`, soit ${euros(c.cout_heure)} de l’heure`:''}.`,value:`${num(c.debit_kg_h,2)} kg/h`})]:[]),
+   listRow({label:'Aujourd’hui',sub:`${num(c.kwh_jour,0)} kWh de chaleur${c.cout_jour!=null?` · ${euros(c.cout_jour)}`:''}`,value:`${num(c.kg_jour,1)} kg`}),
+   listRow({label:'Cette saison',sub:c.saison?`Saison ${c.saison}, comptée par Hestia depuis son installation.`:undefined,value:`${num(c.kg_saison,0)} kg`}),
+   ...(bags?[listRow({label:'Calage sur vos sacs',sub:c.correction===1?'Hestia ajustera ses débits au prochain sac déclaré vide dans Suivi Stock Pellet (pas au premier).'
+     :'Ses débits sont ajustés à chaque sac déclaré dans Suivi Stock Pellet.',value:`× ${num(c.correction,2)}`})]:[]),
+   ...(c.prix_kg!=null?[listRow({label:'Prix',sub:`${c.prix_kwh!=null?`${num(c.prix_kwh*100,1)} centimes le kWh de chaleur. `:''}${c.prix_source==='reglages'?'Le prix donné dans Réglages.':'D’après vos achats dans Suivi Stock Pellet.'}`,value:`${num(c.prix_kg,2)} €/kg`})]:[]),
+  ];
+ }
+ /** The fire pot: the kilos burnt since it was last cleaned, and « J'ai nettoyé » (asked twice, nothing sent to the stove). */
+ private firePot(b:FirePot){
+  const pct=b.kg==null?0:Math.min(100,Math.round(b.kg/b.seuil_kg*100));
+  const done=async()=>{this.cleaning=false;try{await this.hass!.callWS({type:'hestia_heating/brasier_nettoye'});await this.load();}catch(e){this.error=(e as {message?:string}).message??'Le nettoyage n’a pas été noté.';}};
+  return listSection('Le brasier',[
+   listRow({label:b.a_nettoyer?'À nettoyer':b.bientot?'Bientôt à nettoyer':'Granulés depuis le nettoyage',sub:b.texte,level:b.a_nettoyer?'todo':undefined,
+    value:b.kg==null?'—':html`<span class="t">${num(b.kg,1)} kg<small>sur ${num(b.seuil_kg,0)}</small></span>`}),
+   ...(b.kg!=null?[html`<div class="pot" role="img" aria-label=${`${pct} % du seuil`}><i class=${b.a_nettoyer?'full':b.bientot?'soon':''} style=${`width:${pct}%`}></i></div>`]:[]),
+   listRow({label:'Vous venez de le nettoyer ?',control:true,sub:b.nettoye_le?`Dernier nettoyage noté le ${dayOf(b.nettoye_le.slice(0,10))} à ${clockOf(b.nettoye_le)}.`:'Hestia compte à partir de là.',
+    value:this.cleaning?html`<span class="pot-ask"><button type="button" class="primary" @click=${done}>Oui, c’est nettoyé</button><button type="button" class="link" @click=${()=>{this.cleaning=false;}}>Annuler</button></span>`
+     :html`<button type="button" @click=${()=>{this.cleaning=true;}}>J’ai nettoyé</button>`}),
+  ],{help:b.par_les_sacs?'Compté sur vos sacs : ceux versés depuis le nettoyage, moins ce qui reste dans le réservoir.':'Compté par Hestia d’après la flamme du poêle.'});
  }
  /** The pilot, in shadow or flame mode: what Hestia does or would do, what the house does, and today's journal. */
  private pilotPart(s:Stove){
@@ -638,12 +675,27 @@ export class HestiaHeatingSetup extends LitElement {
        <option value="" ?selected=${!low}>Aucun</option>${(f.interrupteurs??[]).map(t=>html`<option value=${t.id} ?selected=${low===t.id}>${t.nom}</option>`)}
        ${low&&!(f.interrupteurs??[]).some(t=>t.id===low)?html`<option value=${low} selected>${low}</option>`:nothing}</select>`})]:[]),
    ],{help:'Le thermostat du poêle donne la demande (en %) face à la flamme réelle. La prise sert de témoin hors cloud.'}):nothing}
+   ${f.poele?listSection('Les granulés',[
+    this.numberRow('brasier_kg','Seuil du brasier','kg',5,60,1,'15','Les kilos brûlés après lesquels le brasier est à nettoyer. Vide : 15 kg, un sac.'),
+    this.numberRow('granules_prix_sac','Prix d’un sac','€',0.5,50,0.01,v.granules?.prix_sac!=null?num(v.granules.prix_sac,2):'',
+     v.granules?.prix_sac!=null?'Vide : d’après vos achats dans Suivi Stock Pellet.':'Pour le coût des granulés. Vide : pas de coût.'),
+    this.numberRow('granules_poids_sac','Poids d’un sac','kg',5,30,0.5,v.granules?.sac_kg!=null?num(v.granules.sac_kg,1):'15',
+     v.granules?.sac_kg!=null?'Vide : celui de Suivi Stock Pellet.':'Vide : 15 kg.'),
+   ],{help:'Hestia compte les granulés d’après la flamme du poêle, et s’ajuste sur les sacs déclarés dans Suivi Stock Pellet.'}):nothing}
    ${listSection('Les thermostats lus',all.map(t=>listRow({label:t.nom,control:true,sub:html`<span class="eid">${t.id}</span>`,
      value:toggle('Lire '+t.nom,off[t.id]!==false,on=>setSource(t.id,on))})),{help:'Un thermostat coupé ici n’est plus lu ni compté, sans rien changer dans Home Assistant.'})}
    ${listSection('Ce que Hestia peut régler',f.thermostats.map(t=>listRow({label:t.nom,control:true,sub:t.piece||undefined,
      value:toggle('Hestia peut régler '+t.nom,allowed.includes(t.id),on=>this.set('planning_autorises',on?[...allowed,t.id]:allowed.filter(x=>x!==t.id)))})),
      {help:'Un planning Actif n’envoie qu’aux thermostats cochés ici, et à aucun autre. Aucun au départ : pour un essai, cochez seulement vos thermostats d’essai.'})}
    ${listSection('',[listRow({label:'Les pièces',sub:'Elles viennent de Home Assistant : la pièce du thermostat, sinon celle de son appareil.',go:()=>this.openHa('/config/areas/dashboard')})])}`;
+ }
+
+ /** A number to type, empty for « as found ». The integration checks the bounds again. */
+ private numberRow(key:string,label:string,unit:string,min:number,max:number,step:number,placeholder:string,sub:string){
+  const x=this.val<number|null>(key);
+  return listRow({label,control:true,sub,value:html`<input class="num" type="number" inputmode="decimal" aria-label=${label} min=${min} max=${max} step=${step}
+   placeholder=${placeholder} .value=${x==null?'':String(x)} @change=${(e:Event)=>{const t=(e.target as HTMLInputElement).value.trim().replace(',','.');
+    const n=t===''?null:Number(t);this.set(key,n!=null&&Number.isFinite(n)?n:null);}}> ${unit}`});
  }
 
  /* ── Extensions ── */

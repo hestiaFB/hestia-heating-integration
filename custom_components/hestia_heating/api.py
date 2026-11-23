@@ -5,9 +5,14 @@ when the data is missing: never an invented value. °C, W, %, aware datetimes in
 """
 from __future__ import annotations
 
-from .const import API_VERSION
+from homeassistant.helpers import entity_registry as er
+
+from .const import API_VERSION, DOMAIN
 
 SOURCE_KEYS = ("id", "nom", "type", "piece", "etat", "puissance_w", "demande_pct", "energie_stat", "granules_stat")
+# The pellets counted by Hestia, as poele()["conso"] gives them (0.6).
+CONSO_KEYS = ("debit_kg_h", "kg_jour", "kg_saison", "saison", "total_kg", "energie_kwh", "kwh_jour", "prix_kg",
+              "prix_kwh", "cout_jour")
 
 
 class HestiaHeatingApi:
@@ -58,32 +63,50 @@ class HestiaHeatingApi:
         """Each source of heat or cold: `id` (stable: the thermostat's entity), `nom`, `type` (radiateur, poele, clim,
         pac, vanne, autre), `piece` (the Home Assistant area), `etat` (chauffe, rafraichit, repos, arret, inconnu),
         `puissance_w` (electricity drawn now, None for the stove), `demande_pct`, and the statistics known for its
-        energy (`energie_stat`) and its pellets (`granules_stat`)."""
+        energy (`energie_stat`) and its pellets (`granules_stat`). For the stove, since 0.6, both are Hestia's own
+        counts (the pellets burnt and their useful energy, sensor.hestia_heating_poele_*), never the stove thermostat's
+        energy counter (it counts the time of a switch that drives nothing): None without Hestia's sensor; for the
+        pellets, Suivi Stock Pellet's statistic then."""
         data = self._data
         out = [{k: s.get(k) for k in SOURCE_KEYS} for s in data.get("sources") or []]
         stove, pellets = data.get("poele"), data.get("granules")
-        if stove and pellets and pellets.get("stat"):
+        if stove:
+            energy, burnt = self._own("sensor", "poele_energie"), self._own("sensor", "poele_granules_brules")
             for s in out:
                 if s["type"] == "poele":
-                    s["granules_stat"] = pellets["stat"]
+                    s["energie_stat"] = energy
+                    s["granules_stat"] = burnt or (pellets or {}).get("stat") or s["granules_stat"]
         return out
+
+    def _own(self, platform: str, key: str) -> str | None:
+        """The entity id of one of this brick's entities (renamed or not), None when it does not exist."""
+        c = self.coordinator
+        if c is None:
+            return None
+        return er.async_get(self.hass).async_get_entity_id(platform, DOMAIN, f"{c.entry.entry_id}_{key}")
 
     def poele(self) -> dict | None:
         """The pellet stove, None without one (added in 0.2): `nom`, `etat`, `en_feu`, `flamme`, `thermostat` (the id of
-        its source), `energie_stat` (its thermostat's energy counter, the one a household often declares as « gas » in
-        the Energy page), and `granules` (Suivi Stock Pellet: `stock_kg`, `jours`, `kg_par_jour`, `saison_kg`, `stat`,
-        the statistic of the kilos burnt), None without it."""
+        its source), `energie_stat` (since 0.6 Hestia's count of the stove's useful energy, the one to declare in the
+        Energy page; before, its thermostat's energy counter), `granules` (Suivi Stock Pellet: `stock_kg`, `jours`,
+        `kg_par_jour`, `saison_kg`, `stat`, the statistic of the kilos burnt), None without it, and `conso` (0.6, the
+        pellets counted by Hestia: `debit_kg_h`, `kg_jour`, `kg_saison`, `saison`, `total_kg`, `energie_kwh`,
+        `kwh_jour`, `prix_kg`, `prix_kwh`, `cout_jour`, and `brasier`: `kg` since the last cleaning, `seuil_kg`,
+        `a_nettoyer`)."""
         data = self._data
         stove = data.get("poele")
         if not stove:
             return None
-        source = next((s for s in data.get("sources") or [] if s.get("type") == "poele"), None)
         pellets = data.get("granules")
+        conso = stove.get("conso")
+        fire_pot = (conso or {}).get("brasier") or {}
         return {"nom": stove.get("nom"), "etat": stove.get("etat"), "en_feu": stove.get("en_feu"),
                 "flamme": stove.get("flamme"), "thermostat": stove.get("thermostat"),
-                "energie_stat": (source or {}).get("energie_stat"),
+                "energie_stat": self._own("sensor", "poele_energie"),
                 "granules": None if not pellets else {k: pellets.get(k) for k in
-                                                      ("stock_kg", "jours", "kg_par_jour", "saison_kg", "stat")}}
+                                                      ("stock_kg", "jours", "kg_par_jour", "saison_kg", "stat")},
+                "conso": None if not conso else {**{k: conso.get(k) for k in CONSO_KEYS}, "brasier": {
+                    k: fire_pot.get(k) for k in ("kg", "seuil_kg", "a_nettoyer")}}}
 
     def maison(self) -> dict | None:
         """The house in one sentence and its figures: `etat`, `titre`, `texte`, `temperature`, `en_chauffe`, `pieces`,

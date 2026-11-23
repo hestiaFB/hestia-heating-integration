@@ -1,6 +1,6 @@
 {
   "name": "hestia-heating-card",
-  "version": "0.5.0b1",
+  "version": "0.6.0b1",
   "private": true,
   "type": "module",
   "scripts": {

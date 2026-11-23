@@ -100,6 +100,10 @@ def pellets(found: dict | None) -> dict | None:
     stock_kg, season_kg, days_used = value("stock"), value("consomme_kg"), value("jours_utilisation")
     bag_kg = _number(attrs.get("poids_sac_kg"))
     pace = season_kg / days_used if season_kg and days_used else None
+    burnt_attrs = (found.get("consomme_kg") or {}).get("attributes") or {}
+    bought_attrs = (found.get("achete_kg") or {}).get("attributes") or {}
+    spent, bought = value("depense"), _number(bought_attrs.get("achete_sacs"))
+    start_month = _number(attrs.get("mois_debut_saison"))
     return {
         "stock_kg": stock_kg,
         "stock_sacs": _number(attrs.get("stock_sacs")) if attrs.get("stock_sacs") is not None else (
@@ -111,5 +115,11 @@ def pellets(found: dict | None) -> dict | None:
         "kg_par_jour": None if pace is None else round(pace, 1),
         "jours": None if pace is None or stock_kg is None else int(stock_kg // pace),
         "depense": value("depense"),
+        # The bags declared burnt this season (one declared when the tank is empty) and the price of one bag, from
+        # what was spent on the bags bought: Hestia's pellet count is set on them (engine/granules.py).
+        "consomme_sacs": _number(burnt_attrs.get("consomme_sacs")),
+        "achete_sacs": bought,
+        "prix_sac": round(spent / bought, 2) if spent and bought else None,
+        "debut_saison": int(start_month) if start_month and 1 <= start_month <= 12 else None,
         "stat": (found.get("consomme_kg") or {}).get("entity_id"),
     }

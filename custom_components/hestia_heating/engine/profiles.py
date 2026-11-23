@@ -26,6 +26,9 @@ class Profile:
     alarm_ok: tuple = ()
     limits: dict = field(default_factory=dict)
     link: str | None = None
+    # Pellets burnt per hour: {"allumage": kg/h, "flammes": [kg/h at flame 1, 2…]} (orders of magnitude, scaled by a
+    # factor learnt on the bags).
+    rates: dict = field(default_factory=dict)
 
     def translate(self, text: str | None) -> tuple[str, bool]:
         """The brick's state for the stove's text, and whether the profile knows it. An unknown text is never guessed:
@@ -49,7 +52,7 @@ def parse(data: dict) -> Profile:
     return Profile(id=data["profil"], name=data.get("nom") or data["profil"], integration=data["integration"],
                    roles=dict(data.get("roles") or {}), states={k: list(v) for k, v in (data.get("etats") or {}).items()},
                    alarm_ok=tuple(data.get("alarme_ok") or ()), limits=dict(data.get("limites") or {}),
-                   link=data.get("lien"))
+                   link=data.get("lien"), rates=dict(data.get("debits") or {}))
 
 
 def load_all(folder: Path) -> list[Profile]:

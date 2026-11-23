@@ -6,8 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription, SensorStateClass
-from homeassistant.const import UnitOfTime
+from homeassistant.const import UnitOfEnergy, UnitOfMass, UnitOfTime
 
+from .engine.granules import KWH_PER_KG
 from .engine.profiles import STATES as STOVE_STATES
 from .entity import HeatingEntity
 
@@ -25,6 +26,14 @@ def _house(d: dict) -> dict:
 
 def _stove(d: dict) -> dict:
     return d.get("poele") or {}
+
+
+def _conso(d: dict) -> dict:
+    return _stove(d).get("conso") or {}
+
+
+def _fire_pot(d: dict) -> dict:
+    return _conso(d).get("brasier") or {}
 
 
 SENSORS = (
@@ -52,6 +61,28 @@ SENSORS = (
         value=lambda d: (d.get("granules") or {}).get("jours"),
         attributes=lambda d: {k: (d.get("granules") or {}).get(k) for k in ("stock_kg", "stock_sacs", "kg_par_jour", "saison_kg")},
         exists=lambda d: bool(d.get("granules"))),
+    # The pellets counted by Hestia (0.6): kilos burnt and their useful energy, never reset (for the Energy page and
+    # Hestia Énergie), and the kilos burnt since the fire pot was last cleaned.
+    HeatingSensorDescription(
+        key="poele_granules_brules", translation_key="poele_granules_brules", device_class=SensorDeviceClass.WEIGHT,
+        state_class=SensorStateClass.TOTAL_INCREASING, native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        suggested_display_precision=1, value=lambda d: _conso(d).get("total_kg"),
+        attributes=lambda d: {k: _conso(d).get(k) for k in ("debit_kg_h", "kg_jour", "kg_saison", "saison",
+                                                             "correction", "prix_kg", "cout_jour")},
+        exists=lambda d: bool(d.get("poele"))),
+    HeatingSensorDescription(
+        key="poele_energie", translation_key="poele_energie", device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING, native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=1, value=lambda d: _conso(d).get("energie_kwh"),
+        attributes=lambda d: {"kwh_par_kg": KWH_PER_KG, "kwh_jour": _conso(d).get("kwh_jour"),
+                              "prix_kwh": _conso(d).get("prix_kwh")},
+        exists=lambda d: bool(d.get("poele"))),
+    HeatingSensorDescription(
+        key="poele_brasier", translation_key="poele_brasier", device_class=SensorDeviceClass.WEIGHT,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS, suggested_display_precision=1,
+        value=lambda d: _fire_pot(d).get("kg"),
+        attributes=lambda d: {k: _fire_pot(d).get(k) for k in ("seuil_kg", "nettoye_le", "par_les_sacs", "texte")},
+        exists=lambda d: bool(d.get("poele"))),
 )
 
 

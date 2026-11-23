@@ -21,7 +21,7 @@ from homeassistant.util import dt as dt_util
 
 from . import reader
 from .const import API_KEY, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
-from .engine import home_planning, house, phrases, pilot, profiles
+from .engine import granules, home_planning, house, phrases, pilot, profiles
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +35,10 @@ TICK = timedelta(minutes=1)
 DAY_CACHE_S = 120
 DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
             "planning": None, "pilote": "ombre", "pilote_thermometre": None,
-            "planning_autorises": [], "pilote_flamme_basse": None}
+            "planning_autorises": [], "pilote_flamme_basse": None,
+            "brasier_kg": None, "granules_prix_sac": None, "granules_poids_sac": None}
+# What the pellets settings may be (Réglages): the fire pot's threshold, a bag's price and weight.
+PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granules_poids_sac": (5, 30)}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en essai, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
@@ -47,6 +50,12 @@ PILOT_SHOWN = 20
 PILOT_DAYS = 7
 PILOT_KEEP = 500
 PILOT_GAPS = 5
+# The pellets' count changes every minute while the stove burns: written at most every 5 minutes (a stop of Home
+# Assistant loses at most that), at once when a bag, the factor, the fire pot or the day changes.
+PELLETS_SAVE_S = 300
+PELLETS_KEYS = ("sacs", "correction", "nettoye_le", "jour", "saison")
+PELLET_WORDS = {"brasier_kg": "seuil du brasier (kg)", "granules_prix_sac": "prix d’un sac (€)",
+                "granules_poids_sac": "poids d’un sac (kg)"}
 
 
 class HeatingCoordinator:
@@ -62,6 +71,9 @@ class HeatingCoordinator:
         # The stove's pilot: its memory and its journal of the week (kept with the planning's state).
         self.pilot_memory: dict = {}
         self.pilot_journal: list[dict] = []
+        # The pellets counted by Hestia (engine/granules.py), kept with the planning's state.
+        self.pellets_memory: dict = {}
+        self._pellets_saved = 0.0
         self.settings: dict = dict(DEFAULTS)
         self.model: dict = home_planning.default()
         self.profiles: list[profiles.Profile] = []
@@ -114,6 +126,9 @@ class HeatingCoordinator:
         # restart is neither a switch-off nor a step up, as for the house's own automations.
         self.pilot_memory = {k: v for k, v in (state.get("pilote") or {}).items() if k not in ("mode", "preset")}
         self.pilot_journal = [j for j in state.get("journal_pilote") or [] if isinstance(j, dict) and j.get("jour") and j.get("qui")]
+        # The rate seen before the stop is not carried over it: the time Home Assistant was stopped counts nothing.
+        pellets = state.get("granules")
+        self.pellets_memory = {**pellets, "debit": 0.0} if isinstance(pellets, dict) else {}
         folder = Path(__file__).parent / "profiles"
         self.profiles = await self.hass.async_add_executor_job(profiles.load_all, folder)
         self._discover()
@@ -130,6 +145,8 @@ class HeatingCoordinator:
         self._listen()
 
     async def async_stop(self) -> None:
+        # Reloaded: the count of the last minutes is written now, before the new brick reads it.
+        await self.state_store.async_save(self._state())
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
@@ -202,7 +219,8 @@ class HeatingCoordinator:
             self.journal = [j for j in self.journal if j.get("jour") == today]
             snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
                         pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory,
-                        autorises=self.settings.get("planning_autorises") or [])
+                        autorises=self.settings.get("planning_autorises") or [],
+                        granules_memoire=self.pellets_memory, granules_reglages=self._pellet_settings())
             view = house.build(snap)
             due, waiting = view["planning"].pop("_dus"), view["planning"].pop("_sans_repere")
             # Orders only once Home Assistant runs: a thermostat that loads after this brick is not yet there.
@@ -212,6 +230,7 @@ class HeatingCoordinator:
                 view["planning"].pop("_dus")
                 view["planning"].pop("_sans_repere")
             self._pilot(view.pop("_pilote", None), view.get("poele"), today)
+            self._pellets(view.pop("_granules", None))
         except Exception:  # noqa: BLE001 - a strange state never stops the brick: the last good view stays
             _LOGGER.exception("Hestia Chauffage n'a pas pu lire la maison")
             return
@@ -255,9 +274,33 @@ class HeatingCoordinator:
             "number", "set_value", {"entity_id": order["entity_id"], "value": order["valeur"]}, blocking=False,
             context=Context()))
 
+    def _pellet_settings(self) -> dict:
+        s = self.settings
+        return {"brasier_kg": s.get("brasier_kg"), "prix_sac": s.get("granules_prix_sac"),
+                "poids_sac": s.get("granules_poids_sac")}
+
+    def _pellets(self, memory: dict | None) -> None:
+        if memory is None:
+            return
+        at_once = any(memory.get(k) != self.pellets_memory.get(k) for k in PELLETS_KEYS)
+        self.pellets_memory = memory
+        if at_once or time.monotonic() - self._pellets_saved >= PELLETS_SAVE_S:
+            self._pellets_saved = time.monotonic()
+            self._save_state()
+
+    async def async_fire_pot_cleaned(self) -> None:
+        """« J'ai nettoyé » : the fire pot's count starts again now. Written at once."""
+        bags = granules.bags_of(self.data.get("granules"), self.settings.get("granules_poids_sac"))
+        self.pellets_memory = granules.cleaned(self.pellets_memory, bags, dt_util.now())
+        await self.state_store.async_save(self._state())
+        self._build()
+
+    def _state(self) -> dict:
+        return {"thermostats": self.applied, "pilote": self.pilot_memory, "journal_pilote": self.pilot_journal,
+                "granules": self.pellets_memory}
+
     def _save_state(self) -> None:
-        self.state_store.async_delay_save(lambda: {"thermostats": self.applied, "pilote": self.pilot_memory,
-                                                   "journal_pilote": self.pilot_journal}, 5)
+        self.state_store.async_delay_save(self._state, 5)
 
     def _extensions(self) -> list[dict]:
         """What the brick reads, installed or not, and switched on or off in Extensions."""
@@ -380,6 +423,11 @@ class HeatingCoordinator:
         sensor = changes.get("pilote_thermometre")
         if sensor is not None and not (isinstance(sensor, str) and sensor.startswith("sensor.")):
             raise ValueError("thermomètre de la maison illisible")
+        for key, (low_v, high_v) in PELLET_LIMITS.items():
+            value = changes.get(key)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
+                                      or not low_v <= value <= high_v):
+                raise ValueError(f"{PELLET_WORDS[key]} : entre {low_v} et {high_v}, ou vide")
         if "planning" in changes:
             model = home_planning.clean(changes["planning"])
             changes = {**changes, "planning": model}
