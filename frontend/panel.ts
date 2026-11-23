@@ -452,7 +452,7 @@ export class HestiaHeatingSetup extends LitElement {
   return html`${this.head(r.nom,{back:['','Accueil'],chips:this.chip(r.badge),lead:r.raison??undefined})}
    <div class="card"><div class="reading"><div><div class="big">${r.temperature!=null?num(r.temperature):'—'}<sup>°C</sup></div>${slope?html`<div class="say">${slope}</div>`:nothing}</div>
     ${r.consigne!=null?html`<div class="target"><span>Consigne</span><b>${deg(r.consigne)}</b>${r.planning?html`<div class="say">${r.planning}${r.prochain?` jusqu’à ${when(r.prochain.a)}`:''}</div>`:nothing}</div>`:nothing}</div>
-    ${r.demande_pct!=null?html`<div class="say" style="margin-top:14px">Demande du thermostat : <b>${r.demande_pct} %</b>${r.puissance_w?` · ${watts(r.puissance_w)}`:''}</div><div class="bar"><i style=${`width:${r.demande_pct}%`}></i></div>`:nothing}
+    ${r.demande_pct?html`<div class="say" style="margin-top:14px">Demande du thermostat : <b>${r.demande_pct} %</b>${r.puissance_w?` · ${watts(r.puissance_w)}`:''}</div><div class="bar"><i style=${`width:${r.demande_pct}%`}></i></div>`:nothing}
     ${day&&day.series.temperature?.length?html`${dayChart([{pts:day.series.temperature,cls:'temp'},{pts:day.series.consigne??[],cls:'target',step:true}],day.maintenant_min,`Température et consigne de ${r.nom} aujourd’hui`)}
      <div class="legend"><span><i class="sw temp"></i>température</span><span><i class="sw target"></i>consigne</span></div>`:nothing}</div>
    ${listSection(srcs.length>1?'Ses thermostats':'Son thermostat',srcs.map(s=>listRow({label:html`<b>${s.nom}</b>`,name:s.nom,
