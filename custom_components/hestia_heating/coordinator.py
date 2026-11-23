@@ -20,7 +20,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from . import reader
-from .const import STORE_KEY, STORE_VERSION, VERSION
+from .const import API_KEY, STORE_KEY, STORE_VERSION, VERSION
 from .engine import house, profiles
 
 _LOGGER = logging.getLogger(__name__)
@@ -211,6 +211,12 @@ class HeatingCoordinator:
              "sans": "Le froid à venir n’est pas dit.", "lien": "https://github.com/hestiaFB/hestia-weather-integration",
              "trouve": 1 if self.weather.get("etat") == "oui" else 0, "lieu": self.weather.get("lieu"),
              "lieu_nom": self.weather.get("nom"), "lieux": self.weather.get("lieux") or []},
+            {"id": "hestia_energy", "groupe": "Briques Hestia-FB", "nom": "Hestia Énergie",
+             "installee": installed.get("hestia_energy", False),
+             "usage": "Lit le chauffage de chaque pièce et le poêle : son énergie et ses granulés, sans rien deviner.",
+             "sans": "Hestia Énergie devine le poêle par une source « gaz ».",
+             "lien": "https://github.com/hestiaFB/hestia-energy-integration",
+             "trouve": 1 if getattr(self.hass.data.get(API_KEY), "readers", {}).get("hestia_energy") else 0},
         ]
         for row in rows:
             row["utilisee"] = off.get(row["id"]) is not False

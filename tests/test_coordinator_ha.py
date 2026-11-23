@@ -87,6 +87,10 @@ class HomeAssistantWithAHouse(unittest.IsolatedAsyncioTestCase):
         entities.async_get_or_create("climate", "aguaiot", "essai", suggested_object_id="poele", device_id=device.id,
                                      config_entry=stove_entry)
         hass.states.async_set("climate.poele", "heat", {"current_temperature": 19.5, "temperature": 21})
+        # The thermostats' energy counters (and a longer id that is not the bureau's own).
+        for object_id in ("vt_poele_energy", "vt_bureau_energy", "vt_bureau_test_energy"):
+            hass.states.async_set(f"sensor.{object_id}", "12.5", {"device_class": "energy", "state_class": "total_increasing",
+                                                                  "unit_of_measurement": "kWh"})
         # Its plug, the pellets and the schedules.
         hass.states.async_set("sensor.prise_du_poele_puissance", "42", {"device_class": "power", "friendly_name": "Prise poêle"})
         for key, r in m.pellets().items():
@@ -159,6 +163,15 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         self.assertEqual(kinds["climate.vt_poele"], "poele")
         self.assertEqual(kinds["climate.vt_bureau"], "radiateur")
         self.assertEqual(api.maison()["etat"], "chauffe")
+        # 0.2: what Hestia Énergie reads instead of guessing the stove from a « gas » source.
+        counters = {s["id"]: s["energie_stat"] for s in api.sources()}
+        self.assertEqual(counters["climate.vt_bureau"], "sensor.vt_bureau_energy")
+        self.assertIsNone(counters["climate.vt_sejour"])
+        stove = api.poele()
+        self.assertEqual((stove["etat"], stove["flamme"], stove["thermostat"]), ("chauffe", 3, "climate.vt_poele"))
+        self.assertEqual(stove["energie_stat"], "sensor.vt_poele_energy")
+        self.assertEqual(stove["granules"]["stat"], "sensor.granules_saison")
+        self.assertEqual(stove["granules"]["jours"], 50)
         heard = []
         remove = api.add_listener(lambda: heard.append(1), brick="hestia_energy")
         attrs = dict(self.hass.states.get("climate.vt_bureau").attributes, current_temperature=18.6)
@@ -166,9 +179,12 @@ class MadeUpHouse(HomeAssistantWithAHouse):
         await asyncio.sleep(1.5)
         await self.hass.async_block_till_done()
         self.assertTrue(heard)
+        energy = next(e for e in c._extensions() if e["id"] == "hestia_energy")
+        self.assertEqual(energy["trouve"], 1)
         remove()
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
         self.assertEqual(api.sources(), [])
+        self.assertIsNone(api.poele())
 
     async def test_the_cards_view_is_lighter(self):
         entry, c = await self._setup()

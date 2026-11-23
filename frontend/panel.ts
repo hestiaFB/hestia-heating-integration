@@ -40,7 +40,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
   prises:{id:string;nom:string;poele:boolean}[];prise:string|null;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null}}};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='0.1.0b1';
+const VERSION='0.2.0b1';
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
 const deg=(v:number|null|undefined)=>v==null?'—':`${num(v)} °C`;
 const watts=(w:number|null|undefined)=>w==null?'—':w>=500?`${num(w/1000)} kW`:`${num(w,0)} W`;

@@ -68,6 +68,23 @@ class HestiaHeatingApi:
                     s["granules_stat"] = pellets["stat"]
         return out
 
+    def poele(self) -> dict | None:
+        """The pellet stove, None without one (added in 0.2): `nom`, `etat`, `en_feu`, `flamme`, `thermostat` (the id of
+        its source), `energie_stat` (its thermostat's energy counter, the one a household often declares as « gas » in
+        the Energy page), and `granules` (Suivi Stock Pellet: `stock_kg`, `jours`, `kg_par_jour`, `saison_kg`, `stat`,
+        the statistic of the kilos burnt), None without it."""
+        data = self._data
+        stove = data.get("poele")
+        if not stove:
+            return None
+        source = next((s for s in data.get("sources") or [] if s.get("type") == "poele"), None)
+        pellets = data.get("granules")
+        return {"nom": stove.get("nom"), "etat": stove.get("etat"), "en_feu": stove.get("en_feu"),
+                "flamme": stove.get("flamme"), "thermostat": stove.get("thermostat"),
+                "energie_stat": (source or {}).get("energie_stat"),
+                "granules": None if not pellets else {k: pellets.get(k) for k in
+                                                      ("stock_kg", "jours", "kg_par_jour", "saison_kg", "stat")}}
+
     def maison(self) -> dict | None:
         """The house in one sentence and its figures: `etat`, `titre`, `texte`, `temperature`, `en_chauffe`, `pieces`,
         `electrique_w`, and the stove's state (`poele`: etat, flamme) when there is one."""
