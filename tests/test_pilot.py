@@ -426,6 +426,31 @@ class TheHouseView(unittest.TestCase):
             self.assertEqual(view["_pilote"]["ordres"], [])
             self.assertNotIn("conduite", view["poele"]["pilote"])
 
+    def test_the_simulator_rehearses_the_whole_pilot_in_conseil_and_flamme(self):
+        """1.0: « Entier » à blanc, nothing sent, its journal in the conditional in place of the pilot's own."""
+        cl = m.climates()
+        cl[0]["attributes"]["preset_mode"] = "frost"
+        snap = m.snapshot(climates=cl, pilote="ombre", simulateur=True,
+                          pilote_memoire={"etat": "chauffe", "reglee": 3, "preset": "boost", "mode": "heat"})
+        snap["stove"]["roles"]["thermostat"] = {"entity_id": "climate.poele", "state": "heat",
+                                                "attributes": {"temperature": 25}}
+        for mode in ("ombre", "flamme", "ombre"):
+            view = house.build({**snap, "pilote": mode, "copies": ["climate.vt_poele"] if mode == "ombre" else []})
+            p = view["poele"]["pilote"]
+            self.assertEqual(view["_pilote"]["ordres"], [])
+            self.assertNotIn("conduite", p)
+            self.assertEqual((p["simulation"]["blanc"], p["simulation"]["sequence"]), (True, "arret"))
+            said = [e["texte"] for e in view["_pilote"]["evenements"]]
+            self.assertIn("Hestia éteindrait le poêle.", said)
+            self.assertNotIn("Hestia arrêterait le poêle.", said)
+            self.assertEqual(view["_pilote"]["reveil"], 300.0)        # the house's own stop, 5 minutes at most
+            self.assertIn("conduite_blanc", view["_pilote"]["memoire"])
+        # Switched off: the pilot's own lines again, and its memory let go.
+        view = house.build(snap | {"simulateur": False})
+        self.assertNotIn("simulation", view["poele"]["pilote"])
+        self.assertIn("Hestia arrêterait le poêle.", [e["texte"] for e in view["_pilote"]["evenements"]])
+        self.assertNotIn("conduite_blanc", view["_pilote"]["memoire"])
+
     def test_switched_off_it_says_nothing(self):
         view = house.build(m.snapshot(pilote="eteint"))
         self.assertEqual(view["poele"]["pilote"], {"mode": "eteint"})

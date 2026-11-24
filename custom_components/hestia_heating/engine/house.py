@@ -195,6 +195,12 @@ def build(snap: dict) -> dict:
             if mode == "entier":
                 orders, events, stove["pilote"]["conduite"], wake = _drive(snap, decision, stove, stove_thermostat,
                                                                            memory, events, now, copy)
+            elif snap.get("simulateur"):
+                # The simulator (1.0): « Entier » rehearsed, nothing sent.
+                events, stove["pilote"]["simulation"], wake = _rehearse(snap, decision, stove, stove_thermostat,
+                                                                        memory, events, now, copy)
+            else:
+                memory.pop("conduite_blanc", None)
             pilot_state = {"memoire": memory, "evenements": events, "ordre": order, "ordres": orders, "reveil": wake}
         # The stove's sentence (1.0), once its pilot has said what it does.
         stove["phrase"] = stove_says.sentence(stove, stove_thermostat, next((r for r in room_list if r.get("poele")), None),
@@ -274,6 +280,23 @@ def _drive(snap, decision, stove, thermostat, memory, events, now, copy) -> tupl
                  "texte": "Le poêle s’éteint, comme Hestia l’a demandé."}
         out.append(e)
     return orders, done + out, status, wake
+
+
+def _rehearse(snap, decision, stove, thermostat, memory, events, now, copy) -> tuple[list, dict | None, float | None]:
+    """The simulator of « Entier » (1.0), in « Conseil » and « Flamme »: the whole pilot's sequences « à blanc », from
+    their own memory (`conduite_blanc`). Nothing is ever sent (driver.drive gives no gesture « à blanc »); its journal
+    says what Hestia would do, in place of the pilot's own « would » lines, next to what the house does."""
+    if not snap.get("pret", True):
+        return events, None, None
+    base = snap.get("conduite") or {}
+    ctx = {"blanc": True, "copie": copy, "brasier": (stove.get("conso") or {}).get("brasier"),
+           "ventilation": base.get("ventilation"), "ha_depuis": base.get("ha_depuis")}
+    shadow = {**memory, "conduite": memory.get("conduite_blanc")}
+    _, said, status, wake = driver.drive(decision, stove, thermostat, shadow, now, ctx)
+    memory["conduite_blanc"] = shadow["conduite"]
+    if not status.get("pilotable") or not thermostat:
+        return events, status, None
+    return said + [e for e in events if not (e["qui"] == "hestia" and e["texte"].startswith(WOULD))], status, wake
 
 
 def _public(s: dict) -> dict:

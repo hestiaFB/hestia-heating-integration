@@ -14,7 +14,7 @@ CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors
 SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote",
                 "pilote_thermometre", "planning_autorises", "pilote_flamme_basse", "brasier_kg", "granules_prix_sac",
                 "granules_poids_sac", "pilote_notifier", "poele_prise_switch", "couper_prise", "prix_kwh",
-                "trop_chaud_ecart", "pilote_ventilation")
+                "trop_chaud_ecart", "pilote_ventilation", "pilote_simulateur")
 # The notify services that are not a phone or a group of phones.
 NOT_PHONES = ("send_message", "persistent_notification")
 # The planning's parts only the tab needs (the plannings, the editor, Scheduler, the journal).

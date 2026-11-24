@@ -43,7 +43,8 @@ DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_pr
             "planning_autorises": [], "pilote_flamme_basse": None,
             "brasier_kg": None, "granules_prix_sac": None, "granules_poids_sac": None,
             "pilote_notifier": None, "poele_prise_switch": None, "couper_prise": True,
-            "prix_kwh": None, "pilote_auto": None, "trop_chaud_ecart": None, "pilote_ventilation": "auto"}
+            "prix_kwh": None, "pilote_auto": None, "trop_chaud_ecart": None, "pilote_ventilation": "auto",
+            "pilote_simulateur": False}
 # What the pellets settings may be (Réglages): the fire pot's threshold, a bag's price and weight.
 PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granules_poids_sac": (5, 30),
                  "prix_kwh": (0.01, 2), "trop_chaud_ecart": pilot.OVER_LIMITS}
@@ -152,8 +153,9 @@ class HeatingCoordinator:
         # restart is neither a switch-off nor a step up, as for the house's own automations.
         self.pilot_memory = {k: v for k, v in (state.get("pilote") or {}).items() if k not in ("mode", "preset")}
         # The whole pilot's sequences are not carried over a restart: only its day's count and its lock are.
-        if "conduite" in self.pilot_memory:
-            self.pilot_memory["conduite"] = driver.kept(self.pilot_memory["conduite"])
+        for key in ("conduite", "conduite_blanc"):
+            if key in self.pilot_memory:
+                self.pilot_memory[key] = driver.kept(self.pilot_memory[key])
         self.pilot_journal = [j for j in state.get("journal_pilote") or [] if isinstance(j, dict) and j.get("jour") and j.get("qui")]
         # The rate seen before the stop is not carried over it: the time Home Assistant was stopped counts nothing.
         pellets = state.get("granules")
@@ -257,6 +259,7 @@ class HeatingCoordinator:
             snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
                         pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory,
                         trop_chaud=self.settings.get("trop_chaud_ecart"),
+                        simulateur=self.settings.get("pilote_simulateur") is True,
                         autorises=self.settings.get("planning_autorises") or [],
                         granules_memoire=self.pellets_memory, granules_reglages=self._pellet_settings(),
                         pret=self.hass.state is CoreState.running,
@@ -642,6 +645,8 @@ class HeatingCoordinator:
             raise ValueError("interrupteur de la prise illisible")
         if "couper_prise" in changes and not isinstance(changes["couper_prise"], bool):
             raise ValueError("« couper la prise sans réponse » : oui ou non")
+        if "pilote_simulateur" in changes and not isinstance(changes["pilote_simulateur"], bool):
+            raise ValueError("simulateur du mode Entier : oui ou non")
         if "pilote_ventilation" in changes and changes["pilote_ventilation"] not in driver.FAN_MODES:
             raise ValueError("ventilation : « auto » ou « flamme »")
         for key, (low_v, high_v) in PELLET_LIMITS.items():

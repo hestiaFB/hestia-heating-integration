@@ -423,6 +423,76 @@ class Fan(unittest.TestCase):
             self.assertEqual(self.fans(orders), [])
 
 
+class Simulator(unittest.TestCase):
+    """1.0: the same sequences « à blanc » in « Conseil » and « Flamme »: nothing sent, the journal in the conditional,
+    and a line of the house when it does not follow."""
+
+    def said(self, p):
+        return [(e["qui"], e["texte"], e["accord"]) for e in p.events]
+
+    def test_a_start_rehearsed_and_the_house_does_not_light_it(self):
+        p = Pilot(blanc=True)
+        everything = boosted(p)
+        self.assertIn(("hestia", "Hestia réglerait d’abord : ECO Stop, Ventilation en AUTO.", None), self.said(p))
+        everything += p.look(stove(), thermostat("boost"), timedelta(seconds=2))
+        self.assertEqual(self.said(p), [("hestia", "Hestia allumerait le poêle (le thermostat est passé en boost).",
+                                         None)])
+        self.assertTrue(p.status["blanc"])
+        self.assertIn("la maison le fait-elle aussi", p.status["texte"])
+        everything += p.look(stove(), thermostat("boost"), timedelta(minutes=3))
+        # No reload: the house drives. Its silence is a disagreement.
+        self.assertEqual(self.said(p), [("maison", "La maison n’a pas allumé le poêle dans les 3 minutes.", False)])
+        self.assertEqual(everything, [])
+        self.assertEqual(p.run["demarrages"], 1)
+
+    def test_the_house_lights_it_as_hestia_would(self):
+        p = Pilot(blanc=True)
+        boosted(p)
+        p.look(stove(), thermostat("boost"), timedelta(seconds=2))
+        self.assertEqual(p.look(stove("allumage"), thermostat("boost"), timedelta(minutes=1)), [])
+        self.assertEqual(self.said(p), [])
+        self.assertEqual(p.run["allumage"]["fin"], "ok")
+
+    def test_a_stop_rehearsed_waits_for_the_house_s_own(self):
+        for house_stops, last in ((True, []), (False, [("maison", "La maison n’a pas éteint le poêle dans les 5 "
+                                                                  "minutes.", False)])):
+            p = Pilot(blanc=True)
+            p.look(stove("chauffe", 3, **HOT), thermostat("boost"))
+            self.assertEqual(p.look(stove("chauffe", 3, **HOT), thermostat("frost"), timedelta(minutes=1)), [])
+            self.assertIn(("hestia", "Hestia éteindrait le poêle.", None), self.said(p))
+            self.assertEqual(p.wake, 300.0)
+            after = stove("extinction", 3, **HOT) if house_stops else stove("chauffe", 3, **HOT)
+            self.assertEqual(p.look(after, thermostat("frost"), timedelta(minutes=5)), [])
+            self.assertEqual(self.said(p), last)
+            if house_stops:
+                self.assertEqual(p.run["arret"]["phase"], "verif")
+
+    def test_no_lock_no_question_and_a_copy_rehearses_too(self):
+        p = Pilot(blanc=True, copie=True)
+        everything = boosted(p, stove(), room=29.0)            # too hot: Entier would switch the thermostat off
+        self.assertIn(("hestia", "Hestia éteindrait le thermostat du poêle : la pièce du poêle est à 29 °C, au-dessus "
+                                 "de 28 °C.", None), self.said(p))
+        self.assertIsNone(p.run.get("verrou"))
+        q = Pilot(blanc=True)
+        everything += boosted(q, house_c=MILD)
+        self.assertIn(("hestia", "Hestia demanderait votre accord pour démarrer le poêle (saison douce).", None),
+                      self.said(q))
+        self.assertIsNone(q.run.get("question"))
+        everything += q.look(stove(), thermostat("boost"), timedelta(minutes=20), house_c=MILD,
+                             reponses={"non": NOW.isoformat()})
+        self.assertEqual(everything, [])
+
+    def test_flame_plus_one_rehearsed_once(self):
+        p = Pilot(blanc=True, ventilation="flamme")
+        levels = {"ventilation_niveaux": ["1", "2", "3", "4", "5"]}
+        p.look(stove(**levels), thermostat("eco"))
+        hot = stove("chauffe", 3, ventilation="AUTO", **HOT, **levels)
+        self.assertEqual(p.look(hot, thermostat("boost"), timedelta(minutes=1)), [])
+        self.assertIn(("hestia", "Hestia mettrait la ventilation à 4 : flamme 3 + 1.", None), self.said(p))
+        p.look(hot, thermostat("boost"), timedelta(minutes=15))
+        self.assertEqual(self.said(p), [], "said once, though the house keeps AUTO")
+
+
 class Never(unittest.TestCase):
     def test_nothing_to_a_stove_copied_from_another_house(self):
         p = Pilot(copie=True)

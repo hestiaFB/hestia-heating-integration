@@ -27,6 +27,11 @@ cloud's delays, one at a time:
 - The front fan (1.0, Réglages « Ventilation »): AUTO, set once before a start (the default); or « flamme + 1 »: at
   its lowest while the smoke is under 110 °C, then the flame + 1 (5 at most), one order at most every 10 minutes and
   only while more than 6 orders are left; nothing is set before a start then.
+
+The simulator (1.0, Réglages, in « Conseil » and « Flamme »): the same sequences « à blanc » (`ctx["blanc"]`), from
+their own memory. Nothing is ever sent, not even a notice; the journal says what Hestia would do (« Hestia allumerait
+le poêle »), and when the house does not follow within a few minutes (it does not light the stove, or stop it), a line
+of the house that disagrees. No answer, no lock, no reload and no plug: the house drives, Hestia only rehearses.
 """
 from __future__ import annotations
 
@@ -50,6 +55,7 @@ RESYNC_AFTER, RESYNC_UNTIL = timedelta(minutes=3), timedelta(minutes=8)
 STARTS_A_DAY = 3
 SETTINGS_KEPT = 6                                     # the ventilation only with more orders left than this
 COLD_SMOKE_C, PLUG_OFF_W, PLUG_HOT_W = 60, 70, 60
+HOUSE_STOP = timedelta(minutes=5)                     # the simulator: the house's own stop, after Hestia's would-be one
 FAN_HOT_C, FAN_TOP, FAN_EVERY = 110, 5, timedelta(minutes=10)   # « flamme + 1 »: hot smoke, its top, its pace
 FAN_MODES = ("auto", "flamme")
 # What a person answers, on the phone (mobile_app_notification_action) or on the Poêle page.
@@ -71,11 +77,35 @@ def _iso(value) -> datetime | None:
         return None
 
 
+# The simulator's journal: what Hestia does, said in the conditional; the lines that only tell how the stove took an
+# order of Hestia are left out (the house's own gestures say it).
+WOULD = (("Hestia coupe le poêle", "Hestia couperait le poêle"),
+         ("Hestia passe le thermostat", "Hestia passerait le thermostat"),
+         ("Hestia vous prévient", "Hestia vous préviendrait"),
+         ("Hestia demande votre accord", "Hestia demanderait votre accord"),
+         ("Hestia met la ventilation", "Hestia mettrait la ventilation"),
+         ("Hestia règle d’abord", "Hestia réglerait d’abord"),
+         ("Hestia allume le poêle", "Hestia allumerait le poêle"),
+         ("Hestia éteint le thermostat", "Hestia éteindrait le thermostat"),
+         ("Hestia éteint le poêle", "Hestia éteindrait le poêle"),
+         ("Hestia renvoie l’ordre d’arrêt", "Hestia renverrait l’ordre d’arrêt"),
+         ("Pas de démarrage :", "Hestia ne démarrerait pas :"),
+         ("Poêle repris en main : son thermostat rallumé", "Hestia reprendrait le poêle en main : son thermostat "
+                                                          "rallumé"))
+
+
+def _would(text: str) -> str | None:
+    for now_, then in WOULD:
+        if now_ in text:
+            return text.replace(now_, then).replace(" attendra ", " attendrait ")
+    return None
+
+
 class _Run:
     """One look: the gestures to make, the events of the journal, when to look again."""
 
-    def __init__(self, now: datetime) -> None:
-        self.now, self.at = now, hour(now)
+    def __init__(self, now: datetime, blank: bool = False) -> None:
+        self.now, self.at, self.blank = now, hour(now), blank
         self.orders: list[dict] = []
         self.events: list[dict] = []
         self.wake: float | None = None
@@ -99,7 +129,15 @@ class _Run:
         self.orders.append({"geste": "effacer", "sujet": subject})
 
     def log(self, text: str, sent: bool = True) -> None:
+        if self.blank:
+            text, sent = _would(text), False
+            if text is None:
+                return
         self.events.append({"heure": self.at, "qui": "hestia", "texte": text, "accord": None, "envoye": sent})
+
+    def house_did_not(self, text: str) -> None:
+        """The simulator: the house did not make the gesture Hestia would have made."""
+        self.events.append({"heure": self.at, "qui": "maison", "texte": text, "accord": False})
 
 
 def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict, now: datetime, ctx: dict) \
@@ -110,7 +148,8 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
     fire pot's view), `prise_switch` (the plug's switch, or None), `couper_prise` (Réglages: cut the plug without an
     answer), `ha_depuis` (since when Home Assistant runs, None when it was already running), `ventilation` (Réglages:
     « auto » or « flamme », for flamme + 1)."""
-    run = _Run(now)
+    blank = bool(ctx.get("blanc"))
+    run = _Run(now, blank)
     # A copy: the view may be built twice from the same memory in one look (the planning's orders), and only the last
     # one's gestures are made.
     mem = copy.deepcopy(pilot_mem.get("conduite") or {})
@@ -118,14 +157,16 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
     today = now.date().isoformat()
     if mem.get("jour") != today:
         mem.update(jour=today, demarrages=0)
-    status = {"actif": True, "copie": bool(ctx.get("copie")), "demarrages": mem.get("demarrages", 0),
-              "max_demarrages": STARTS_A_DAY, "pilotable": bool(stove.get("pilotable"))}
-    if ctx.get("copie") or not thermostat or not stove.get("pilotable"):
+    status = {"actif": not blank, "blanc": blank, "copie": bool(ctx.get("copie")),
+              "demarrages": mem.get("demarrages", 0), "max_demarrages": STARTS_A_DAY,
+              "pilotable": bool(stove.get("pilotable"))}
+    # The simulator sends nothing: it may rehearse on a copy (a lab).
+    if (ctx.get("copie") and not blank) or not thermostat or not stove.get("pilotable"):
         status["texte"] = ("Ce poêle est recopié d’une autre maison : Hestia ne lui envoie rien." if ctx.get("copie")
                            else "Le pilote suit le thermostat du poêle : choisissez-le dans Réglages." if not thermostat
                            else "Le profil de ce poêle ne dit pas encore comment l’allumer et l’éteindre.")
         return [], [], status, None
-    answers = {k: _iso(v) for k, v in (ctx.get("reponses") or {}).items() if k in ANSWERS}
+    answers = {} if blank else {k: _iso(v) for k, v in (ctx.get("reponses") or {}).items() if k in ANSWERS}
     state = stove.get("etat")
     action = decision.get("action")
     preset, mode = thermostat.get("preset"), thermostat.get("mode")
@@ -181,7 +222,8 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
     elif action == "refuser" and (pilot_mem.get("refus") or {}).get("a") == fresh:
         _refuse(run, mem, decision, mode)
     elif action == "demander" and pilot_mem.get("demande") == fresh and not mem.get("question"):
-        mem["question"] = {"a": fresh, "sujet": "saison"}
+        # The simulator only says it: the person answers the house's own question, not Hestia's.
+        mem["question"] = None if blank else {"a": fresh, "sujet": "saison"}
         run.say("saison", "Saison douce : allumer le poêle ?", decision.get("texte") or "", ("oui", "non"), lasting=True)
         run.log("Hestia demande votre accord pour démarrer le poêle (saison douce).", sent=False)
     _question(run, mem, stove, thermostat, answers)
@@ -197,9 +239,9 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
                 sent=False)
     elif not fire_pot.get("a_nettoyer"):
         mem["brasier_dit"] = None
-    status.update(_status(mem, stove, now))
+    status.update(_status(mem, stove, now, blank))
     status["demarrages"] = mem.get("demarrages", 0)
-    return run.orders, run.events, status, run.wake
+    return ([] if blank else run.orders), run.events, status, run.wake
 
 
 def _lower(text: str | None) -> str:
@@ -231,7 +273,7 @@ def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
     else:
         want, why = levels[0], f"au plus bas tant que les fumées sont sous {FAN_HOT_C} °C"
     current = stove.get("ventilation")
-    if current is None or str(current).casefold() == want.casefold():
+    if current is None or str(current).casefold() == want.casefold() or (run.blank and seq.get("voulu") == want):
         return
     last = _iso(seq.get("a"))
     if last and run.now - last < FAN_EVERY:
@@ -240,7 +282,7 @@ def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
     writes, cap = stove.get("ecritures"), stove.get("ecritures_max")
     if writes is not None and cap and cap - writes <= SETTINGS_KEPT:
         return
-    seq["a"] = run.now.isoformat()
+    seq.update(a=run.now.isoformat(), voulu=want)
     run.stove("ventilation", valeur=want)
     run.log(f"Hestia met la ventilation à {want} : {why}.")
 
@@ -272,11 +314,15 @@ def _start(run: _Run, mem: dict, stove: dict, thermostat: dict, skip: tuple = ()
             return
         writes, cap = stove.get("ecritures"), stove.get("ecritures_max")
         left = None if writes is None or not cap else cap - writes
+        names = []
         for s in stove.get("reglages") or ():
             if s["role"] in skip:
                 continue
             if s.get("a_changer") and (not s.get("reserve") or left is None or left > s["reserve"]):
                 run.stove("reglage", role=s["role"], nom=s["nom"])
+                names.append(s["nom"])
+        if run.blank and names:
+            run.log(f"Hestia règle d’abord : {', '.join(names)}.")
         seq.update(phase="ordre", depuis=now.isoformat())
         run.again(SETTLE)
         return
@@ -300,6 +346,11 @@ def _start(run: _Run, mem: dict, stove: dict, thermostat: dict, skip: tuple = ()
             return
         if now - since < IGNITION:
             run.again(IGNITION, since)
+            return
+        if run.blank:
+            # The simulator: the house did not light it; Hestia would have reloaded the stove's integration.
+            seq.update(fin="maison", depuis=now.isoformat())
+            run.house_did_not("La maison n’a pas allumé le poêle dans les 3 minutes.")
             return
         if seq.get("essai", 1) == 1:
             run.stove("recharger")
@@ -341,7 +392,8 @@ def _refuse(run: _Run, mem: dict, decision: dict, mode: str | None) -> None:
     said = f"Le thermostat est passé en boost, mais {reason}."
     if lock and mode != "off":
         run.thermostat("turn_off")
-        mem.update(verrou=lock, verrou_off=None)
+        # The simulator keeps no lock: the thermostat stays as the house leaves it.
+        mem.update(verrou=None if run.blank else lock, verrou_off=None)
         said += (" Hestia a éteint le thermostat du poêle : « J’ai nettoyé » le rallumera." if lock == "brasier"
                  else " Hestia a éteint le thermostat du poêle : rallumez-le quand ce sera réglé.")
         run.log(f"Hestia éteint le thermostat du poêle : {reason}.")
@@ -430,6 +482,14 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
             seq.update(phase="verif", depuis=now.isoformat())
             run.again(VERIFY)
             return
+        if run.blank and seq["essais"]:
+            # The simulator: the house's own stop is waited for, never a second order.
+            if now - since < HOUSE_STOP:
+                run.again(HOUSE_STOP, since)
+                return
+            seq.update(fin="maison", depuis=now.isoformat())
+            run.house_did_not("La maison n’a pas éteint le poêle dans les 5 minutes.")
+            return
         if now - since < STOP_EVERY:
             run.again(STOP_EVERY, since)
             return
@@ -442,7 +502,7 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
         seq["depuis"] = now.isoformat()
         run.stove("eteindre")
         run.log("Hestia éteint le poêle." if seq["essais"] == 1 else f"Hestia renvoie l’ordre d’arrêt ({seq['essais']}/3).")
-        run.again(STOP_EVERY)
+        run.again(HOUSE_STOP if run.blank else STOP_EVERY)
         return
     if seq["phase"] == "verif":
         if now - since < VERIFY:
@@ -460,6 +520,9 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
                 "renvoie l’ordre.")
         run.stove("eteindre")
         run.log("Le poêle chauffe encore 25 minutes après : Hestia renvoie l’ordre d’arrêt.")
+        if run.blank:
+            seq.update(fin="encore", depuis=now.isoformat())
+            return
         seq.update(phase="renvoi", depuis=now.isoformat())
         run.again(RESEND_CHECK)
         return
@@ -566,8 +629,20 @@ def _cleaned(run: _Run, mem: dict, thermostat: dict, answers: dict) -> None:
 
 # --- what the page says --------------------------------------------------------------------------------------------
 
-def _status(mem: dict, stove: dict, now: datetime) -> dict:
+def _status(mem: dict, stove: dict, now: datetime, blank: bool = False) -> dict:
     start, stop, q = mem.get("allumage") or {}, mem.get("arret") or {}, mem.get("question")
+    if blank:
+        # The simulator: what Hestia would be doing now, if anything.
+        out = {"question": None, "sequence": None, "texte": None, "verrou": None, "injoignable": False}
+        if start and not start.get("fin"):
+            out.update(sequence="allumage", texte="Hestia allumerait le poêle maintenant : la maison le fait-elle "
+                                                  "aussi ?")
+        elif stop and not stop.get("fin"):
+            since = _iso(stop.get("depuis")) or _iso(stop.get("a")) or now
+            out.update(sequence="arret", texte=f"Hestia vérifierait l’arrêt à {hour(since + VERIFY)}."
+                       if stop.get("phase") == "verif" else "Hestia éteindrait le poêle maintenant : la maison le "
+                       "fait-elle aussi ?")
+        return out
     out: dict = {"question": None, "sequence": None, "texte": None, "verrou": mem.get("verrou"),
                  "injoignable": bool(mem.get("injoignable"))}
     if q:
