@@ -421,7 +421,6 @@ class HestiaHeatingCard extends LitElement {
      <span>${kg}</span></div><div class="pt"><b>Brasier</b><span>${pot.texte}</span></div></div>`:nothing}
    <div class="rows">
     <div class="row"><b>Alarme</b><span>${s.alarme?`${s.alarme_texte??'Le poêle signale une alarme'}.`:'Aucune en ce moment.'}</span></div>
-    ${s.ecritures!=null?html`<div class="row"><b>Ordres du jour</b><span>${s.ecritures}${s.ecritures_max?` sur ${s.ecritures_max}`:''} : le poêle n’accepte qu’un nombre limité d’ordres par jour.</span></div>`:nothing}
     ${s.prise_w!=null?html`<div class="row"><b>Prise</b><span>${watts(s.prise_w)} en ce moment.</span></div>`:nothing}
    </div>`;
  }

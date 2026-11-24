@@ -9,7 +9,7 @@
 - **La carte d’une pièce** : un témoin « Chauffe 21 % » ou « Ne chauffe pas », le mode du thermostat, un bouton vers la page de la pièce, et le tiroir **Argent · Conso · Confort** : ce que coûte la pièce aujourd’hui, sur 7 jours et sur le mois, ses kWh, son temps de chauffe du jour, l’humidité et la consigne.
 - **La carte du poêle** : « Gestion auto » ou « À la main », la flamme, ce que fait Hestia, et trois boutons : **Éteindre** (ou **Allumer**), **Gestion auto** et **J’ai nettoyé**. Éteindre, Allumer et J’ai nettoyé demandent de confirmer.
 - Le tiroir **Le feu et les réglages**, ouvert : la pièce et sa consigne, les fumées, les granulés de l’heure et leur prix, la flamme réduite, la ventilation, la prise, le planning et le radiateur d’appoint.
-- Le tiroir **Granulés · Argent · Entretien**, fermé : jusqu’à quand durent les granulés et les 14 derniers jours ; ce que coûte le poêle face à la même chaleur à l’électricité (aujourd’hui, 7 jours, la saison) ; le brasier, l’alarme et les ordres du jour.
+- Le tiroir **Granulés · Argent · Entretien**, fermé : jusqu’à quand durent les granulés et les 14 derniers jours ; ce que coûte le poêle face à la même chaleur à l’électricité (aujourd’hui, 7 jours, la saison) ; le brasier, l’alarme et la prise.
 - **Dans Réglages, « L’électricité »** : le prix du kWh, pour l’argent des cartes. Sans lui, les cartes disent où le donner.
 
 ### Améliorations

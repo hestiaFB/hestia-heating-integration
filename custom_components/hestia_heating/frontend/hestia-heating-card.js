@@ -651,7 +651,6 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
      <span>${c}</span></div><div class="pt"><b>Brasier</b><span>${e.texte}</span></div></div>`:d}
    <div class="rows">
     <div class="row"><b>Alarme</b><span>${t.alarme?`${t.alarme_texte??"Le po\xEAle signale une alarme"}.`:"Aucune en ce moment."}</span></div>
-    ${t.ecritures!=null?l`<div class="row"><b>Ordres du jour</b><span>${t.ecritures}${t.ecritures_max?` sur ${t.ecritures_max}`:""} : le poêle n’accepte qu’un nombre limité d’ordres par jour.</span></div>`:d}
     ${t.prise_w!=null?l`<div class="row"><b>Prise</b><span>${je(t.prise_w)} en ce moment.</span></div>`:d}
    </div>`}_room(t){let e=this._roomOf(t);if(!e)return l`<div class="head"><h2 class="nw-title">${this._config.name||"Pi\xE8ce"}</h2></div><p class="empty">Aucun thermostat trouvé.</p>`;let a=this._config.name||e.nom,r=this._tapAction(e),i=r==="thermostat"?`Ouvrir le thermostat de ${e.nom}`:`Ouvrir la page de ${e.nom}`;if(this._config.court)return l`<div class="short" role=${r?"button":d} tabindex=${r?0:d} aria-label=${r?i:d}
     @keydown=${r?u=>this._key(u,e):d}>
