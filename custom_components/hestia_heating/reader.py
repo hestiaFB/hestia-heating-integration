@@ -62,7 +62,7 @@ class Found:
         if self.stove:
             out |= set(self.stove["roles"].values())
         out |= set(self.pellets.values()) | set(self.schedules)
-        out |= {e for e in (self.plug, self.workday, self.house_sensor, self.low_switch) if e}
+        out |= {e for e in (self.plug, self.workday, self.house_sensor, self.low_switch, self.plug_switch) if e}
         return out | set(extra or [])
 
 
@@ -373,6 +373,10 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
         t = hass.states.get(found.low_switch)
         low = {"entity_id": found.low_switch, "nom": (t.attributes.get("friendly_name") if t else None)
                or found.low_switch, "on": bool(t and t.state == "on")}
+    # The plug's switch, for the card's « Prise » (0.8): on, off, or None when unknown.
+    plug_switch = None
+    if found.plug_switch and (t := hass.states.get(found.plug_switch)) is not None:
+        plug_switch = {"entity_id": found.plug_switch, "on": None if t.state not in ("on", "off") else t.state == "on"}
     house_sensor = None
     if found.house_sensor:
         t = hass.states.get(found.house_sensor)
@@ -400,6 +404,7 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
         "plug": plug,
         "house_sensor": house_sensor,
         "flamme_basse": low,
+        "prise_switch": plug_switch,
         "pellets": pellets,
         "schedules": schedules,
         "workday": workday,
@@ -498,3 +503,44 @@ async def day_history(hass: HomeAssistant, start: datetime, end: datetime, wante
     except Exception as err:  # noqa: BLE001 - no recorder, or a database hiccup: no curve, never an error
         _LOGGER.debug("Day history unavailable: %s", err)
         return {}
+
+
+# The units the long-term statistics are asked in, by the unit the cards show.
+STAT_UNITS = {"kWh": {"energy": "kWh"}, "kg": {"mass": "kg"}}
+FACTORS = {"Wh": 0.001, "kWh": 1.0, "MWh": 1000.0, "g": 0.001, "kg": 1.0}
+
+
+async def daily_totals(hass: HomeAssistant, stat: str, unit: str, start: datetime, now: datetime) -> dict[str, float]:
+    """{« 2026-11-24 »: total of the day} of a counter (`total_increasing`: kWh, kg) since `start`, from the long-term
+    statistics (one row a day, in the recorder's executor). Today's total adds what the counter moved since its last
+    hourly statistic, read from its state now. Empty when the counter has no statistics."""
+    from homeassistant.components.recorder import get_instance
+    from homeassistant.components.recorder.statistics import statistics_during_period
+
+    def read():
+        return statistics_during_period(hass, start, now, {stat}, "day", STAT_UNITS.get(unit), {"change", "state"})
+
+    try:
+        rows = (await get_instance(hass).async_add_executor_job(read)).get(stat) or []
+    except Exception as err:  # noqa: BLE001 - no recorder, or a database hiccup: no history, never an error
+        _LOGGER.debug("Statistics unavailable for %s: %s", stat, err)
+        return {}
+    out: dict[str, float] = {}
+    last_state = None
+    for row in rows:
+        begin = row.get("start")
+        day = (dt_util.as_local(dt_util.utc_from_timestamp(begin)) if isinstance(begin, (int, float))
+               else dt_util.as_local(begin)).date().isoformat()
+        out[day] = round(max(0.0, float(row.get("change") or 0.0)), 3)
+        if row.get("state") is not None:
+            last_state = float(row["state"])
+    current = hass.states.get(stat)
+    factor = FACTORS.get((current.attributes.get("unit_of_measurement") if current else None) or unit)
+    try:
+        value = float(current.state) * factor if current is not None and factor is not None else None
+    except (TypeError, ValueError):
+        value = None
+    if value is not None and last_state is not None and value >= last_state:
+        today = now.date().isoformat()
+        out[today] = round(out.get(today, 0.0) + value - last_state, 3)
+    return out

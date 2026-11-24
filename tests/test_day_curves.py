@@ -55,5 +55,36 @@ class DayCurves(unittest.TestCase):
                          [(self.start + timedelta(hours=7), "Allumage")])
 
 
+class DailyTotals(unittest.TestCase):
+    """0.8: the drawers' days come from the long-term statistics, today's total topped up with what the counter moved
+    since its last hourly statistic."""
+
+    def test_today_adds_what_the_counter_moved_since_the_last_hour(self):
+        import asyncio
+        from unittest.mock import patch
+        from custom_components.hestia_heating import reader
+        now = dt_util.now().replace(hour=18, minute=34, second=0, microsecond=0)
+        today = now.replace(hour=0, minute=0)
+        rows = [{"start": (today - timedelta(days=1)).timestamp(), "change": 7.4, "state": 100.0},
+                {"start": today.timestamp(), "change": 6.0, "state": 106.0}]
+
+        class Instance:
+            async def async_add_executor_job(self, job):
+                return job()
+
+        class States:
+            def get(self, entity_id):
+                return State(entity_id, "6.9", {"unit_of_measurement": "MWh"}) if entity_id == "sensor.mwh" else \
+                    State(entity_id, "106500", {"unit_of_measurement": "Wh"})
+
+        hass = type("Hass", (), {"states": States()})()
+        with patch("homeassistant.components.recorder.get_instance", return_value=Instance()), \
+                patch("homeassistant.components.recorder.statistics.statistics_during_period",
+                      return_value={"sensor.wh": rows}) as stats:
+            days = asyncio.run(reader.daily_totals(hass, "sensor.wh", "kWh", today - timedelta(days=13), now))
+        self.assertEqual(stats.call_args.args[5], {"energy": "kWh"}, "asked in kWh whatever the counter's unit")
+        self.assertEqual(days, {(today - timedelta(days=1)).date().isoformat(): 7.4, today.date().isoformat(): 6.5})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -172,6 +172,13 @@ def build(snap: dict) -> dict:
         stove["pilote"] = {"mode": mode}
         # Never a stove, nor a stove's thermostat, copied from another Home Assistant (a lab copies the home).
         copy = bool(raw_stove.get("copie")) or bool(stove_thermostat and stove_thermostat["id"] in copies)
+        # The card's buttons (0.8): greyed out on a copy; the « flamme au plus bas » switch and the plug's switch,
+        # each pressed by the user (Home Assistant's own dialog for the plug).
+        stove["copie"] = copy
+        low_switch, plug_switch = snap.get("flamme_basse"), snap.get("prise_switch")
+        stove["flamme_basse"] = {"entity_id": low_switch["entity_id"], "nom": low_switch["nom"],
+                                 "on": low_switch["on"]} if low_switch else None
+        stove["prise_switch"] = dict(plug_switch) if plug_switch else None
         if mode in ("ombre", "flamme", "entier"):
             # The house's temperature: the sensor chosen in Réglages (the automations' own), else the rooms' average.
             sensor, low = snap.get("house_sensor"), snap.get("flamme_basse")

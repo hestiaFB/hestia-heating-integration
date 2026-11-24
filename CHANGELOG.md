@@ -1,5 +1,26 @@
 # Changements
 
+## 0.8.0b1 — Les cartes en horloge
+
+**La carte d’une pièce et la carte du poêle deviennent une horloge de 24 heures**, avec le dessin de votre chauffage au centre et un tiroir dessous. Les cartes Maison, Planning et la pièce sur une ligne ne changent pas.
+
+### Nouveautés
+- **L’horloge du jour**, minuit en haut. L’anneau montre le planning de la journée. La courbe montre la température des 20 dernières heures : plus elle s’éloigne du centre, plus il fait chaud. Les petits traits à l’intérieur montrent la chauffe (la demande du thermostat, ou la flamme du poêle). L’aiguille montre l’heure. Au centre : un radiateur électrique, un radiateur à eau, une clim ou une pompe à chaleur, ou le poêle, avec la température et ce qui vient ensuite.
+- **La carte d’une pièce** : un témoin « Chauffe 21 % » ou « Ne chauffe pas », le mode du thermostat, un bouton vers la page de la pièce, et le tiroir **Argent · Conso · Confort** : ce que coûte la pièce aujourd’hui, sur 7 jours et sur le mois, ses kWh, son temps de chauffe du jour, l’humidité et la consigne.
+- **La carte du poêle** : « Gestion auto » ou « À la main », la flamme, ce que fait Hestia, et trois boutons : **Éteindre** (ou **Allumer**), **Gestion auto** et **J’ai nettoyé**. Éteindre, Allumer et J’ai nettoyé demandent de confirmer.
+- Le tiroir **Le feu et les réglages**, ouvert : la pièce et sa consigne, les fumées, les granulés de l’heure et leur prix, la flamme réduite, la ventilation, la prise, le planning et le radiateur d’appoint.
+- Le tiroir **Granulés · Argent · Entretien**, fermé : jusqu’à quand durent les granulés et les 14 derniers jours ; ce que coûte le poêle face à la même chaleur à l’électricité (aujourd’hui, 7 jours, la saison) ; le brasier, l’alarme et la prise.
+- **Dans Réglages, « L’électricité »** : le prix du kWh, pour l’argent des cartes. Sans lui, les cartes disent où le donner.
+
+### Améliorations
+- Les cartes lisent les 24 dernières heures et les totaux des 14 derniers jours dans l’historique de Home Assistant : les kWh du compteur d’énergie du thermostat, les kilos de granulés comptés par Hestia.
+- « Gestion auto » remet le pilote dans le mode choisi dans Réglages (« Flamme » ou « Entier »), et le coupe en le laissant « à l’ombre ».
+
+### Ce qui protège la maison
+- Les boutons des cartes sont vos propres appuis, envoyés depuis votre navigateur, comme les cartes de Home Assistant.
+- Sur un poêle recopié d’une autre maison (au labo), Éteindre, Allumer, Gestion auto, la flamme réduite, la ventilation et la prise sont grisés : rien n’est envoyé. « Gestion auto » ne s’y met jamais en marche, même demandé par un autre chemin.
+- La ventilation et la prise ouvrent la fenêtre de Home Assistant : la carte ne les change pas toute seule.
+
 ## 0.7.0b1 — Première bêta : le chauffage de la maison, le poêle et vos plannings
 
 **Hestia Chauffage explique le chauffage de la maison, pièce par pièce, suit le poêle à granulés, et a ses propres plannings.**
