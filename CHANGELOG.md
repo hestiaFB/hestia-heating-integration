@@ -1,9 +1,10 @@
 # Changements
 
-## 1.0.0b6 — L’horloge du poêle montre ses paliers en entier
+## 1.0.0b6 — L’horloge du poêle montre ses paliers en entier, et la carte son brasier
 
 ### Améliorations
 - **Chaque trait de flamme autour de l’horloge montre son palier en entier** : une flamme 3 a toujours la longueur d’une flamme 3, même si le poêle n’a brûlé que vingt minutes dans l’heure. Les flammes 1 et 2 se voient bien. Les minutes de l’heure restent au centre, au survol.
+- **Le brasier se voit sur la carte du poêle**, sans rien ouvrir : le bouton « J’ai nettoyé » dit où il en est (« Brasier 10 % · encore 9 jours », « Brasier à nettoyer ») et se remplit comme lui, vert, puis orange quand le nettoyage approche, rouge quand il est dû. L’appui fait toujours « J’ai nettoyé », avec sa confirmation.
 - **La consigne du poêle se lit en marches nettes** sur toutes les heures où son thermostat la demandait (le Boost), et plus seulement par bouts pendant que le poêle brûlait. Le trait est plus épais et passe par-dessus la courbe. Le Hors gel n’est toujours pas dessiné.
 
 ### Corrections

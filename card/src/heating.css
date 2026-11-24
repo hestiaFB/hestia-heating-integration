@@ -260,6 +260,14 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .btn:hover:not(:disabled) { border-color:color-mix(in srgb, var(--nw-fg) 34%, transparent); }
 .btn:disabled { opacity:.55; cursor:not-allowed; }
 .btn.ask, .btn.due { --c:var(--nw-act); background:color-mix(in oklab, var(--c) var(--nw-chip-tint), var(--nw-bg)); border-color:color-mix(in oklab, var(--c) 70%, transparent); }
+/* The fire pot's button (1.0.0b6): filled as the pot is, its state over « J’ai nettoyé ». */
+.btn.pot { --c:var(--nw-calm); flex-basis:100%; justify-content:flex-start; padding:0 18px;
+  background:linear-gradient(90deg, color-mix(in oklab, var(--c) 30%, var(--hc-raised2)) var(--fill), var(--hc-raised2) var(--fill)); }
+.btn.pot.soon { --c:var(--nw-act); } .btn.pot.due { --c:var(--nw-alert); border-color:color-mix(in oklab, var(--c) 70%, transparent); }
+.btn.pot.ask { background:color-mix(in oklab, var(--nw-act) var(--nw-chip-tint), var(--nw-bg)); }
+.pot-say { display:flex; flex-direction:column; align-items:flex-start; min-width:0; line-height:1.2; }
+.pot-say b, .pot-say small { overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.pot-say small { font-size:var(--nw-fs-small, 12px); font-weight:600; color:var(--nw-fg2); }
 .btn.auto.on { background:color-mix(in oklab, var(--nw-calm) 22%, var(--nw-bg)); border-color:color-mix(in oklab, var(--nw-calm) 60%, transparent); }
 .switch { position:relative; flex:none; width:30px; height:18px; border-radius:9px; background:color-mix(in srgb, var(--nw-fg) 32%, var(--nw-bg)); }
 .switch i { position:absolute; top:3px; left:3px; width:12px; height:12px; border-radius:50%; background:#fff; transition:left .2s; }
