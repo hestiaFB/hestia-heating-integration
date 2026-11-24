@@ -8,6 +8,7 @@
 - Un planning qui montre ce qu’il ferait, sans rien envoyer, est maintenant « En pause » (avant : « En essai »). « Actif » ne change pas.
 - Le pilote du poêle qui dit ce qu’il ferait, sans rien commander, s’appelle « Conseil » (avant : « À l’ombre »). Flamme, Entier et Éteint ne changent pas.
 - Un thermostat ou un poêle recopié d’une autre maison (Remote Home Assistant) porte la note « Recopié » (avant : « Labo »).
+- Le mode « Entier » du pilote (Hestia allume et éteint le poêle) n’est plus proposé dans Réglages : il reviendra une fois essayé dans une vraie maison. Un poêle déjà réglé sur « Entier » le garde.
 - Le README et le cahier des charges décrivent la brique telle qu’elle est ; l’histoire des versions et les décisions passent dans `docs/dev/HISTOIRE.md`.
 
 ## 0.8.0b3 — La roue au survol

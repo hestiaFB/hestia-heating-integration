@@ -166,7 +166,7 @@ La vue ajoute `poele.pilote.commande` : `envois`, `max`, `attente` (la flamme de
 
 ### Le pilote entier (0.7)
 
-Réglage `pilote` = `entier`. Hestia règle la flamme comme en mode « Flamme », et fait aussi ce que font les automatisations du poêle de la maison de référence : démarrer, arrêter, tenir les sécurités, reprendre la main après un redémarrage (cahier des charges, « Démarrer », « Arrêter », « Les sécurités »). Il faut d’abord couper ces automatisations : deux pilotes en même temps se contrediraient.
+Réglage `pilote` = `entier`. Depuis la 1.0, Réglages ne le propose plus, sauf à un poêle déjà réglé dessus : il reviendra une fois essayé dans une vraie maison. Hestia règle la flamme comme en mode « Flamme », et fait aussi ce que font les automatisations du poêle de la maison de référence : démarrer, arrêter, tenir les sécurités, reprendre la main après un redémarrage (cahier des charges, « Démarrer », « Arrêter », « Les sécurités »). Il faut d’abord couper ces automatisations : deux pilotes en même temps se contrediraient.
 
 `pilot.decide()` dit ce qu’il faut (le passage en boost, l’arrêt, la coupure…) ; `driver.drive()` (Python pur, appelé par `house.py`) en fait des séquences qui survivent aux retards du cloud, une à la fois, et rend les gestes à faire maintenant et dans combien de secondes regarder de nouveau. Le coordinateur fait les gestes dans l’ordre, dans une seule tâche (30 s au plus chacun), et se rappelle à l’heure demandée (`async_call_later`, sous la minute ; au-delà, la minuterie d’une minute suffit).
 

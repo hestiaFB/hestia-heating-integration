@@ -326,7 +326,7 @@ Ce qui dépend du foyer, avec sa valeur par défaut. | Réglage | Par défaut | 
 | --- | --- | --- |
 | Thermostat pilote du poêle | à choisir (trouvé seul quand c’est possible) | 0.1 |
 | Température de la maison | la moyenne des pièces chauffées, ou un capteur choisi | 0.4 |
-| Le pilote : Conseil, Flamme, Entier, Éteint | Conseil | 0.4, 0.5, 0.7 |
+| Le pilote : Conseil, Flamme, Entier (proposé de nouveau une fois essayé dans une vraie maison), Éteint | Conseil | 0.4, 0.5, 0.7 |
 | Flamme au plus bas (un interrupteur) | aucun | 0.5 |
 | Paliers de flamme | 45 · 65 · 85 % | 0.4, fixe |
 | Marge de flamme | 7 points | 0.4, fixe |

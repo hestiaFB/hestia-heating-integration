@@ -694,7 +694,10 @@ export class HestiaHeatingSetup extends LitElement {
         :'Hestia démarre et arrête le poêle, règle sa flamme et tient ses sécurités. Coupez d’abord toutes vos automatisations du poêle (démarrage, modulation, arrêt, vérification, sécurités) : deux pilotes en même temps se contrediraient.')
       :'Conseil : il montre ce qu’il ferait, à côté de ce que font vos automatisations. Il ne commande rien.',
      level:this.val<string>('pilote')==='entier'&&!f.poele_copie&&f.pilotable!==false?'todo':undefined,
-     value:segmented<string>('Le pilote de Hestia',[['ombre','Conseil'],['flamme','Flamme'],['entier','Entier'],['eteint','Éteint']],this.val<string>('pilote')??'ombre',x=>this.set('pilote',x))}),
+     value:segmented<string>('Le pilote de Hestia',[['ombre','Conseil'],['flamme','Flamme'],
+      // « Entier » (1.0): offered again once tried in a real house; kept for a stove already set on it.
+      ...(this.stored('pilote')==='entier'||this.val<string>('pilote')==='entier'?[['entier','Entier']] as [string,string][]:[]),['eteint','Éteint']],
+      this.val<string>('pilote')??'ombre',x=>this.set('pilote',x))}),
     ...(this.val<string>('pilote')==='entier'?this.wholeRows(f):[]),
     ...(this.val<string>('pilote')!=='eteint'?[listRow({label:'La température de la maison',control:true,
      sub:house?'Choisie par vous : prenez le capteur que lisent vos automatisations du poêle.':'La moyenne des pièces que Hestia voit.',
