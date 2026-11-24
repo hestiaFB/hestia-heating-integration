@@ -103,6 +103,11 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .ttl { grid-area:ttl; min-width:0; }
 .ttl .nw-title { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ttl .sub { font-size:var(--nw-fs-small); color:var(--nw-fg2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* 1.0: the stove's sentence under its name, coloured by its tone (engine/stove_says.py). */
+.ttl .sub .say { display:block; white-space:normal; font-weight:600; color:var(--nw-fg); }
+.ttl .sub .say.alert, .ttl .sub .say.act { color:color-mix(in oklab, var(--c) var(--nw-ink), var(--nw-fg)); }
+.ttl .sub .say.alert { --c:var(--nw-alert); } .ttl .sub .say.act { --c:var(--nw-act); }
+.ttl .sub .say.off { font-weight:500; color:var(--nw-fg2); }
 .pills { grid-area:pills; display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; min-width:0; }
 .gear { grid-area:gear; flex:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--nw-line); background:var(--hc-raised2);
   display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }

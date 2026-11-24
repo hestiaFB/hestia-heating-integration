@@ -28,7 +28,7 @@ type Stove={nom:string;fabricant:string|null;modele:string|null;piece:string|nul
  a_traduire:boolean;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_min:number;flamme_max:number;fumees:number|null;
  air:number|null;alarme:boolean|null;alarme_texte:string|null;eco_stop:boolean|null;ecritures:number|null;ecritures_max:number|null;ecritures_lues?:boolean;thermostat:string|null;
  thermostat_nom:string|null;demande_pct:number|null;consigne:number|null;preset:string|null;prise:string|null;prise_w:number|null;prise_tourne:boolean|null;
- entites:Record<string,string>;pilote?:Pilot;conso?:Conso;pilotable?:boolean};
+ entites:Record<string,string>;pilote?:Pilot;conso?:Conso;pilotable?:boolean;phrase?:Badge};
 type Pilot={mode:string;action?:string;titre?:string;texte?:string;ton?:string;flamme?:number|null;maison?:string;accord?:boolean|null;
  journal?:{heure:string;qui:string;texte:string;accord:boolean|null}[];accord_jour?:{oui:number;sur:number};
  accord_semaine?:{oui:number;sur:number;depuis:string;ecarts:{jour:string;heure:string;texte:string;hestia:string|null}[]};
@@ -173,6 +173,8 @@ export class HestiaHeatingSetup extends LitElement {
   .pill.ok::before{background:var(--nk-ok,var(--nk-accent))}.pill.todo::before{background:var(--nk-todo)}
   .chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:var(--nw-fs-small,12px);line-height:18px;font-weight:600;white-space:nowrap;
    background:color-mix(in oklab,var(--c,var(--hc-calm)) var(--hc-tint),transparent);color:color-mix(in oklab,var(--c,var(--hc-calm)) var(--hc-ink),var(--primary-text-color))}
+  .lead [class^=say-]{font-weight:600;color:var(--primary-text-color)}.lead .say-alert,.lead .say-act{color:color-mix(in oklab,var(--c) var(--hc-ink),var(--primary-text-color))}
+  .lead .say-alert{--c:var(--hc-alert)}.lead .say-act{--c:var(--hc-act)}
   .chip.stove{--c:var(--hc-stove)}.chip.heat{--c:var(--hc-heat)}.chip.cold{--c:var(--hc-cold)}.chip.calm{--c:var(--hc-calm)}.chip.act{--c:var(--hc-act)}.chip.alert{--c:var(--hc-alert)}
   .chip.off{--c:var(--hc-off)}
   .band{--c:var(--hc-calm);border-radius:18px;padding:18px;margin:0 0 22px;background:color-mix(in oklab,var(--c) 16%,transparent);border:1px solid var(--nk-border)}
@@ -399,7 +401,10 @@ export class HestiaHeatingSetup extends LitElement {
   const s=v.poele;
   if(!s)return html`${this.head('Poêle',{lead:'Aucun poêle trouvé. Hestia Chauffage reconnaît Micronova Agua IOT ; les autres poêles viendront un par un.'})}`;
   const g=v.granules,day=this.days['poele'],max=s.flamme_max;
-  const lead=s.en_feu?`Il chauffe ${since(s.depuis)}. La maison régule, le poêle suit la flamme donnée.`:s.etat==='alarme'?'Le poêle est en alarme.':`${STOVE_WORD[s.etat][0].toUpperCase()+STOVE_WORD[s.etat].slice(1)} ${since(s.depuis)}.`;
+  // 1.0: its sentence first (engine/stove_says.py), coloured by its tone, then since when it is in that state.
+  const was=s.depuis?(s.en_feu?`Il chauffe ${since(s.depuis)}.`:s.etat==='eteint'?`Éteint ${since(s.depuis)}.`:''):'';
+  const lead=s.phrase?html`<span class=${'say-'+s.phrase.ton}>${s.phrase.texte}.</span>${was?` ${was}`:''}`:
+   s.en_feu?`Il chauffe ${since(s.depuis)}. La maison régule, le poêle suit la flamme donnée.`:s.etat==='alarme'?'Le poêle est en alarme.':`${STOVE_WORD[s.etat][0].toUpperCase()+STOVE_WORD[s.etat].slice(1)} ${since(s.depuis)}.`;
   const flames=Array.from({length:max},(_,i)=>i+1);
   const asked=s.flamme_reglee,real=s.flamme;
   const sayFlame=[s.demande_pct!=null?`Le thermostat demande ${s.demande_pct} %.`:'',asked!=null?`Flamme réglée : ${asked}.`:'',real!=null&&real!==asked?`Le poêle est à la flamme ${real}.`:''].filter(Boolean).join(' ');

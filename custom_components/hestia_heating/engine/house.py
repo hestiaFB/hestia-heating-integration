@@ -9,7 +9,7 @@ import re
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from . import driver, granules, home_planning, phrases, pilot, planning, sources, stove as stove_engine
+from . import driver, granules, home_planning, phrases, pilot, planning, sources, stove as stove_engine, stove_says
 from .phrases import degrees, hour
 
 # The tone of each room's chip in the panel and the card (the colours of the charte).
@@ -196,6 +196,9 @@ def build(snap: dict) -> dict:
                 orders, events, stove["pilote"]["conduite"], wake = _drive(snap, decision, stove, stove_thermostat,
                                                                            memory, events, now, copy)
             pilot_state = {"memoire": memory, "evenements": events, "ordre": order, "ordres": orders, "reveil": wake}
+        # The stove's sentence (1.0), once its pilot has said what it does.
+        stove["phrase"] = stove_says.sentence(stove, stove_thermostat, next((r for r in room_list if r.get("poele")), None),
+                                              now)
     lanes = _lanes(room_list, srcs, stove_thermostat, lines, naive_now)
     room_names = {r["id"]: r["nom"] for r in room_list}
     plan = _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, aimed_on, schedules, copies,

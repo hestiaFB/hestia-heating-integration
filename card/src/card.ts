@@ -31,7 +31,8 @@ type Stove={nom:string;modele?:string|null;etat:string;en_feu:boolean;depuis:str
  fumees:number|null;prise:string|null;prise_w:number|null;demande_pct:number|null;consigne?:number|null;ecritures:number|null;ecritures_max:number|null;
  alarme:boolean|null;alarme_texte:string|null;allume?:boolean|null;conso?:Use;pilote?:{mode:string;titre?:string;texte?:string};
  boutons?:{allumer?:Order;eteindre?:Order};ventilation?:string|null;copie?:boolean;entites?:Record<string,string>;
- flamme_basse?:{entity_id:string;nom:string;on:boolean|null}|null;prise_switch?:{entity_id:string;on:boolean|null}|null};
+ flamme_basse?:{entity_id:string;nom:string;on:boolean|null}|null;prise_switch?:{entity_id:string;on:boolean|null}|null;
+ phrase?:{texte:string;ton:string}};
 type Pellets={stock_sacs:number|null;stock_kg:number|null;jours:number|null;kg_par_jour?:number|null};
 type Lane={id:string;nom:string;segments:{de:number;a:number;ton:string}[];source?:string|null;bloque?:boolean};
 type Planning={source:string|null;jour?:string;jour_nom:string;labo?:boolean;essai?:boolean;maintenant_min:number;lignes:Lane[];
@@ -172,7 +173,7 @@ class HestiaHeatingCard extends LitElement {
 
  /* The clock cards' pieces: the head (name, what heats, two pills, the settings' button), a drawer, its tabs, a press
     that asks again before it is sent. */
- private _head(title:string,sub:string,pills:unknown,path:string,label:string){
+ private _head(title:string,sub:unknown,pills:unknown,path:string,label:string){
   return html`<div class="chead"><div class="ttl"><h2 class="nw-title">${title}</h2>${sub?html`<div class="sub">${sub}</div>`:nothing}</div>
    <div class="pills">${pills}</div>
    <button class="gear" aria-label=${label} title="Réglages" @click=${()=>this._open(path)}>${GEAR}</button></div>`;
@@ -337,7 +338,8 @@ class HestiaHeatingCard extends LitElement {
    label:`Horloge du jour : ${where} à ${deg(t)}, poêle ${state}${stop?`, arrêt prévu à ${isoHm(stop.a)}`:''}.`},
    center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
   return html`<div class="top">
-   ${this._head(this._config.name||s.nom,`Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
+   ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
+    `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
     <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Gestion auto':'À la main'}</span>
     <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`,'poele','Réglages du poêle')}
    ${clock}
@@ -348,7 +350,7 @@ class HestiaHeatingCard extends LitElement {
     ${hrs.some(h=>h.ahead&&(h.heat??0)>=.02)?html`<span><i class="sw yday"></i>hier, aux heures à venir</span>`:nothing}
     ${lit!=null?html`<span><i class="sw ring lit"></i>allumage</span>`:nothing}${stop?html`<span><i class="sw ring stop"></i>arrêt prévu</span>`:nothing}</div>
    ${d?html`<p class="hint">Survolez ou touchez une heure pour ses chiffres</p>`:nothing}
-   <p class="why">${this._why(s,room,auto,level)}</p>
+   ${(w=>w?html`<p class="why">${w}</p>`:nothing)(this._why(s,room,auto,level))}
    ${this._stoveButtons(s,auto)}
   </div>
   ${this._fireDrawer(v,s,room)}
@@ -363,7 +365,7 @@ class HestiaHeatingCard extends LitElement {
  }
  /* The sentence under the clock: what Hestia does when it drives the stove (« Gestion auto »), else what the stove does. */
  private _why(s:Stove,room:Room|undefined,auto:boolean,level:number){
-  if(s.etat==='alarme')return `Le poêle est en alarme${s.alarme_texte?` : ${s.alarme_texte}`:''}.`;
+  if(s.etat==='alarme')return s.phrase?'':`Le poêle est en alarme${s.alarme_texte?` : ${s.alarme_texte}`:''}.`;
   if(auto&&s.pilote?.texte)return s.pilote.texte;
   const since=s.depuis?` depuis ${hm(new Date(s.depuis))}`:'';
   const now=s.en_feu&&level?`Flamme ${level}.${room&&room.temperature!=null?` ${room.nom} : ${deg(room.temperature)}${s.consigne!=null?`, consigne ${deg(s.consigne)}`:''}.`:''}`:
