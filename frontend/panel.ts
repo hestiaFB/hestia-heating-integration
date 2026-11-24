@@ -397,7 +397,7 @@ export class HestiaHeatingSetup extends LitElement {
  /* ── Poêle ── */
  private stovePage(v:View){
   const s=v.poele;
-  if(!s)return html`${this.head('Poêle',{lead:'Aucun poêle trouvé. Hestia Chauffage reconnaît Micronova Agua IOT ; les autres poêles viendront un par un, avec des testeurs.'})}`;
+  if(!s)return html`${this.head('Poêle',{lead:'Aucun poêle trouvé. Hestia Chauffage reconnaît Micronova Agua IOT ; les autres poêles viendront un par un.'})}`;
   const g=v.granules,day=this.days['poele'],max=s.flamme_max;
   const lead=s.en_feu?`Il chauffe ${since(s.depuis)}. La maison régule, le poêle suit la flamme donnée.`:s.etat==='alarme'?'Le poêle est en alarme.':`${STOVE_WORD[s.etat][0].toUpperCase()+STOVE_WORD[s.etat].slice(1)} ${since(s.depuis)}.`;
   const flames=Array.from({length:max},(_,i)=>i+1);
