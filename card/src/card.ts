@@ -13,6 +13,8 @@ import {wheel,hours,center,heaterArt,stoveArt,sample,TRACE_MIN,type Pt,type Mark
        the use and the comfort in a drawer (card: piece, piece: <id>), or one line (court: true). A tap on it opens its
        thermostat (tap_action: page, the room's page in the tab; none, nothing)
    4 · le planning: the day of each room and of the stove, from the planning Hestia or Scheduler (card: planning)
+   The stove's and a room's cards also come compact (compacte: true, 1.0): the clock small, beside its sentence, without
+   its legend; about half the height.
    Every figure comes from the integration (hestia_heating/subscribe, day, historique): the card only puts it into
    words. Its buttons are the user's own presses, sent from this browser as Home Assistant's own cards do, and never
    to a thermostat or a stove copied from another house (a lab), where they would reach that house. */
@@ -45,7 +47,7 @@ type Day={maintenant_min:number;debut_min?:number;fenetre_min?:number;series:Rec
  energie?:{unite:string|null;heures:[number,number][]}};
 /** The drawers' days: a room's kWh or the stove's kilos, per day, the oldest first; today is the day so far. */
 type History={unite:string|null;stat:string|null;aujourdhui:string;jours:{jour:string;valeur:number|null}[];mois:number|null};
-type Config={type:string;card?:string;piece?:string;court?:boolean;name?:string;tap_action?:string};
+type Config={type:string;card?:string;piece?:string;court?:boolean;compacte?:boolean;name?:string;tap_action?:string};
 const CARDS=['maison','poele','piece','planning'];
 /** A tap on a room's card: its thermostat (Home Assistant's own window, by default), its page in the tab, or nothing. */
 export const TAPS=['thermostat','page','none'];
@@ -117,7 +119,8 @@ class HestiaHeatingCard extends LitElement {
   if(config.tap_action!=null&&!TAPS.includes(config.tap_action))throw new Error(`tap_action: ${config.tap_action} ? (${TAPS.join(', ')})`);
   this._config={...config,card};
  }
- getCardSize(){const c=this._config.card;return c==='piece'&&this._config.court?2:c==='piece'?11:c==='poele'?13:c==='planning'?6:5;}
+ getCardSize(){const c=this._config.card,small=!!this._config.compacte;
+  return c==='piece'&&this._config.court?2:c==='piece'?small?6:11:c==='poele'?small?7:13:c==='planning'?6:5;}
  getGridOptions(){const c=this._config.card;return c==='planning'?{columns:'full',rows:'auto'}:{columns:12,rows:'auto',min_columns:6};}
  set hass(hass:Hass){
   const other=this._hass?.connection!==hass.connection;
@@ -337,6 +340,17 @@ class HestiaHeatingCard extends LitElement {
   const clock=wheel({span,segments,series:series_,hours:hrs,kind:'flame',max,marks,say,...this._picker(),
    label:`Horloge du jour : ${where} à ${deg(t)}, poêle ${state}${stop?`, arrêt prévu à ${isoHm(stop.a)}`:''}.`},
    center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
+  const why=this._why(s,room,auto,level);
+  if(this._config.compacte)return html`<div class="top compact">
+   ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
+    `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
+    <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`,'poele','Réglages du poêle')}
+   <div class="pair">${clock}<div class="side">${why?html`<p class="why">${why}</p>`:nothing}
+    <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Gestion auto':'À la main'}</span></div></div>
+   ${this._stoveButtons(s,auto)}
+  </div>
+  ${this._fireDrawer(v,s,room)}
+  ${this._pelletDrawer(v,s)}`;
   return html`<div class="top">
    ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
     `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
@@ -350,7 +364,7 @@ class HestiaHeatingCard extends LitElement {
     ${hrs.some(h=>h.ahead&&(h.heat??0)>=.02)?html`<span><i class="sw yday"></i>hier, aux heures à venir</span>`:nothing}
     ${lit!=null?html`<span><i class="sw ring lit"></i>allumage</span>`:nothing}${stop?html`<span><i class="sw ring stop"></i>arrêt prévu</span>`:nothing}</div>
    ${d?html`<p class="hint">Survolez ou touchez une heure pour ses chiffres</p>`:nothing}
-   ${(w=>w?html`<p class="why">${w}</p>`:nothing)(this._why(s,room,auto,level))}
+   ${why?html`<p class="why">${why}</p>`:nothing}
    ${this._stoveButtons(s,auto)}
   </div>
   ${this._fireDrawer(v,s,room)}
@@ -391,7 +405,7 @@ class HestiaHeatingCard extends LitElement {
  private _fireDrawer(v:View,s:Stove,room:Room|undefined){
   const c=s.conso,rate=s.en_feu&&c?.debit_kg_h?c.debit_kg_h:null,hour=rate&&c?.cout_heure!=null?`${eur(c.cout_heure)} de l’heure`:null;
   const say=[s.fumees!=null?`fumées ${num(s.fumees,0)} °C`:null,rate?`${num(rate,2)} kg/h`:s.en_feu?null:'à l’arrêt',hour].filter(Boolean).join(' · ');
-  return this._drawer('feu','Le feu et les réglages',say,true,()=>{
+  return this._drawer('feu','Le feu et les réglages',say,!this._config.compacte,()=>{
    const locked=!!s.copie,low=s.flamme_basse,fan=s.ventilation,fanId=s.entites?.ventilation,plug=s.prise_switch,next=this._soon(room?.prochain);
    const chips=[
     low?html`<button class=${'chip'+(low.on?' on stove':'')} aria-pressed=${low.on?'true':'false'} ?disabled=${locked||this._busy==='low'} title=${low.nom}
@@ -507,6 +521,12 @@ class HestiaHeatingCard extends LitElement {
    ...this._picker(),tap:tap?{label:what,run:(e:Event)=>this._tap(e,r)}:undefined,
    label:`Horloge du jour : ${r.nom} à ${deg(r.temperature)}${r.consigne!=null?`, consigne ${deg(r.consigne)}`:''}${next?`, ${this._next(next,v)}`:''}.`},
    center(art,r.temperature!=null?`${num(r.temperature)}°`:'—',sub));
+  if(this._config.compacte)return html`<div class="top compact">
+   ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}`,'pieces/'+r.id,`Réglages de ${r.nom}`)}
+   <div class="pair">${clock}<div class="side">${r.raison?html`<p class="say">${r.raison}</p>`:nothing}${this._modePill(r)}</div></div>
+   ${this._modes(r)}
+  </div>
+  ${this._roomDrawer(v,r)}`;
   return html`<div class="top">
    ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}${this._modePill(r)}`,'pieces/'+r.id,`Réglages de ${r.nom}`)}
    ${clock}
