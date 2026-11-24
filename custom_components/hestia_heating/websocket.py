@@ -10,10 +10,10 @@ from .const import DOMAIN
 
 VIEW_VERSION = 1
 # What the cards read: the extensions, the schedules' details and the « à régler » stay out of their view.
-CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning")
+CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning", "prix_kwh")
 SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote",
                 "pilote_thermometre", "planning_autorises", "pilote_flamme_basse", "brasier_kg", "granules_prix_sac",
-                "granules_poids_sac", "pilote_notifier", "poele_prise_switch", "couper_prise")
+                "granules_poids_sac", "pilote_notifier", "poele_prise_switch", "couper_prise", "prix_kwh")
 # The notify services that are not a phone or a group of phones.
 NOT_PHONES = ("send_message", "persistent_notification")
 # The planning's parts only the tab needs (the plannings, the editor, Scheduler, the journal).
@@ -26,7 +26,8 @@ def _coordinator(hass):
 
 
 def async_setup_websocket(hass) -> None:
-    for command in (ws_view, ws_subscribe, ws_day, ws_settings, ws_set_settings, ws_fire_pot_cleaned, ws_answer):
+    for command in (ws_view, ws_subscribe, ws_day, ws_history, ws_settings, ws_set_settings, ws_fire_pot_cleaned,
+                    ws_answer, ws_auto):
         websocket_api.async_register_command(hass, command)
 
 
@@ -95,15 +96,29 @@ def ws_subscribe(hass, connection, msg):
     send()
 
 
-@websocket_api.websocket_command({vol.Required("type"): "hestia_heating/day", vol.Required("cible"): str})
+@websocket_api.websocket_command({vol.Required("type"): "hestia_heating/day", vol.Required("cible"): str,
+                                  vol.Optional("heures"): vol.All(int, vol.Range(min=1, max=24))})
 @websocket_api.async_response
 async def ws_day(hass, connection, msg):
-    """Today's curves of a room (`piece/<id>`) or of the stove (`poele`)."""
+    """Today's curves of a room (`piece/<id>`) or of the stove (`poele`); with `heures`, the last hours (the cards'
+    clock, 0.8)."""
     c = _coordinator(hass)
     if c is None:
         connection.send_error(msg["id"], "not_ready", "Hestia Chauffage n'est pas activée.")
         return
-    connection.send_result(msg["id"], await c.async_day(msg["cible"]))
+    connection.send_result(msg["id"], await c.async_day(msg["cible"], msg.get("heures")))
+
+
+@websocket_api.websocket_command({vol.Required("type"): "hestia_heating/historique", vol.Required("cible"): str})
+@websocket_api.async_response
+async def ws_history(hass, connection, msg):
+    """The last 14 days' totals of a room (`piece/<id>`, kWh) or of the stove (`poele`, kilos of pellets), for the
+    cards' drawers (0.8)."""
+    c = _coordinator(hass)
+    if c is None:
+        connection.send_error(msg["id"], "not_ready", "Hestia Chauffage n'est pas activée.")
+        return
+    connection.send_result(msg["id"], await c.async_history(msg["cible"]))
 
 
 @websocket_api.websocket_command({vol.Required("type"): "hestia_heating/settings"})
@@ -170,6 +185,23 @@ async def ws_fire_pot_cleaned(hass, connection, msg):
         return
     await c.async_fire_pot_cleaned()
     connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "hestia_heating/gestion_auto", vol.Required("actif"): bool})
+@websocket_api.async_response
+async def ws_auto(hass, connection, msg):
+    """The stove card's « Gestion auto » (0.8): on, the pilot acts again in the mode it had; off, it only looks."""
+    c = _coordinator(hass)
+    if c is None:
+        connection.send_error(msg["id"], "not_ready", "Hestia Chauffage n'est pas activée.")
+        return
+    if not c.data.get("poele"):
+        connection.send_error(msg["id"], "no_stove", "Pas de poêle trouvé.")
+        return
+    if msg["actif"] and c.data["poele"].get("copie"):
+        connection.send_error(msg["id"], "copie", "Poêle recopié d'une autre maison : la gestion auto reste coupée.")
+        return
+    connection.send_result(msg["id"], {"pilote": await c.async_auto(msg["actif"])})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "hestia_heating/repondre", vol.Required("reponse"): str})

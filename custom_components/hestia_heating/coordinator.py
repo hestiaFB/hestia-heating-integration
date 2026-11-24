@@ -21,7 +21,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from . import reader
-from .const import API_KEY, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
+from .const import API_KEY, DOMAIN, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
 from .engine import driver, granules, home_planning, house, phrases, pilot, profiles
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,13 +34,19 @@ DISCOVER_PAUSE_S = 5.0
 TICK = timedelta(minutes=1)
 # A day's curve read from the recorder is kept this long.
 DAY_CACHE_S = 120
+# The days' totals (the cards' drawers, 0.8: kWh of a room, kilos of pellets) come from the long-term statistics,
+# which grow once an hour: kept this long, for this many days.
+HISTORY_CACHE_S = 600
+HISTORY_DAYS = 14
 DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
             "planning": None, "pilote": "ombre", "pilote_thermometre": None,
             "planning_autorises": [], "pilote_flamme_basse": None,
             "brasier_kg": None, "granules_prix_sac": None, "granules_poids_sac": None,
-            "pilote_notifier": None, "poele_prise_switch": None, "couper_prise": True}
+            "pilote_notifier": None, "poele_prise_switch": None, "couper_prise": True,
+            "prix_kwh": None, "pilote_auto": None}
 # What the pellets settings may be (Réglages): the fire pot's threshold, a bag's price and weight.
-PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granules_poids_sac": (5, 30)}
+PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granules_poids_sac": (5, 30),
+                 "prix_kwh": (0.01, 2)}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en essai, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
@@ -57,7 +63,10 @@ PILOT_GAPS = 5
 PELLETS_SAVE_S = 300
 PELLETS_KEYS = ("sacs", "correction", "nettoye_le", "jour", "saison")
 PELLET_WORDS = {"brasier_kg": "seuil du brasier (kg)", "granules_prix_sac": "prix d’un sac (€)",
-                "granules_poids_sac": "poids d’un sac (kg)"}
+                "granules_poids_sac": "poids d’un sac (kg)", "prix_kwh": "prix du kWh d’électricité (€)"}
+# The card's « Gestion auto » (0.8): off, the pilot only looks (« ombre ») and remembers the mode it had; on again, it
+# takes that mode back, else the gentlest one that acts (« flamme »).
+AUTO_MODES = ("flamme", "entier")
 # The whole pilot (0.7): what a person answers on the phone (the companion app's actions) and the buttons' words; a
 # gesture waits this long for Home Assistant's answer.
 ANSWER_EVENT = "mobile_app_notification_action"
@@ -273,6 +282,9 @@ class HeatingCoordinator:
         view["version"] = VERSION
         view["mis_a_jour"] = dt_util.now().isoformat()
         view["meteo"] = {k: self.weather.get(k) for k in ("etat", "nom")}
+        # The price of a kWh of electricity (Réglages, 0.8): the cards' « Argent » for a room, and the stove's against
+        # the same heat bought as electricity. None: the cards say where to set it.
+        view["prix_kwh"] = self.settings.get("prix_kwh")
         view["extensions"] = self._extensions()
         self.data = view
         self.last_build_ms = round((time.perf_counter() - started) * 1000, 2)
@@ -636,16 +648,38 @@ class HeatingCoordinator:
         await self.store.async_save(settings)
         self._started()
 
+    async def async_auto(self, on: bool) -> str:
+        """The card's « Gestion auto »: off, the pilot goes back to looking only (« ombre ») and keeps the mode it had;
+        on, it takes that mode back (else « flamme »; « entier » only for a stove the profile can light and stop).
+        Returns the mode now in force. Never switched on for a stove copied from another house (a lab)."""
+        mode = self.settings.get("pilote") or "ombre"
+        if on and (self.data.get("poele") or {}).get("copie"):
+            return mode
+        if on:
+            wanted = self.settings.get("pilote_auto") if self.settings.get("pilote_auto") in AUTO_MODES else "flamme"
+            if wanted == "entier" and not (self.data.get("poele") or {}).get("pilotable"):
+                wanted = "flamme"
+            if mode in AUTO_MODES:
+                return mode
+            await self.async_set_settings({"pilote": wanted})
+            return wanted
+        if mode not in AUTO_MODES:
+            return mode
+        await self.async_set_settings({"pilote": "ombre", "pilote_auto": mode})
+        return "ombre"
+
     # --- a day's curves (the panel's and the card's charts) ------------------------------------------------------
 
-    async def async_day(self, target: str) -> dict:
+    async def async_day(self, target: str, hours: int | None = None) -> dict:
         """Today's curves since midnight for a room (`piece/<id>`) or the stove (`poele`): temperature and set point,
-        flame. Read from the recorder at most every two minutes per target."""
-        cached = self._days.get(target)
+        flame. With `hours` (the cards' clock, 0.8), the last hours instead, up to now. Read from the recorder at most
+        every two minutes per target."""
+        key = target if not hours else f"{target}@{hours}"
+        cached = self._days.get(key)
         if cached and time.monotonic() - cached[0] < DAY_CACHE_S:
             return cached[1]
         now = dt_util.now()
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = now - timedelta(hours=hours) if hours else now.replace(hour=0, minute=0, second=0, microsecond=0)
         wanted: list[tuple[str, str, str | None]] = []
         if target == "poele":
             stove = self.data.get("poele") or {}
@@ -670,8 +704,42 @@ class HeatingCoordinator:
             series["flamme"] = _burning_only(series.get("flamme") or [], series.pop("etat"), profile)
         view = {"debut": start.isoformat(), "maintenant_min": now.hour * 60 + now.minute,
                 "series": {name: _minutes(points, start) for name, points in series.items()}}
-        self._days[target] = (time.monotonic(), view)
+        if hours:
+            # The minutes count from `debut`; the clock places them from the minute of the day it falls on.
+            view.update(debut_min=start.hour * 60 + start.minute, fenetre_min=hours * 60)
+        self._days[key] = (time.monotonic(), view)
         return view
+
+    async def async_history(self, target: str) -> dict:
+        """The last days' totals for the cards' drawers (0.8), from the long-term statistics: a room's kWh (its
+        thermostat's energy counter) or the stove's pellets (Hestia's own count). Today's total adds what the counter
+        moved since its last hourly statistic. Kept ten minutes per target."""
+        cached = self._days.get("histoire/" + target)
+        if cached and time.monotonic() - cached[0] < HISTORY_CACHE_S:
+            return cached[1]
+        stat, unit = None, None
+        if target == "poele":
+            stat, unit = self._own_entity("sensor", "poele_granules_brules"), "kg"
+        elif target.startswith("piece/"):
+            room = next((r for r in self.data.get("pieces") or [] if r["id"] == target[6:]), None)
+            main = (room or {}).get("principal")
+            stat = next((c.get("energie") for c in self.found.climates if c["entity_id"] == main), None) if main else None
+            unit = "kWh"
+        now = dt_util.now()
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        first = min(today - timedelta(days=HISTORY_DAYS - 1), today.replace(day=1))
+        days = await reader.daily_totals(self.hass, stat, unit, first, now) if stat else {}
+        view = {"unite": unit, "stat": stat, "aujourdhui": today.date().isoformat(),
+                "jours": [{"jour": (today - timedelta(days=n)).date().isoformat(),
+                           "valeur": days.get((today - timedelta(days=n)).date().isoformat())}
+                          for n in range(HISTORY_DAYS - 1, -1, -1)],
+                "mois": round(sum(v for d, v in days.items() if d >= today.replace(day=1).date().isoformat()), 2)
+                if days else None}
+        self._days["histoire/" + target] = (time.monotonic(), view)
+        return view
+
+    def _own_entity(self, platform: str, key: str) -> str | None:
+        return er.async_get(self.hass).async_get_entity_id(platform, DOMAIN, f"{self.entry.entry_id}_{key}")
 
 
 def _burning_only(flames: list[tuple], states: list[tuple], profile) -> list[tuple]:

@@ -60,13 +60,13 @@ type View={pret:boolean;version:string;maison:House;pieces:Room[];sources:Source
  mis_a_jour:string;calcul_ms:number|null};
 type Day={debut:string;maintenant_min:number;series:Record<string,[number,number|null][]>};
 type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null;planning:Model;pilote:string;pilote_thermometre:string|null;planning_autorises:string[];pilote_flamme_basse:string|null;
-  brasier_kg?:number|null;granules_prix_sac?:number|null;granules_poids_sac?:number|null;pilote_notifier?:string|null;poele_prise_switch?:string|null;couper_prise?:boolean};
+  brasier_kg?:number|null;granules_prix_sac?:number|null;granules_poids_sac?:number|null;pilote_notifier?:string|null;poele_prise_switch?:string|null;couper_prise?:boolean;prix_kwh?:number|null};
  trouve:{thermostats:{id:string;nom:string;piece:string}[];coupes:{id:string;nom:string}[];poele:boolean;poele_thermostat:string|null;
   prises:{id:string;nom:string;poele:boolean}[];prise:string|null;thermometres:{id:string;nom:string;maison:boolean}[];interrupteurs?:{id:string;nom:string}[];poele_copie?:boolean;
   notifieurs?:string[];coupures?:{id:string;nom:string;poele:boolean}[];coupure?:string|null;pilotable?:boolean;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null}}};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='0.7.0b1';
+const VERSION='0.8.0b1';
 // The whole pilot's answers, as on the phone.
 const ANSWER:Record<string,string>={oui:'Oui, allumer',non:'Non',couper:'Couper la prise',ignorer:'Ignorer',nettoye:'J’ai nettoyé'};
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
@@ -713,6 +713,9 @@ export class HestiaHeatingSetup extends LitElement {
     this.numberRow('granules_poids_sac','Poids d’un sac','kg',5,30,0.5,v.granules?.sac_kg!=null?num(v.granules.sac_kg,1):'15',
      v.granules?.sac_kg!=null?'Vide : celui de Suivi Stock Pellet.':'Vide : 15 kg.'),
    ],{help:'Hestia compte les granulés d’après la flamme du poêle, et s’ajuste sur les sacs déclarés dans Suivi Stock Pellet.'}):nothing}
+   ${listSection('L’électricité',[
+    this.numberRow('prix_kwh','Prix du kWh','€',0.01,2,0.0001,'0,2516','Pour l’onglet Argent des cartes : le coût d’une pièce chauffée à l’électricité'+(f.poele?', et le poêle face à la même chaleur payée en électricité.':'.')+' Vide : pas de coût.'),
+   ],{help:'Le prix de votre contrat, abonnement à part. En heures pleines et creuses, mettez un prix moyen.'})}
    ${listSection('Les thermostats lus',all.map(t=>listRow({label:t.nom,control:true,sub:html`<span class="eid">${t.id}</span>`,
      value:toggle('Lire '+t.nom,off[t.id]!==false,on=>setSource(t.id,on))})),{help:'Un thermostat coupé ici n’est plus lu ni compté, sans rien changer dans Home Assistant.'})}
    ${listSection('Ce que Hestia peut régler',f.thermostats.map(t=>listRow({label:t.nom,control:true,sub:t.piece||undefined,

@@ -3,30 +3,45 @@ import charte from './ui/hestia-charte.css';
 import heating from './heating.css';
 import './editor';
 import {follow,type Connection} from './stream';
+import {dial,center,heaterArt,stoveArt,sample,TRACE_MIN,type Pt,type Mark} from './clock';
 
-/* Hestia Chauffage's card, after the cards' mock-up validated by Frank on 20 Nov. 2026:
+/* Hestia Chauffage's card, after the cards' mock-up validated by Frank on 20 Nov. 2026, and the clock of 24 Nov. 2026:
    1 · la maison: the house in one sentence, every room, the night's cold (card: maison, by default)
-   2 · le poêle: its flame, its day, its smoke, the plug, the pellets (card: poele)
-   3 · une pièce: its temperature, its set point, its demand, its day, its modes (card: piece, piece: <id>), or one line
-       (court: true). A tap on it opens its thermostat (tap_action: page, the room's page in the tab; none, nothing)
+   2 · le poêle: its clock (the planning, the room's temperature, the flame), what Hestia does, its buttons, the fire
+       and its settings, then the pellets, the money and the upkeep in a drawer (card: poele)
+   3 · une pièce: its clock (the planning, its temperature, its heating), whether it heats, its modes, then the money,
+       the use and the comfort in a drawer (card: piece, piece: <id>), or one line (court: true). A tap on it opens its
+       thermostat (tap_action: page, the room's page in the tab; none, nothing)
    4 · le planning: the day of each room and of the stove, from the planning Hestia or Scheduler (card: planning)
-   Every figure comes from the integration (hestia_heating/subscribe, day): the card only puts it into words. */
+   Every figure comes from the integration (hestia_heating/subscribe, day, historique): the card only puts it into
+   words. Its buttons are the user's own presses, sent from this browser as Home Assistant's own cards do, and never
+   to a thermostat or a stove copied from another house (a lab), where they would reach that house. */
 
 type Hass={callWS:<T>(msg:Record<string,unknown>)=>Promise<T>;callService:(domain:string,service:string,data:Record<string,unknown>)=>Promise<unknown>;
  connection:Connection;themes?:{darkMode?:boolean}};
 type Badge={texte:string;ton:string};
+type Next={a:string;texte:string;ton?:string|null};
 type Room={id:string;nom:string;temperature:number|null;consigne:number|null;etat:string;poele:boolean;demande_pct:number|null;puissance_w:number;
- pente:number|null;fenetre:boolean;badge:Badge;raison:string|null;planning:string|null;prochain:{a:string;texte:string}|null;type:string|null;
- principal:string|null;preset:string|null;modes?:string[];recopie?:boolean};
-type Stove={nom:string;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;fumees:number|null;
- prise:string|null;prise_w:number|null;demande_pct:number|null;ecritures:number|null;ecritures_max:number|null;alarme:boolean|null;alarme_texte:string|null};
-type Pellets={stock_sacs:number|null;stock_kg:number|null;jours:number|null};
+ pente:number|null;fenetre:boolean;fenetre_depuis?:string|null;humidite?:number|null;badge:Badge;raison:string|null;planning:string|null;
+ prochain:Next|null;type:string|null;principal:string|null;preset:string|null;modes?:string[];recopie?:boolean;appoint?:number|null};
+type Order={service:string;entity_id:string;donnees?:Record<string,unknown>};
+type FirePot={kg:number|null;seuil_kg:number;a_nettoyer:boolean;bientot?:boolean;texte:string};
+type Use={debit_kg_h:number;kg_jour:number;kg_saison:number;prix_kg:number|null;cout_jour:number|null;cout_heure:number|null;brasier?:FirePot};
+type Stove={nom:string;modele?:string|null;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;
+ fumees:number|null;prise:string|null;prise_w:number|null;demande_pct:number|null;consigne?:number|null;ecritures:number|null;ecritures_max:number|null;
+ alarme:boolean|null;alarme_texte:string|null;allume?:boolean|null;conso?:Use;pilote?:{mode:string;titre?:string;texte?:string};
+ boutons?:{allumer?:Order;eteindre?:Order};ventilation?:string|null;copie?:boolean;entites?:Record<string,string>;
+ flamme_basse?:{entity_id:string;nom:string;on:boolean|null}|null;prise_switch?:{entity_id:string;on:boolean|null}|null};
+type Pellets={stock_sacs:number|null;stock_kg:number|null;jours:number|null;kg_par_jour?:number|null};
 type Lane={id:string;nom:string;segments:{de:number;a:number;ton:string}[];source?:string|null;bloque?:boolean};
-type Planning={source:string|null;jour_nom:string;labo?:boolean;essai?:boolean;maintenant_min:number;lignes:Lane[];
+type Planning={source:string|null;jour?:string;jour_nom:string;labo?:boolean;essai?:boolean;maintenant_min:number;lignes:Lane[];
  prochains:{a:string;heure:string;texte:string}[]};
 type View={pret:boolean;maison:{etat:string;titre:string;temperature:number|null;en_chauffe:number;pieces:number;electrique_w:number};
- pieces:Room[];poele:Stove|null;granules:Pellets|null;dehors:{nuit_min:number|null;demain_max:number|null}|null;planning:Planning};
-type Day={maintenant_min:number;series:Record<string,[number,number|null][]>};
+ pieces:Room[];poele:Stove|null;granules:Pellets|null;dehors:{nuit_min:number|null;demain_max:number|null}|null;planning:Planning;prix_kwh?:number|null};
+/** The clock's day: the last 24 hours, in minutes from `debut_min` (a minute of the day). */
+type Day={maintenant_min:number;debut_min?:number;fenetre_min?:number;series:Record<string,Pt[]>};
+/** The drawers' days: a room's kWh or the stove's kilos, per day, the oldest first; today is the day so far. */
+type History={unite:string|null;stat:string|null;aujourdhui:string;jours:{jour:string;valeur:number|null}[];mois:number|null};
 type Config={type:string;card?:string;piece?:string;court?:boolean;name?:string;tap_action?:string};
 const CARDS=['maison','poele','piece','planning'];
 /** A tap on a room's card: its thermostat (Home Assistant's own window, by default), its page in the tab, or nothing. */
@@ -35,12 +50,23 @@ export const TAPS=['thermostat','page','none'];
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{maximumFractionDigits:d}).replace('-','−');
 const deg=(v:number|null|undefined)=>v==null?'—':`${num(v)} °C`;
 const watts=(w:number|null|undefined)=>w==null?'—':w>=500?`${num(w/1000)} kW`:`${num(w,0)} W`;
-const hm=(d:Date)=>d.getMinutes()?`${d.getHours()} h ${String(d.getMinutes()).padStart(2,'0')}`:`${d.getHours()} h`;
+const eur=(v:number)=>v>=100?`${num(v,0)} €`:`${v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} €`;
+const cap=(t:string)=>t?t[0].toUpperCase()+t.slice(1):t;
+const hm=(d:Date)=>d.getMinutes()?`${d.getHours()} h ${String(d.getMinutes()).padStart(2,'0')}`:`${d.getHours()} h`;
 const DAYS=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+const DAY_SHORT=['di','lu','ma','me','je','ve','sa'];
+const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 function when(iso:string){const d=new Date(iso),now=new Date(),t=new Date(now);t.setDate(t.getDate()+1);
  if(d.toDateString()===now.toDateString())return hm(d);if(d.toDateString()===t.toDateString())return `demain ${hm(d)}`;return `${DAYS[d.getDay()]} ${hm(d)}`;}
+/* A time the integration gives in the house's own time zone, read as it is written (the browser may be elsewhere). */
+const isoMinute=(iso:string)=>+iso.slice(11,13)*60+ +iso.slice(14,16);
+const isoHm=(iso:string)=>{const m=isoMinute(iso);return m%60?`${Math.floor(m/60)} h ${String(m%60).padStart(2,'0')}`:`${m/60} h`;};
+const isoWhen=(iso:string,today?:string)=>!today||iso.slice(0,10)===today?isoHm(iso):`demain ${isoHm(iso)}`;
+const dateOf=(day:string)=>{const [y,m,d]=day.split('-').map(Number);return new Date(y,m-1,d);};
 const STOVE_WORD:Record<string,string>={eteint:'éteint',allumage:'allumage',chauffe:'chauffe',nettoyage:'nettoyage',extinction:'extinction',alarme:'alarme',inconnu:'inconnu'};
 const LANE_WORD:Record<string,string>={poele:'poêle en chauffe',confort:'confort',eco:'éco',hors_gel:'hors gel',boost:'boost',arret:'arrêt'};
+const TYPE_WORD:Record<string,string>={radiateur:'Radiateur électrique',vanne:'Radiateur à eau',clim:'Climatisation',pac:'Pompe à chaleur',
+ poele:'Poêle',autre:'Chauffage'};
 /* A room's modes, as its thermostat names them (Versatile Thermostat's presets first), in this order, and their colour. */
 const MODE_WORD:Record<string,string>={frost:'Hors gel',eco:'Éco',comfort:'Confort',boost:'Boost',away:'Absent',sleep:'Nuit',home:'Présent',activity:'Activité'};
 const MODE_TONE:Record<string,string>={frost:'off',eco:'cold',comfort:'heat',boost:'act',away:'off',sleep:'cold',home:'heat',activity:'act'};
@@ -48,42 +74,33 @@ const ORDER=Object.keys(MODE_WORD);
 const modeRank=(m:string)=>{const i=ORDER.indexOf(m);return i<0?ORDER.length:i;};
 // A mode pressed shows as chosen until the thermostat says so, at most this long.
 const PENDING_MS=10_000;
+// A press that cannot be taken back (the stove on or off, « J’ai nettoyé ») asks again, this long.
+const CONFIRM_MS=5_000;
+// One kilo of pellets gives 4.176 kWh (engine/granules.py): the same heat, bought as electricity.
+const KWH_PER_KG=4.176;
+const HISTORY_MS=600_000;
 
-/* The day's curves: one line per series, its own scale or the shared one (temperatures). A gap (no value) cuts the
-   line; the last run reaches « now » only when the series still has a value at its end. */
-const W=400,H=80;
-function runs(points:[number,number|null][],end?:number){
- const out:[number,number][][]=[];let cur:[number,number][]|null=null;
- for(const [m,v] of points){if(v==null){cur=null;continue;}if(!cur){cur=[];out.push(cur);}cur.push([m,v]);}
- const last=points.at(-1),run=out.at(-1);
- if(run&&last?.[1]!=null&&end!=null&&end>run.at(-1)![0])run.push([end,run.at(-1)![1]]);
- return out;
-}
-function paths(points:[number,number|null][],lo:number,hi:number,step=false,end?:number,band?:number){
- const x=(m:number)=>(m/1440*W).toFixed(1),y=(v:number)=>(band?H-(v-lo)/(hi-lo||1)*band:H-6-(v-lo)/(hi-lo||1)*(H-12)).toFixed(1);
- const line=(run:[number,number][])=>run.map(([m,v],i)=>i===0?`M${x(m)} ${y(v)}`:step?`H${x(m)}V${y(v)}`:`L${x(m)} ${y(v)}`).join('');
- const all=runs(points,end);
- return {line:all.map(line).join(''),area:all.map(r=>`M${x(r[0][0])} ${H}`+line(r).replace(/^M/,'L')+`V${H}Z`).join('')};
-}
-/* `band`: a series drawn low in the chart, on that many pixels (a thermostat's demand, under the temperature). */
-function chart(lines:{pts:[number,number|null][];cls:string;step?:boolean;fill?:boolean;lo?:number;hi?:number;band?:number}[],now:number,label:string):TemplateResult{
- const vals=lines.filter(l=>l.lo==null).flatMap(l=>l.pts.map(p=>p[1])).filter((x):x is number=>x!=null);
- const lo=vals.length?Math.floor(Math.min(...vals)-.5):15,hi=vals.length?Math.ceil(Math.max(...vals)+.5):22;
- return html`<svg class="chart" viewBox="0 0 ${W} ${H+14}" role="img" aria-label=${label}>
-  ${[0,360,720,1080].map(m=>svg`<line class="grid" x1=${m/1440*W} x2=${m/1440*W} y1="0" y2=${H}></line><text x=${m/1440*W+2} y=${H+12}>${m/60} h</text>`)}
-  ${lines.map(l=>{const p=paths(l.pts,l.lo??lo,l.hi??hi,l.step,now,l.band);
-   return p.line?svg`${l.fill?svg`<path class=${l.cls+' area'} d=${p.area}></path>`:nothing}<path class=${l.cls} d=${p.line}></path>`:nothing;})}
-  <line class="now" x1=${now/1440*W} x2=${now/1440*W} y1="0" y2=${H}></line></svg>`;
-}
+const GEAR=svg`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
+const CHEVRON=svg`<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>`;
+const WAVES=svg`<svg class="wv" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 14c-1.6-1.6 1.6-2.6 0-4.2s1.6-2.6 0-4.2M8 14c-1.6-1.6 1.6-2.6 0-4.2s1.6-2.6 0-4.2M12 14c-1.6-1.6 1.6-2.6 0-4.2s1.6-2.6 0-4.2"></path></svg>`;
+const POWER=svg`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"></path></svg>`;
+const BRUSH=svg`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4l6 6M17 7l-6 6M5 21l4.5-1.5 4-4-3-3-4 4z"></path></svg>`;
+const CLOCK=svg`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>`;
+const RELAY=svg`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7v10M8 7v10M12 7v10M16 7v10M20 7v10M2 19h20M2 5h20"></path></svg>`;
 
 class HestiaHeatingCard extends LitElement {
  static styles=[unsafeCSS(charte),unsafeCSS(heating)];
- static properties={_view:{state:true},_day:{state:true},_error:{state:true},_pending:{state:true},_refused:{state:true}};
- declare _view?:View;declare _day?:Day;declare _error?:string;
+ static properties={_view:{state:true},_day:{state:true},_hist:{state:true},_error:{state:true},_pending:{state:true},_refused:{state:true},
+  _drawers:{state:true},_tabs:{state:true},_confirm:{state:true},_busy:{state:true}};
+ declare _view?:View;declare _day?:Day;declare _hist?:History;declare _error?:string;
  /** The mode just pressed, until the thermostat says it; what went wrong with the last press. */
  declare _pending?:{id:string;mode:string;at:number};declare _refused?:string;
+ /** The drawers opened or closed and the tab shown in each (this card only), the press waiting for its second tap,
+     the press being sent. */
+ declare _drawers:Record<string,boolean>;declare _tabs:Record<string,string>;declare _confirm?:string;declare _busy?:string;
  private _hass?:Hass;private _config:Config={type:'custom:hestia-heating-card',card:'maison'};private _stop?:()=>void;private _again?:number;
- private _dayAt=0;private _dayFor='';
+ private _dayAt=0;private _dayFor='';private _histAt=0;private _histFor='';
+ constructor(){super();this._drawers={};this._tabs={};}
 
  static getStubConfig(){return {card:'maison'};}
  static getConfigElement(){return document.createElement('hestia-heating-card-editor');}
@@ -93,7 +110,7 @@ class HestiaHeatingCard extends LitElement {
   if(config.tap_action!=null&&!TAPS.includes(config.tap_action))throw new Error(`tap_action: ${config.tap_action} ? (${TAPS.join(', ')})`);
   this._config={...config,card};
  }
- getCardSize(){const c=this._config.card;return c==='piece'&&this._config.court?2:c==='planning'||c==='piece'?6:5;}
+ getCardSize(){const c=this._config.card;return c==='piece'&&this._config.court?2:c==='piece'?11:c==='poele'?13:c==='planning'?6:5;}
  getGridOptions(){const c=this._config.card;return c==='planning'?{columns:'full',rows:'auto'}:{columns:12,rows:'auto',min_columns:6};}
  set hass(hass:Hass){
   const other=this._hass?.connection!==hass.connection;
@@ -111,17 +128,28 @@ class HestiaHeatingCard extends LitElement {
    e=>{this._stop=undefined;this._error=e.message??'Hestia Chauffage ne répond pas.';this._again=window.setTimeout(()=>this._follow(),30000);},
    ()=>{this._stop=undefined;this._again=window.setTimeout(()=>this._follow(),2000);});
  }
- /** The day's curves (stove, room): asked when the card shows, then every two minutes at most. */
+ /** The clock's last 24 hours (stove, room): asked when the card shows, then every two minutes at most; the drawers'
+     days every ten minutes at most. */
  private _maybeDay(){
-  const c=this._config,target=c.card==='poele'?'poele':c.card==='piece'&&!c.court&&c.piece?`piece/${c.piece}`:'';
+  const c=this._config,v=this._view,room=c.card==='piece'&&!c.court&&v?this._roomOf(v):undefined;
+  const target=c.card==='poele'?'poele':room?`piece/${room.id}`:'';
   if(!target||!this._hass)return;
-  if(target===this._dayFor&&Date.now()-this._dayAt<120_000)return;
-  this._dayFor=target;this._dayAt=Date.now();
-  this._hass.callWS<Day>({type:'hestia_heating/day',cible:target}).then(d=>{this._day=d;}).catch(()=>{/* no recorder: no curve */});
+  // Another room or the stove: never show the last one's day in the meantime.
+  if(target!==this._dayFor)this._day=undefined;
+  if(target!==this._histFor)this._hist=undefined;
+  if(target!==this._dayFor||Date.now()-this._dayAt>=120_000){
+   this._dayFor=target;this._dayAt=Date.now();
+   this._hass.callWS<Day>({type:'hestia_heating/day',cible:target,heures:24}).then(d=>{this._day=d;}).catch(()=>{/* no recorder: no curve */});
+  }
+  if(target!==this._histFor||Date.now()-this._histAt>=HISTORY_MS){
+   this._histFor=target;this._histAt=Date.now();
+   this._hass.callWS<History>({type:'hestia_heating/historique',cible:target}).then(h=>{this._hist=h;}).catch(()=>{/* no statistics: no days */});
+  }
  }
  private _open(path:string){history.pushState(null,'','/hestia/chauffage'+(path?'/'+path:''));window.dispatchEvent(new CustomEvent('location-changed',{bubbles:true,composed:true}));}
  private _info(path:string,label:string){return html`<button class="nw-info" aria-label=${label} @click=${()=>this._open(path)}></button>`;}
  private _chip(b:Badge){return html`<span class=${'nw-chip '+b.ton}>${b.texte}</span>`;}
+ private _more(entityId:string){this.dispatchEvent(new CustomEvent('hass-more-info',{detail:{entityId},bubbles:true,composed:true}));}
 
  render(){
   const v=this._view;
@@ -129,11 +157,50 @@ class HestiaHeatingCard extends LitElement {
   if(!v||!v.pret)return html`<ha-card><div class="head"><h2 class="nw-title">Chauffage</h2></div><p class="empty">Lecture des thermostats…</p></ha-card>`;
   const c=this._config.card;
   if(c==='piece'){
-   const r=this._roomOf(v),tap=r&&this._tapAction(r);
-   return html`<ha-card class=${tap?'tap':''} @click=${tap?(e:MouseEvent)=>this._tap(e,r!):nothing}>${this._room(v)}</ha-card>`;
+   const r=this._roomOf(v),tap=r&&this._tapAction(r),clock=r&&!this._config.court;
+   return html`<ha-card class=${(tap?'tap ':'')+(clock?'clock':'')} @click=${tap?(e:MouseEvent)=>this._tap(e,r!):nothing}>${this._room(v)}</ha-card>`;
   }
-  return html`<ha-card>${c==='poele'?this._stove(v):c==='planning'?this._planning(v):this._house(v)}</ha-card>`;
+  if(c==='poele')return html`<ha-card class=${v.poele?'clock':''}>${this._stove(v)}</ha-card>`;
+  return html`<ha-card>${c==='planning'?this._planning(v):this._house(v)}</ha-card>`;
  }
+
+ /* The clock cards' pieces: the head (name, what heats, two pills, the settings' button), a drawer, its tabs, a press
+    that asks again before it is sent. */
+ private _head(title:string,sub:string,pills:unknown,path:string,label:string){
+  return html`<div class="chead"><div class="ttl"><h2 class="nw-title">${title}</h2>${sub?html`<div class="sub">${sub}</div>`:nothing}</div>
+   <div class="pills">${pills}</div>
+   <button class="gear" aria-label=${label} title="Réglages" @click=${()=>this._open(path)}>${GEAR}</button></div>`;
+ }
+ private _drawer(key:string,title:string,say:string,byDefault:boolean,body:()=>unknown,cls=''){
+  const open=this._drawers[key]??byDefault;
+  // A press in a drawer is never a tap on the card.
+  return html`<div class=${'dbox '+cls} @click=${(e:Event)=>e.stopPropagation()}>
+   <button class="drawer" aria-expanded=${open?'true':'false'} @click=${()=>{this._drawers={...this._drawers,[key]:!open};}}>
+    <span class="dt">${title}${say?html`<span class="ds">${say}</span>`:nothing}</span>${CHEVRON}</button>
+   ${open?html`<div class="dbody">${body()}</div>`:nothing}</div>`;
+ }
+ private _tabbar(key:string,tabs:[string,string][],label:string){
+  const on=this._tab(key,tabs);
+  return html`<div class="tabs" role="tablist" aria-label=${label}>${tabs.map(([id,l])=>html`<button class="tab" role="tab"
+   aria-selected=${id===on?'true':'false'} @click=${()=>{this._tabs={...this._tabs,[key]:id};}}>${l}</button>`)}</div>`;
+ }
+ private _tab(key:string,tabs:[string,string][]){const t=this._tabs[key];return tabs.some(x=>x[0]===t)?t:tabs[0][0];}
+ private async _press(key:string,run:()=>Promise<unknown>,confirm=false){
+  if(confirm&&this._confirm!==key){
+   this._confirm=key;
+   window.setTimeout(()=>{if(this._confirm===key)this._confirm=undefined;},CONFIRM_MS);
+   return;
+  }
+  this._confirm=undefined;this._busy=key;this._refused=undefined;
+  try{await run();}
+  catch(e){this._refused=`Ce n’est pas passé : ${(e as {message?:string}).message??'pas de réponse'}.`;}
+  finally{this._busy=undefined;}
+ }
+ private _service(o:Order){
+  const [domain,service]=o.service.split('.');
+  return this._hass!.callService(domain,service,{...(o.donnees??{}),entity_id:o.entity_id});
+ }
+ private _toSettings(){return html`<button class="link" @click=${()=>this._open('reglages')}>Ouvrir les réglages</button>`;}
 
  /* A room's card: a tap opens its thermostat, its page in the tab, or nothing (the card's settings, « Clic sur la
     carte »). A press on a mode or on « i » is not a tap on the card. */
@@ -182,24 +249,184 @@ class HestiaHeatingCard extends LitElement {
     ${g?.jours!=null?html`<div><span>Granulés</span><b>${g.jours} jours</b></div>`:out?.demain_max!=null?html`<div><span>Demain après-midi</span><b>${deg(out.demain_max)}</b></div>`:html`<div><span>Pièces</span><b>${h.pieces}</b></div>`}</div>`;
  }
 
- /* 2 · Le poêle */
+ /* The clock's window (the last 24 hours, cached two minutes): where its minutes start, its length, its series. */
+ private _window(){const d=this._day;return {d,series:d?.series??{},start:d?.debut_min??0,length:d?.fenetre_min??0};}
+ /** What comes next, in the house's own time: « confort à 20 h 30 », « éco demain 6 h 30 ». */
+ private _next(n:Next,v:View){const w=isoWhen(n.a,v.planning.jour);return `${n.texte} ${w.startsWith('demain')?w:'à '+w}`;}
+ private _soon(n:Next|null|undefined){return n&&Date.parse(n.a)-Date.now()<86_400_000?n:null;}
+ private _tile(value:string,key:string,unit=''){
+  return html`<div class="tile"><b class="v">${value}${unit?html`<small class="u">${unit}</small>`:nothing}</b><span class="k">${key}</span></div>`;
+ }
+ /** Days as bars, today's last and highlighted; their values under them (up to a week), then the days' letters. */
+ private _bars(days:{jour:string;valeur:number|null}[],label:(x:number)=>string,aria:string){
+  const max=Math.max(0,...days.map(d=>d.valeur??0)),last=days.length-1;
+  return html`<div class="bars" role="img" aria-label=${aria} style=${`--n:${days.length}`}>
+   <div class="cols">${days.map((d,i)=>html`<span class=${i===last?'today':''} style=${`height:${max&&d.valeur?Math.max(4,Math.round(d.valeur/max*72)):0}px`}></span>`)}</div>
+   ${days.length<=7?html`<div class="vals">${days.map((d,i)=>html`<span class=${i===last?'today':''}>${d.valeur!=null?label(d.valeur):'—'}</span>`)}</div>`:nothing}
+   <div class="days">${days.map((d,i)=>html`<span>${i===last?'auj.':DAY_SHORT[dateOf(d.jour).getDay()]}</span>`)}</div></div>`;
+ }
+ private _dayList(days:{jour:string;valeur:number|null}[],words:(x:number)=>string){
+  return days.map(d=>`${DAYS[dateOf(d.jour).getDay()]} ${d.valeur!=null?words(d.valeur):'—'}`).join(', ');
+ }
+
+ /* 2 · Le poêle: its clock, what Hestia does, its buttons; the fire and its settings (open); the pellets, the money and
+    the upkeep (closed). */
  private _stove(v:View){
   const s=v.poele;
   if(!s)return html`<div class="head"><h2 class="nw-title">${this._config.name||'Poêle'}</h2></div><p class="empty">Aucun poêle trouvé.</p>`;
-  const max=s.flamme_max,real=s.flamme,asked=s.flamme_reglee,d=this._day,g=v.granules,room=v.pieces.find(r=>r.poele);
-  const say=s.en_feu&&s.demande_pct!=null?`Le thermostat demande ${s.demande_pct} %${s.depuis?`. Depuis ${hm(new Date(s.depuis))}`:''}.`:s.depuis?`${STOVE_WORD[s.etat][0].toUpperCase()+STOVE_WORD[s.etat].slice(1)} depuis ${hm(new Date(s.depuis))}.`:'';
-  return html`<div class="head"><h2 class="nw-title">${this._config.name||s.nom}</h2>${this._chip({texte:STOVE_WORD[s.etat],ton:s.etat==='alarme'?'alert':s.en_feu?'stove':'off'})}${this._info('poele','Ouvrir la page du poêle')}</div>
-   <div class="nw-panel flame-row"><div><div class="nw-value"><b>${real!=null?`Flamme ${real}`:'Flamme —'}</b><span>sur ${max}</span></div><div class="nw-say">${say}</div></div>
-    <div class="flames" aria-hidden="true">${Array.from({length:max},(_,i)=>i+1).map(i=>html`<i class=${(real!=null&&i<=real?'on':'')+(asked===i?' ask':'')} style=${`height:${14+i*(32/max)}px`}></i>`)}</div></div>
-   ${d&&(d.series.flamme?.length||d.series.temperature?.length)?html`${chart([{pts:d.series.flamme??[],cls:'flame',step:true,fill:true,lo:0,hi:max},{pts:d.series.temperature??[],cls:'salon'}],d.maintenant_min,'Flamme du poêle et température de la pièce aujourd’hui')}
-    <div class="nw-legend"><span><i class="sw flame"></i>flamme</span><span><i class="sw salon"></i>${room?room.nom.toLowerCase():'pièce'}</span></div>`:nothing}
-   <div class="nw-stats" style="--n:4"><div><span>Fumées</span><b>${deg(s.fumees)}</b></div>
-    ${s.prise?html`<div><span>Prise</span><b>${watts(s.prise_w)}</b></div>`:html`<div><span>Alarme</span><b>${s.alarme?s.alarme_texte??'oui':'aucune'}</b></div>`}
-    <div><span>Stock</span><b>${g?.stock_sacs!=null?`${num(g.stock_sacs,0)} sacs`:'—'}</b></div>
-    <div><span>Ordres du jour</span><b>${s.ecritures!=null?`${s.ecritures}${s.ecritures_max?` / ${s.ecritures_max}`:''}`:'—'}</b></div></div>`;
+  const room=v.pieces.find(r=>r.poele),{series,start,length}=this._window();
+  const auto=s.pilote?.mode==='flamme'||s.pilote?.mode==='entier',max=s.flamme_max||5,level=s.en_feu?s.flamme??0:0;
+  const lane=v.planning.lignes.find(l=>l.id==='poele'),tones=[...new Set((lane?.segments??[]).map(x=>x.ton))];
+  const flames=(series.flamme??[]).map(([m,x]):Pt=>[m,x==null?null:x/max]);
+  // The last start within the trace, and the stop the planning has next while the stove burns.
+  const lit=this._lastStart(series.flamme??[],length),next=this._soon(room?.prochain);
+  const stop=s.en_feu&&next&&next.ton&&next.ton!=='poele'?next:null;
+  const marks:Mark[]=[...(lit!=null?[{at:start+lit,cls:'lit'}]:[]),...(stop?[{at:isoMinute(stop.a),cls:'stop'}]:[])];
+  const t=room?.temperature??null,where=room?room.nom:'la pièce';
+  const state=s.etat==='alarme'?'alarme':s.en_feu&&level?`flamme ${level} sur ${max}`:STOVE_WORD[s.etat]??s.etat;
+  const sub=s.etat==='alarme'?'en alarme':s.en_feu?s.consigne!=null?`consigne ${num(s.consigne)}°`:`flamme ${level}`:
+   s.etat==='eteint'?'poêle éteint':STOVE_WORD[s.etat]??'';
+  const clock=dial({segments:lane?.segments??[],start,length,now:v.planning.maintenant_min,temp:series.temperature??[],
+   refs:s.consigne!=null?[s.consigne]:[],ticks:flames,tickCls:'flame',tickMin:.01,tickLen:13,marks,
+   label:`Horloge du jour : ${where} à ${deg(t)}, poêle ${state}${stop?`, arrêt prévu à ${isoHm(stop.a)}`:''}.`},
+   center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
+  return html`<div class="top">
+   ${this._head(this._config.name||s.nom,`Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
+    <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Gestion auto':'À la main'}</span>
+    <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`,'poele','Réglages du poêle')}
+   ${clock}
+   <div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
+    ${(series.temperature??[]).length?html`<span><i class="sw line"></i>${where.toLowerCase()}</span>`:nothing}
+    ${flames.some(p=>(p[1]??0)>0)?html`<span><i class="sw tick flame"></i>flamme</span>`:nothing}
+    ${lit!=null?html`<span><i class="sw ring lit"></i>allumage</span>`:nothing}${stop?html`<span><i class="sw ring stop"></i>arrêt prévu</span>`:nothing}</div>
+   <p class="why">${this._why(s,room,auto,level)}</p>
+   ${this._stoveButtons(s,auto)}
+  </div>
+  ${this._fireDrawer(v,s,room)}
+  ${this._pelletDrawer(v,s)}`;
+ }
+ /** The minute (from the window's start) the stove last lit within the clock's trace; null if it did not, or if it
+     burnt since the trace's start. */
+ private _lastStart(flame:Pt[],length:number){
+  const from=Math.max(0,length-TRACE_MIN);let last:number|null=null,prev=false;
+  for(const [m,x] of sample(flame,from,length)){const on=(x??0)>0;if(on&&!prev)last=m;prev=on;}
+  return last===from?null:last;
+ }
+ /* The sentence under the clock: what Hestia does when it drives the stove (« Gestion auto »), else what the stove does. */
+ private _why(s:Stove,room:Room|undefined,auto:boolean,level:number){
+  if(s.etat==='alarme')return `Le poêle est en alarme${s.alarme_texte?` : ${s.alarme_texte}`:''}.`;
+  if(auto&&s.pilote?.texte)return s.pilote.texte;
+  const since=s.depuis?` depuis ${hm(new Date(s.depuis))}`:'';
+  const now=s.en_feu&&level?`Flamme ${level}.${room&&room.temperature!=null?` ${room.nom} : ${deg(room.temperature)}${s.consigne!=null?`, consigne ${deg(s.consigne)}`:''}.`:''}`:
+   `${({eteint:'Poêle éteint',allumage:'Le poêle s’allume',chauffe:'En chauffe',nettoyage:'Le poêle se nettoie',extinction:'Le poêle s’éteint'} as Record<string,string>)[s.etat]??'Le poêle ne dit pas son état'}${since}.`;
+  return (s.pilote&&!auto?'Gestion auto coupée : Hestia ne touche pas au poêle. ':'')+now;
+ }
+ /* « Éteindre » or « Allumer » (the profile's own orders), « Gestion auto » (Hestia's pilot, in the mode chosen in
+    Réglages), « J’ai nettoyé » (Hestia's count only). The first two and « J’ai nettoyé » ask again before they are
+    sent; nothing is sent to a stove copied from another house. */
+ private _stoveButtons(s:Stove,auto:boolean){
+  const lit=s.allume??(s.en_feu||s.etat==='allumage'),order=s.boutons?.[lit?'eteindre':'allumer'];
+  const locked=!!s.copie,pot=s.conso?.brasier,ask=this._confirm,why=locked?'Poêle recopié d’une autre maison : rien ne lui est envoyé.':'';
+  return html`<div class="btns" @click=${(e:Event)=>e.stopPropagation()}>
+   ${order?html`<button class=${'btn'+(ask==='power'?' ask':'')} ?disabled=${locked||this._busy==='power'} title=${why}
+     @click=${()=>this._press('power',()=>this._service(order),true)}>${POWER}${ask==='power'?lit?'Vraiment éteindre ?':'Vraiment allumer ?':lit?'Éteindre':'Allumer'}</button>`:nothing}
+   <button class=${'btn auto'+(auto?' on':'')} aria-pressed=${auto?'true':'false'} ?disabled=${locked||this._busy==='auto'} title=${why}
+     @click=${()=>this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:!auto}))}><span class="switch"><i></i></span>Gestion auto</button>
+   ${pot?html`<button class=${'btn'+(pot.a_nettoyer?' due':'')+(ask==='clean'?' ask':'')} ?disabled=${this._busy==='clean'}
+     @click=${()=>this._press('clean',()=>this._hass!.callWS({type:'hestia_heating/brasier_nettoye'}),true)}>${BRUSH}${ask==='clean'?'Remettre à zéro ?':'J’ai nettoyé'}</button>`:nothing}
+  </div>
+  ${locked?html`<p class="note">Poêle recopié d’une autre maison : ses boutons sont grisés, rien ne lui est envoyé.</p>`:this._refused?html`<p class="note bad">${this._refused}</p>`:nothing}`;
+ }
+ private _fireDrawer(v:View,s:Stove,room:Room|undefined){
+  const c=s.conso,rate=s.en_feu&&c?.debit_kg_h?c.debit_kg_h:null,hour=rate&&c?.cout_heure!=null?`${eur(c.cout_heure)} de l’heure`:null;
+  const say=[s.fumees!=null?`fumées ${num(s.fumees,0)} °C`:null,rate?`${num(rate,2)} kg/h`:s.en_feu?null:'à l’arrêt',hour].filter(Boolean).join(' · ');
+  return this._drawer('feu','Le feu et les réglages',say,true,()=>{
+   const locked=!!s.copie,low=s.flamme_basse,fan=s.ventilation,fanId=s.entites?.ventilation,plug=s.prise_switch,next=this._soon(room?.prochain);
+   const chips=[
+    low?html`<button class=${'chip'+(low.on?' on stove':'')} aria-pressed=${low.on?'true':'false'} ?disabled=${locked||this._busy==='low'} title=${low.nom}
+      @click=${()=>this._press('low',()=>this._hass!.callService(low.entity_id.split('.')[0],low.on?'turn_off':'turn_on',{entity_id:low.entity_id}))}><i class="dot"></i>Flamme réduite</button>`:null,
+    fan!=null&&fanId?html`<button class=${'chip'+(fan.toLowerCase()!=='auto'?' on cold':'')} ?disabled=${locked} title="Ouvrir la ventilation"
+      @click=${()=>this._more(fanId)}><i class="dot"></i>Ventilation ${fan.toLowerCase()==='auto'?'auto':fan}</button>`:null,
+    plug?html`<button class=${'chip'+(plug.on?' on calm':'')} ?disabled=${locked} title="Ouvrir la prise"
+      @click=${()=>this._more(plug.entity_id)}><i class="dot"></i>${plug.on?'Prise allumée':plug.on===false?'Prise coupée':'Prise'}</button>`:null,
+   ].filter(Boolean);
+   const rows=[
+    next?html`<div class="row">${CLOCK}<span><b>Planning.</b> ${room?.planning?`${cap(room.planning)} maintenant, puis `:'Ensuite : '}${this._next(next,v)}.</span></div>`:null,
+    room?.appoint!=null?html`<div class="row cold">${RELAY}<span><b>Radiateur d’appoint.</b> Réglé à ${deg(room.appoint)} : il prend le relais si le poêle ne suffit pas.</span></div>`:null,
+   ].filter(Boolean);
+   return html`<div class="tiles">${this._tile(room?.temperature!=null?num(room.temperature):'—',`${room?room.nom.toLowerCase():'pièce'}, °C`,s.consigne!=null?`→ ${num(s.consigne)}`:'')}
+     ${this._tile(s.fumees!=null?num(s.fumees,0):'—','fumées','°C')}${this._tile(rate?num(rate,2):'—',hour??'granulés','kg/h')}</div>
+    ${chips.length?html`<div class="chips">${chips}</div>`:nothing}${rows.length?html`<div class="rows boxed">${rows}</div>`:nothing}`;
+  },'fire');
+ }
+ private _pelletDrawer(v:View,s:Stove){
+  const g=v.granules,c=s.conso,pot=c?.brasier,h=this._hist?.unite==='kg'?this._hist:undefined;
+  const until=g?.jours!=null?this._dayIn(g.jours):null;
+  const potPct=pot?.kg!=null&&pot.seuil_kg?Math.round(pot.kg/pot.seuil_kg*100):null;
+  const say=[until?`jusqu’au ${until}`:null,c?.cout_jour!=null?`${eur(c.cout_jour)} aujourd’hui`:c?`${num(c.kg_jour,1)} kg aujourd’hui`:null,
+   potPct!=null?`brasier ${potPct} %`:null].filter(Boolean).join(' · ');
+  const TABS:[string,string][]=[['granules','Granulés'],['argent','Argent'],['entretien','Entretien']];
+  return this._drawer('granules','Granulés · Argent · Entretien',say,false,()=>{
+   const tab=this._tab('poele',TABS);
+   return html`${this._tabbar('poele',TABS,'Détails du poêle')}<div role="tabpanel" class="panel">${
+    tab==='granules'?this._pellets(g,c,h,until):tab==='argent'?this._stoveMoney(v,c,h):this._upkeep(s)}</div>`;
+  },'pellets');
+ }
+ private _dayIn(days:number){const d=new Date();d.setDate(d.getDate()+days);return `${d.getDate()===1?'1er':d.getDate()} ${MONTHS[d.getMonth()]}`;}
+ private _sacks(n:number){
+  const full=Math.floor(n+.05),part=n-full>.05;
+  if(!full)return part?'un sac entamé':'plus aucun sac';
+  return `${full} sac${full>1?'s':''}${part?' et un entamé':''}`;
+ }
+ private _sackArt(n:number){
+  const full=Math.floor(n+.05),part=n-full>.05?n-full:0,count=Math.min(12,full+(part?1:0));
+  const SACK='M7 2h12l-1.5 4c3 2 4.5 5.5 4.5 10v4a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-4c0-4.5 1.5-8 4.5-10z';
+  return html`<svg class="sacks" viewBox="0 0 150 90" role="img" aria-label=${this._sacks(n)}><defs><linearGradient id="hcSack" x1="0" y1="1" x2="0" y2="0">
+   <stop offset="0" class="full"></stop><stop offset=${part.toFixed(2)} class="full"></stop><stop offset=${part.toFixed(2)} class="empty"></stop><stop offset="1" class="empty"></stop></linearGradient></defs>
+   ${Array.from({length:count},(_,i)=>svg`<path class=${'sack'+(part&&full<12&&i===count-1?' part':'')} fill=${part&&full<12&&i===count-1?'url(#hcSack)':nothing} transform=${`translate(${(i%6)*24+(i>=6?12:0)} ${i<6?58:30})`} d=${SACK}></path>`)}</svg>`;
+ }
+ private _pellets(g:Pellets|null,c:Use|undefined,h:History|undefined,until:string|null){
+  const days=h?.stat?h.jours:[],top=days.reduce<{jour:string;valeur:number|null}|null>((a,d)=>d.valeur!=null&&(a==null||d.valeur>(a.valeur??0))?d:a,null);
+  return html`${g?.stock_sacs!=null?html`<div class="stock"><div><div class="nw-label">${until?'Il en reste jusqu’au':'Il en reste'}</div>
+     <div class="big">${until??this._sacks(g.stock_sacs)}</div>
+     <div class="small">${[until?cap(this._sacks(g.stock_sacs)):null,g.kg_par_jour!=null?`au rythme de la saison : ${num(g.kg_par_jour)} kg par jour`:null].filter(Boolean).join(', ')}</div></div>
+     ${this._sackArt(g.stock_sacs)}</div>`
+    :html`<p class="note left">Le stock se lit avec l’intégration Suivi Stock Pellet : sans elle, Hestia compte seulement ce qui brûle.</p>
+     ${c?html`<div class="tiles">${this._tile(num(c.kg_jour,1),'aujourd’hui','kg')}${this._tile(num(c.kg_saison,0),'cette saison','kg')}${this._tile(c.debit_kg_h?num(c.debit_kg_h,2):'—','en ce moment','kg/h')}</div>`:nothing}`}
+   ${top?html`<div class="bhead"><span>Les 14 derniers jours</span><span>le plus : ${DAYS[dateOf(top.jour).getDay()]}, ${num(top.valeur!,1)} kg</span></div>
+    ${this._bars(days,x=>num(x,1),`Granulés brûlés par jour : ${this._dayList(days,x=>`${num(x,1)} kg`)}`)}`:nothing}`;
+ }
+ private _stoveMoney(v:View,c:Use|undefined,h:History|undefined){
+  const PER:[string,string][]=[['jour','Aujourd’hui'],['semaine','7 jours'],['saison','Saison']],per=this._tab('periode',PER);
+  const week=h?.stat?h.jours.slice(-7).reduce((a,d)=>a+(d.valeur??0),0):null;
+  const kg=per==='jour'?c?.kg_jour??null:per==='semaine'?week:c?.kg_saison??null,pk=c?.prix_kg??null,pe=v.prix_kwh??null;
+  const seg=html`<div class="tabs" role="group" aria-label="Période">${PER.map(([id,l])=>html`<button class="tab" aria-pressed=${id===per?'true':'false'}
+   @click=${()=>{this._tabs={...this._tabs,periode:id};}}>${l}</button>`)}</div>`;
+  if(pk==null||pe==null)return html`${seg}<p class="note left">${pk==null?'Le prix des granulés manque : donnez le prix et le poids d’un sac dans les réglages. ':''}${
+   pe==null?'Le prix du kWh manque, pour comparer à l’électricité.':''}</p>${this._toSettings()}`;
+  if(kg==null)return html`${seg}<p class="note">Pas encore de compte pour cette période.</p>`;
+  const stove=kg*pk,elec=kg*KWH_PER_KG*pe,top=Math.max(stove,elec)||1,saved=elec-stove;
+  return html`${seg}<div class="versus">
+    <span>Le poêle</span><span class="vb"><i class="pellet" style=${`width:${stove/top*100}%`}></i></span><b>${eur(stove)}</b>
+    <span>À l’électricité</span><span class="vb"><i class="elec" style=${`width:${elec/top*100}%`}></i></span><b>${eur(elec)}</b></div>
+   <div class="saved"><b class=${saved>=0?'good':'bad'}>${eur(Math.abs(saved))} ${saved>=0?'gagnés':'de plus'}</b>
+    <span>${per==='jour'?'aujourd’hui, pour la même chaleur':per==='semaine'?'sur les 7 derniers jours':'depuis le début de la saison'}</span></div>
+   <p class="note left">${num(kg,kg>=100?0:1)} kg de granulés à ${num(pk,3)} € le kg, face à la même chaleur à l’électricité, à ${num(pe,4)} € le kWh.</p>`;
+ }
+ private _upkeep(s:Stove){
+  const pot=s.conso?.brasier,C=2*Math.PI*26,part=pot?.kg!=null&&pot.seuil_kg?Math.min(1,pot.kg/pot.seuil_kg):0;
+  const tone=pot?.a_nettoyer?'alert':pot?.bientot?'act':'stove',kg=pot?.kg!=null?num(pot.kg,1):'—';
+  return html`${pot?html`<div class="pot"><div class="pring"><svg viewBox="0 0 64 64" role="img" aria-label=${`Brasier : ${kg} kg brûlés sur ${num(pot.seuil_kg,0)}`}>
+     <circle class="bg" cx="32" cy="32" r="26"></circle><circle class=${'fg '+tone} cx="32" cy="32" r="26" style=${`stroke-dasharray:${(C*part).toFixed(1)} ${C.toFixed(1)}`}></circle></svg>
+     <span>${kg}</span></div><div class="pt"><b>Brasier</b><span>${pot.texte}</span></div></div>`:nothing}
+   <div class="rows">
+    <div class="row"><b>Alarme</b><span>${s.alarme?`${s.alarme_texte??'Le poêle signale une alarme'}.`:'Aucune en ce moment.'}</span></div>
+    ${s.ecritures!=null?html`<div class="row"><b>Ordres du jour</b><span>${s.ecritures}${s.ecritures_max?` sur ${s.ecritures_max}`:''} : le poêle n’accepte qu’un nombre limité d’ordres par jour.</span></div>`:nothing}
+    ${s.prise_w!=null?html`<div class="row"><b>Prise</b><span>${watts(s.prise_w)} en ce moment.</span></div>`:nothing}
+   </div>`;
  }
 
- /* 3 · Une pièce, longue ou courte */
+ /* 3 · Une pièce, longue (son horloge) ou courte (une ligne) */
  private _room(v:View){
   const r=this._roomOf(v);
   if(!r)return html`<div class="head"><h2 class="nw-title">${this._config.name||'Pièce'}</h2></div><p class="empty">Aucun thermostat trouvé.</p>`;
@@ -208,23 +435,96 @@ class HestiaHeatingCard extends LitElement {
   if(this._config.court)return html`<div class="short" role=${tap?'button':nothing} tabindex=${tap?0:nothing} aria-label=${tap?what:nothing}
     @keydown=${tap?(e:KeyboardEvent)=>this._key(e,r):nothing}>
     <div class="temp">${r.temperature!=null?num(r.temperature):'—'}<sup>°C</sup></div><div><b>${name}</b><span class="nw-say">${r.raison??(r.consigne!=null?`Consigne ${deg(r.consigne)}`:'')}</span></div>${this._chip(r.badge)}</div>`;
-  // The thermostat's demand only when it asks for heat: at 0 % the band said nothing more than the sentence under it.
-  const d=this._day,slope=r.pente!=null&&Math.abs(r.pente)>=.05?`${r.pente>0?'↗':'↘'} ${r.pente>0?'+':''}${num(r.pente)} °C par heure`:null;
-  return html`<div class="head"><h2 class="nw-title">${name}</h2>${this._chip(r.badge)}${this._info('pieces/'+r.id,'Ouvrir la page de la pièce')}</div>
-   <div class="reading"><div role=${tap?'button':nothing} tabindex=${tap?0:nothing} aria-label=${tap?what:nothing} @keydown=${tap?(e:KeyboardEvent)=>this._key(e,r):nothing}><div class="temp">${r.temperature!=null?num(r.temperature):'—'}<sup>°C</sup></div>${slope?html`<div class="slope">${slope}</div>`:nothing}</div>
-    ${r.consigne!=null?html`<div class="target"><span class="nw-label">Consigne</span><b>${deg(r.consigne)}</b><span class="nw-say">${r.planning??''}${r.prochain?` jusqu’à ${when(r.prochain.a)}`:''}</span></div>`:nothing}</div>
-   ${r.demande_pct&&!r.poele?html`<div class="nw-panel"><div class="flame-row"><span class="nw-label">Demande du thermostat</span><b>${r.demande_pct} %</b></div>
-    <div class="bar"><i style=${`width:${r.demande_pct}%`}></i></div><div class="nw-say">${r.raison??''}</div></div>`:r.raison?html`<div class="nw-say">${r.raison}</div>`:nothing}
-   ${d&&d.series.temperature?.length?this._roomDay(r,d):nothing}
-   ${this._modes(r)}`;
+  const {series,start,length}=this._window(),lane=v.planning.lignes.find(l=>l.id===r.id),tones=[...new Set((lane?.segments??[]).map(x=>x.ton))];
+  // The thermostat's demand as ticks, only when it heated: a stove's room shows its flame on the stove's card.
+  const demand=!r.poele&&(series.demande??[]).some(p=>(p[1]??0)>0);
+  const sets=(series.consigne??[]).map(p=>p[1]).filter((x):x is number=>x!=null);
+  const refs=sets.length?[Math.min(...sets),Math.max(...sets)]:r.consigne!=null?[r.consigne]:[];
+  const next=this._soon(r.prochain),stove=r.type==='poele'?v.poele:null;
+  const art=stove?stoveArt(stove.en_feu?stove.flamme??0:0,stove.flamme_max||5,stove.en_feu):heaterArt(r.type,r.etat);
+  const sub=next?this._next(next,v):r.consigne!=null?`consigne ${num(r.consigne)}°`:'';
+  const clock=dial({segments:lane?.segments??[],start,length,now:v.planning.maintenant_min,temp:series.temperature??[],refs,
+   ticks:demand?(series.demande??[]).map(([m,x]):Pt=>[m,x==null?null:x/100]):[],tickCls:'demand',tickMin:.12,tickLen:9,
+   marks:next?[{at:isoMinute(next.a),cls:'next'}]:[],
+   label:`Horloge du jour : ${r.nom} à ${deg(r.temperature)}${r.consigne!=null?`, consigne ${deg(r.consigne)}`:''}${next?`, ${this._next(next,v)}`:''}.`},
+   center(art,r.temperature!=null?`${num(r.temperature)}°`:'—',sub));
+  return html`<div class="top">
+   ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}${this._modePill(r)}`,'pieces/'+r.id,`Réglages de ${r.nom}`)}
+   <div class="tapzone" role=${tap?'button':nothing} tabindex=${tap?0:nothing} aria-label=${tap?what:nothing}
+    @keydown=${tap?(e:KeyboardEvent)=>this._key(e,r):nothing}>${clock}</div>
+   <div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
+    ${(series.temperature??[]).length?html`<span><i class="sw line"></i>température</span>`:nothing}
+    ${demand?html`<span><i class="sw tick demand"></i>% de chauffe</span>`:nothing}${next?html`<span><i class="sw ring next"></i>prochain changement</span>`:nothing}</div>
+   ${r.raison?html`<p class="say">${r.raison}</p>`:nothing}
+   ${this._modes(r)}
+  </div>
+  ${this._roomDrawer(v,r)}`;
  }
- /** The room's day: its temperature (and its area), its set point in steps, and low in the chart when its thermostat
-     heated (its demand, 0 to 100 %). */
- private _roomDay(r:Room,d:Day){
-  const demand=(d.series.demande??[]).some(p=>(p[1]??0)>0)&&!r.poele;
-  return html`${chart([...(demand?[{pts:d.series.demande,cls:'demand',step:true,fill:true,lo:0,hi:100,band:18}]:[]),
-    {pts:d.series.temperature,cls:'temp',fill:true},{pts:d.series.consigne??[],cls:'target',step:true}],d.maintenant_min,`Température et consigne de ${r.nom} aujourd’hui`)}
-   <div class="nw-legend"><span><i class="sw temp"></i>température</span><span><i class="sw target"></i>consigne</span>${demand?html`<span><i class="sw demand"></i>chauffe</span>`:nothing}</div>`;
+ /* Whether the room heats now, and how much (its thermostat's demand); else what keeps it from heating. */
+ private _heatPill(r:Room){
+  if(r.badge.ton==='alert'||r.badge.ton==='act'||r.etat==='arret'||r.etat==='inconnu')
+   return html`<span class=${'pill '+r.badge.ton} role="status">${r.badge.texte}</span>`;
+  if(r.etat==='chauffe'&&r.poele)return html`<span class="pill stove" role="status"><span class="beat">${WAVES}</span>${r.badge.texte}</span>`;
+  if(r.etat==='chauffe'||r.etat==='rafraichit'){
+   const cool=r.etat==='rafraichit',pct=r.demande_pct,word=cool?'Rafraîchit':'Chauffe';
+   return html`<span class=${'pill '+(cool?'cold':'heat')} role="status" aria-label=${pct!=null?`${word}, demande ${pct} %`:word}>
+    <span class="beat">${WAVES}</span>${word}${pct!=null?html` ${pct} %<span class="gauge"><i style=${`width:${Math.min(100,pct)}%`}></i></span>`:nothing}</span>`;
+  }
+  return html`<span class="pill off" role="status">${WAVES}Ne chauffe pas</span>`;
+ }
+ private _modePill(r:Room){
+  const preset=r.preset&&r.preset!=='none'?r.preset:null,word=preset?MODE_WORD[preset]??preset:r.planning;
+  if(!word)return nothing;
+  return html`<span class=${'pill '+(preset?MODE_TONE[preset]??'heat':'calm')}><i class="dot"></i>${word.toLowerCase()}${r.planning?' · planning':''}</span>`;
+ }
+ private _roomDrawer(v:View,r:Room){
+  const h=this._hist?.unite==='kWh'?this._hist:undefined,price=v.prix_kwh??null,today=h?.stat?h.jours.at(-1)?.valeur??null:null,heat=this._heatToday(r);
+  const say=[today!=null&&price!=null?`${eur(today*price)} aujourd’hui`:null,today!=null?`${num(today)} kWh`:heat?`${heat.time} de chauffe`:null,
+   r.humidite!=null?`humidité ${num(r.humidite,0)} %`:null].filter(Boolean).join(' · ');
+  const TABS:[string,string][]=[['argent','Argent'],['conso','Conso'],['confort','Confort']];
+  return this._drawer('piece','Argent · Conso · Confort',say,false,()=>{
+   const tab=this._tab('piece',TABS);
+   return html`${this._tabbar('piece',TABS,'Détails de la pièce')}<div role="tabpanel" class="panel">${
+    tab==='argent'?this._roomMoney(h,price):tab==='conso'?this._roomUse(h,heat):this._roomComfort(v,r)}</div>`;
+  });
+ }
+ /** The heating since midnight, from the thermostat's demand: 50 % for an hour count half an hour. */
+ private _heatToday(r:Room){
+  const d=this._day;
+  if(!d||r.poele||!d.series.demande?.length||d.fenetre_min==null)return null;
+  const end=d.fenetre_min,from=Math.max(0,end-d.maintenant_min);
+  let mins=0;for(const [,x] of sample(d.series.demande,from,end-5))mins+=(x??0)/100*5;
+  const m=Math.round(mins);
+  return {time:m>=60?`${Math.floor(m/60)} h ${String(m%60).padStart(2,'0')}`:`${m} min`,duty:Math.round(mins/Math.max(5,d.maintenant_min)*100)};
+ }
+ private _roomMoney(h:History|undefined,price:number|null){
+  if(!h)return html`<p class="note">Les derniers jours ne sont pas encore lus.</p>`;
+  if(!h.stat)return html`<p class="note left">Le thermostat ne donne pas de compteur d’énergie : Hestia ne peut pas compter les kWh de cette pièce.</p>`;
+  if(price==null)return html`<p class="note left">Donnez le prix du kWh dans les réglages pour voir ce que coûte la pièce.</p>${this._toSettings()}`;
+  const week=h.jours.slice(-7),today=week.at(-1)?.valeur;
+  return html`<div class="tiles">${this._tile(today!=null?eur(today*price):'—','aujourd’hui')}
+    ${this._tile(eur(week.reduce((a,d)=>a+(d.valeur??0),0)*price),'7 derniers jours')}
+    ${this._tile(h.mois!=null?eur(h.mois*price):'—',MONTHS[dateOf(h.aujourdhui).getMonth()])}</div>
+   ${this._bars(week,x=>num(x*price,2),`Coût par jour : ${this._dayList(week,x=>eur(x*price))}`)}
+   <p class="note left">Prix : ${num(price,4)} € le kWh, abonnement à part.</p>`;
+ }
+ private _roomUse(h:History|undefined,heat:{time:string;duty:number}|null){
+  const week=h?.stat?h.jours.slice(-7):[],today=week.at(-1)?.valeur??null;
+  return html`<div class="tiles">${this._tile(today!=null?num(today):'—','aujourd’hui','kWh')}${this._tile(heat?heat.time:'—','de chauffe')}
+    ${this._tile(heat?`${heat.duty} %`:'—','du temps')}</div>
+   ${week.some(d=>d.valeur!=null)?this._bars(week,x=>num(x),`kWh par jour : ${this._dayList(week,x=>`${num(x)} kWh`)}`):nothing}
+   <p class="note left">${heat?'Le temps de chauffe suit la demande du thermostat : 50 % pendant une heure comptent une demi-heure. ':''}${
+    h?.stat?'Les kWh viennent du compteur d’énergie du thermostat.':h?'Le thermostat ne donne pas de compteur d’énergie.':''}</p>`;
+ }
+ private _roomComfort(v:View,r:Room){
+  const rows:[string,string][]=[];
+  if(r.humidite!=null)rows.push(['Humidité',`${num(r.humidite,0)} %, ${r.humidite<40?'un peu sec':r.humidite>60?'humide : aérez quelques minutes':'bien'}.`]);
+  if(r.fenetre)rows.push(['Fenêtre',`Ouverte${r.fenetre_depuis?` depuis ${hm(new Date(r.fenetre_depuis))}`:''}.`]);
+  if(r.pente!=null&&Math.abs(r.pente)>=.05)rows.push(['En ce moment',`La pièce ${r.pente>0?'gagne':'perd'} ${num(Math.abs(r.pente))} °C par heure.`]);
+  if(r.consigne!=null)rows.push(['Consigne',`${deg(r.consigne)}${r.planning?`, ${r.planning} au planning`:''}${r.prochain?`, puis ${this._next(r.prochain,v)}`:''}.`]);
+  if(r.puissance_w)rows.push(['Puissance',`${watts(r.puissance_w)} en ce moment.`]);
+  return rows.length?html`<div class="rows">${rows.map(([k,t])=>html`<div class="row"><b>${k}</b><span>${t}</span></div>`)}</div>`:
+   html`<p class="note">Rien d’autre à dire sur la pièce pour l’instant.</p>`;
  }
 
  /* 4 · Le planning */

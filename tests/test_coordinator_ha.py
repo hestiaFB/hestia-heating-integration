@@ -357,6 +357,62 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         self.assertNotIn("scheduler", view["planning"])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
+    async def test_the_card_s_auto_switch(self):
+        """0.8: « Gestion auto » off, the pilot only looks and remembers its mode; on again, it takes it back (else the
+        flame only, the gentlest mode that acts)."""
+        entry, c = await self._setup()
+        self.assertEqual(c.settings["pilote"], "ombre")
+        self.assertEqual(await c.async_auto(True), "flamme")
+        self.assertEqual(c.settings["pilote"], "flamme")
+        self.assertEqual(await c.async_auto(True), "flamme", "already on: nothing changes")
+        self.assertEqual(await c.async_auto(False), "ombre")
+        self.assertEqual((c.settings["pilote"], c.settings["pilote_auto"]), ("ombre", "flamme"))
+        await c.async_set_settings({"pilote": "eteint"})
+        self.assertEqual(await c.async_auto(False), "eteint", "a pilot switched off in Réglages stays off")
+        self.assertEqual(await c.async_auto(True), "flamme")
+        await self.hass.async_block_till_done()
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_clock_s_day_and_the_drawers_history(self):
+        """0.8: the clock asks for the last 24 hours (not since midnight), the drawers for the days' totals of the stove's
+        own pellet count and of a room's energy counter."""
+        from custom_components.hestia_heating import reader
+        entry, c = await self._setup()
+        with patch.object(reader, "day_history", return_value={}):
+            day = await c.async_day("poele", 24)
+            since_midnight = await c.async_day("poele")
+        start = dt_util.parse_datetime(day["debut"])
+        self.assertAlmostEqual((dt_util.now() - start).total_seconds(), 24 * 3600, delta=60)
+        self.assertEqual((day["debut_min"], day["fenetre_min"]), (start.hour * 60 + start.minute, 1440))
+        self.assertNotIn("fenetre_min", since_midnight, "the tab's day is still since midnight")
+        asked = []
+
+        async def totals(hass, stat, unit, first, now):
+            asked.append((stat, unit))
+            return {now.date().isoformat(): 4.7, (now - timedelta(days=1)).date().isoformat(): 5.2}
+        with patch.object(reader, "daily_totals", side_effect=totals):
+            stove = await c.async_history("poele")
+            room = await c.async_history("piece/bureau")
+            again = await c.async_history("poele")
+        self.assertEqual(asked, [("sensor.hestia_heating_poele_granules_brules", "kg"), ("sensor.vt_bureau_energy", "kWh")],
+                         "the stove's own count, the bureau's own counter; the second ask comes from the cache")
+        self.assertIs(again, stove)
+        self.assertEqual(len(stove["jours"]), 14)
+        self.assertEqual(stove["jours"][-1], {"jour": dt_util.now().date().isoformat(), "valeur": 4.7})
+        self.assertEqual(room["unite"], "kWh")
+        self.assertEqual(self.calls, [], "reading sends nothing")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_price_of_a_kwh_is_a_setting(self):
+        entry, c = await self._setup()
+        self.assertIsNone(card_view(c.data)["prix_kwh"])
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"prix_kwh": 5})
+        await c.async_set_settings({"prix_kwh": 0.2516})
+        await self.hass.async_block_till_done()
+        self.assertEqual(card_view(c.data)["prix_kwh"], 0.2516)
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
     async def test_the_daily_orders_come_from_the_stove_integrations_options(self):
         """The stove integration lets so many orders through a day, set in its own options: Hestia reads it there."""
         stove_entry = next(e for e in self.hass.config_entries._entries.values() if e.domain == "aguaiot")
@@ -633,6 +689,14 @@ class CopiedHouse(SendsThePlanning, SetsTheFlame, DrivesTheStove, HomeAssistantW
         self.assertEqual(self.sent, [])
         self.assertTrue(c.data["poele"]["pilote"]["commande"]["copie"])
         self.assertTrue(c.found.stove["copie"])
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_card_s_auto_switch_stays_off_on_a_copy(self):
+        """0.8: the stove card's « Gestion auto » never switches the pilot on for a copied stove."""
+        entry, c = await self._setup()
+        self.assertTrue(c.data["poele"]["copie"])
+        self.assertEqual(await c.async_auto(True), "ombre")
+        self.assertEqual(c.settings["pilote"], "ombre")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_a_copied_stove_is_never_driven(self):

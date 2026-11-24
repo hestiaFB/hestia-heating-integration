@@ -28,6 +28,11 @@ def _same(current, wanted) -> bool:
         return str(current).casefold() == str(wanted).casefold()
 
 
+def _fan(role: dict) -> str | None:
+    mode = (role.get("attributes") or {}).get("fan_mode") if role.get("entity_id") else None
+    return None if mode in (None, "unknown", "unavailable", "") else str(mode)
+
+
 def _orders(profile: Profile, roles: dict) -> dict:
     """What the whole pilot (0.7) needs to know of the stove: whether it can be lit and stopped (the profile says how,
     and the entities are there), whether it took the order to light, and its settings to set before a start, each
@@ -48,7 +53,20 @@ def _orders(profile: Profile, roles: dict) -> dict:
         settings.append({"nom": s.get("nom") or s["role"], "role": s["role"], "reserve": s.get("reserve"),
                          "a_changer": known and not _same(current, s.get("valeur"))})
     return {"pilotable": bool(orders) and can, "allume": lit, "reglages": settings,
-            "rechargeable": bool(orders.get("recharger"))}
+            "rechargeable": bool(orders.get("recharger")), "boutons": _buttons(orders, roles)}
+
+
+def _buttons(orders: dict, roles: dict) -> dict:
+    """The card's « Allumer » and « Éteindre » (0.8): the profile's own orders, each a service, its entity and its
+    data. A press is the user's, sent from the browser like the room's mode buttons, never by Hestia; the card greys
+    them out for a stove copied from another house."""
+    out = {}
+    for gesture in ("allumer", "eteindre"):
+        spec = orders.get(gesture) or {}
+        entity = _role(roles, spec.get("role")).get("entity_id")
+        if entity and "." in str(spec.get("service") or ""):
+            out[gesture] = {"service": spec["service"], "entity_id": entity, "donnees": dict(spec.get("donnees") or {})}
+    return out
 
 
 def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = None, plug: dict | None = None,
@@ -112,6 +130,8 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "prise_w": plug_w,
         "prise_tourne": None if plug_w is None else plug_w >= PLUG_RUNNING_W,
         "entites": {role: r.get("entity_id") for role, r in roles.items() if r.get("entity_id")},
+        # The front fan's mode (« AUTO », « 3 »), for the card's « Ventilation » (0.8).
+        "ventilation": _fan(_role(roles, "ventilation")),
         "granules": pellets,
         **_orders(profile, roles),
     }

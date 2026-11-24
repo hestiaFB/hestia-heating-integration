@@ -70,6 +70,32 @@ class House(unittest.TestCase):
         # 90 kg in 30 days of use: 3 kg a day, 150 kg left.
         self.assertEqual((g["kg_par_jour"], g["jours"], g["stock_sacs"]), (3.0, 50, 10.0))
 
+    def test_the_stove_card_s_buttons(self):
+        # 0.8: « Allumer » and « Éteindre » are the profile's own orders, pressed by the user from the card; the front
+        # fan's mode, the « flamme au plus bas » switch and the plug's switch for its chips.
+        snap = m.snapshot(flamme_basse={"entity_id": "input_boolean.flamme_au_plus_bas", "nom": "Flamme au plus bas",
+                                        "on": False},
+                          prise_switch={"entity_id": "switch.prise_du_poele", "on": True})
+        roles = snap["stove"]["roles"]
+        roles["thermostat"] = {"entity_id": "climate.poele", "state": "heat", "attributes": {}, "last_changed": m.NOW}
+        roles["ventilation"] = {"entity_id": "climate.poele_vent_front", "state": "heat",
+                                "attributes": {"fan_mode": "AUTO"}, "last_changed": m.NOW}
+        s = house.build(snap)["poele"]
+        self.assertEqual(s["boutons"]["eteindre"], {"service": "climate.set_hvac_mode", "entity_id": "climate.poele",
+                                                    "donnees": {"hvac_mode": "off"}})
+        self.assertEqual(s["boutons"]["allumer"]["donnees"], {"hvac_mode": "heat"})
+        self.assertEqual(s["ventilation"], "AUTO")
+        self.assertFalse(s["copie"])
+        self.assertEqual(s["flamme_basse"]["entity_id"], "input_boolean.flamme_au_plus_bas")
+        self.assertEqual(s["prise_switch"], {"entity_id": "switch.prise_du_poele", "on": True})
+        # Without its thermostat, no button; a stove copied from another house says so (the card greys them out).
+        plain = house.build(m.snapshot())["poele"]
+        self.assertEqual((plain["boutons"], plain["ventilation"], plain["flamme_basse"], plain["prise_switch"]),
+                         ({}, None, None, None))
+        copied = m.snapshot()
+        copied["stove"]["copie"] = True
+        self.assertTrue(house.build(copied)["poele"]["copie"])
+
     def test_the_smoothed_temperature_of_a_versatile_thermostat(self):
         from engine import sources
         read = lambda **extra: sources.read(m.vt("climate.vt_x", "X", "sejour", **extra))["temperature_lissee"]

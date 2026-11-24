@@ -11,8 +11,8 @@ export const TAP_CHOICES:[string,string][]=[['thermostat','Ouvrir le thermostat'
 
 export const FORMATS:[string,string,string,string][]=[
  ['maison','mdi:home-thermometer-outline','La maison','qui chauffe, chaque pièce, le froid de la nuit'],
- ['poele','mdi:fireplace','Le poêle','sa flamme, sa journée, ses fumées, le stock'],
- ['piece','mdi:thermometer','Une pièce','sa température, sa consigne, sa journée, ses modes'],
+ ['poele','mdi:fireplace','Le poêle','son horloge du jour, sa flamme, ses boutons, les granulés et l’argent'],
+ ['piece','mdi:thermometer','Une pièce','son horloge du jour, sa chauffe, ses modes, ce qu’elle coûte'],
  ['planning','mdi:calendar-clock','Le planning','la journée de chaque pièce et du poêle'],
 ];
 
