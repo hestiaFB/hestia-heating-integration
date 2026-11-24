@@ -327,10 +327,13 @@ class HestiaHeatingCard extends LitElement {
   const state=s.etat==='alarme'?'alarme':s.en_feu&&level?`flamme ${level} sur ${max}`:STOVE_WORD[s.etat]??s.etat;
   const sub=s.etat==='alarme'?'en alarme':s.en_feu?s.consigne!=null?`consigne ${num(s.consigne)}°`:`flamme ${level}`:
    s.etat==='eteint'?'poêle éteint':STOVE_WORD[s.etat]??'';
-  // The stove's set point only while it burns: once it is off, its thermostat keeps a frost guard (14 °C) that says
-  // nothing of the room.
+  // The stove's set point in whole steps (1.0.0b6): over every hour its thermostat held a set point the stove burnt to
+  // for a quarter of an hour at least today (Boost's 21,5 °C), not only in the bits it burnt; never its frost guard
+  // (14 °C), which says nothing of the room.
   const flames=sample(flame,0,span.length),cons=sample(series.consigne??[],0,span.length);
-  const sets=flames.map(([m,x],i):Pt=>[m,(x??0)>0?cons[i][1]:null]);
+  const burnt=new Map<number,number>();
+  cons.forEach(([,c],i)=>{if(c!=null&&(flames[i][1]??0)>0)burnt.set(c,(burnt.get(c)??0)+1);});
+  const sets=cons.map(([m,c],i):Pt=>[m,c!=null&&((flames[i][1]??0)>0||(burnt.get(c)??0)>=3)?c:null]);
   const kg=d?.energie?.unite==='kg'?d.energie.heures:[],price=s.conso?.prix_kg??null;
   const series_={temp:series.temperature??[],heat:flame.map(([m,x]):Pt=>[m,x==null?null:x/max]),level:flame,sets,energy:kg};
   const hrs=hours(span,segments,series_);
@@ -403,10 +406,21 @@ class HestiaHeatingCard extends LitElement {
      @click=${()=>this._press('power',()=>this._service(order),true)}>${POWER}${ask==='power'?lit?'Vraiment éteindre ?':'Vraiment allumer ?':lit?'Éteindre':'Allumer'}</button>`:nothing}
    <button class=${'btn auto'+(auto?' on':'')} aria-pressed=${auto?'true':'false'} ?disabled=${locked||this._busy==='auto'} title=${why}
      @click=${()=>this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:!auto}))}><span class="switch"><i></i></span>Flamme auto</button>
-   ${pot?html`<button class=${'btn'+(pot.a_nettoyer?' due':'')+(ask==='clean'?' ask':'')} ?disabled=${this._busy==='clean'}
-     @click=${()=>this._press('clean',()=>this._hass!.callWS({type:'hestia_heating/brasier_nettoye'}),true)}>${BRUSH}${ask==='clean'?'Remettre à zéro ?':'J’ai nettoyé'}</button>`:nothing}
+   ${pot?html`<button class=${'btn pot'+(pot.a_nettoyer?' due':pot.bientot?' soon':'')+(ask==='clean'?' ask':'')} ?disabled=${this._busy==='clean'}
+     style=${`--fill:${this._potFill(pot)}%`} aria-label=${`${this._potWord(pot)}. J’ai nettoyé le brasier`} title=${pot.texte}
+     @click=${()=>this._press('clean',()=>this._hass!.callWS({type:'hestia_heating/brasier_nettoye'}),true)}>${BRUSH}<span class="pot-say"><b>${this._potWord(pot)}</b>
+     <small>${ask==='clean'?'Remettre à zéro ?':'J’ai nettoyé'}</small></span></button>`:nothing}
   </div>
   ${locked?html`<p class="note">Poêle recopié d’une autre maison : ses boutons sont grisés, rien ne lui est envoyé.</p>`:this._refused?html`<p class="note bad">${this._refused}</p>`:nothing}`;
+ }
+ /* The fire pot on the card's face (1.0.0b6): how full it is, and the days left at the pace since its cleaning; the
+    button that says it is also « J’ai nettoyé ». */
+ private _potFill(pot:FirePot){return pot.a_nettoyer?100:pot.kg!=null&&pot.seuil_kg?Math.max(0,Math.min(100,Math.round(pot.kg/pot.seuil_kg*100))):0;}
+ private _potWord(pot:FirePot){
+  if(pot.a_nettoyer)return 'Brasier à nettoyer';
+  if(pot.kg==null)return 'Brasier pas encore compté';
+  const days=pot.jours==null?'':pot.jours<1?' · moins d’un jour':pot.jours<1.5?' · encore 1 jour':` · encore ${num(pot.jours,0)} jours`;
+  return `Brasier ${this._potFill(pot)} %${days}`;
  }
  private _fireDrawer(v:View,s:Stove,room:Room|undefined){
   const c=s.conso,rate=s.en_feu&&c?.debit_kg_h?c.debit_kg_h:null,hour=rate&&c?.cout_heure!=null?`${eur(c.cout_heure)} de l’heure`:null;

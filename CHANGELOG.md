@@ -1,10 +1,20 @@
 # Changements
 
+## 1.0.0b6 — L’horloge du poêle montre ses paliers en entier, et la carte son brasier
+
+### Améliorations
+- **Chaque trait de flamme autour de l’horloge montre son palier en entier** : une flamme 3 a toujours la longueur d’une flamme 3, même si le poêle n’a brûlé que vingt minutes dans l’heure. Les flammes 1 et 2 se voient bien. Les minutes de l’heure restent au centre, au survol.
+- **Le brasier se voit sur la carte du poêle**, sans rien ouvrir : le bouton « J’ai nettoyé » dit où il en est (« Brasier 10 % · encore 9 jours », « Brasier à nettoyer ») et se remplit comme lui, vert, puis orange quand le nettoyage approche, rouge quand il est dû. L’appui fait toujours « J’ai nettoyé », avec sa confirmation.
+- **La consigne du poêle se lit en marches nettes** sur toutes les heures où son thermostat la demandait (le Boost), et plus seulement par bouts pendant que le poêle brûlait. Le trait est plus épais et passe par-dessus la courbe. Le Hors gel n’est toujours pas dessiné.
+
+### Corrections
+- **La ventilation « par Hestia » suit la flamme réglée**, plus la flamme que le poêle affiche : celle-ci baisse un instant quand le poêle module, et chaque baisse coûtait un ordre de ventilation de trop.
+
 ## 1.0.0b5 — Le poêle allumé à la main reste allumé
 
 ### Corrections
 - **Un poêle allumé à la main n’est plus éteint par Hestia** quand « Par Hestia » allume et éteint le poêle. Son thermostat était resté en Hors gel : Hestia arrêtait le poêle aussitôt. Maintenant, Hestia met le thermostat du poêle en Boost et conduit le poêle comme d’habitude : la flamme, puis l’arrêt quand la maison est assez chaude ou quand le thermostat repasse en Hors gel. Cela vaut pour un allumage sur le poêle, depuis son application ou par « Allumer » sur la carte.
-- **Hors gel arrête le poêle au moment où le thermostat y passe**, comme votre automatisation « Arrêt », et non plus tant qu’il y reste.
+- **Hors gel arrête le poêle au moment où le thermostat y passe**, comme une automatisation d’arrêt du poêle, et non plus tant qu’il y reste.
 
 ### Améliorations
 - **« Éteindre » sur la carte du poêle, avec « Par Hestia »**, passe le thermostat du poêle en Hors gel : Hestia arrête le poêle et vérifie l’arrêt, et le thermostat dit la même chose que le poêle.

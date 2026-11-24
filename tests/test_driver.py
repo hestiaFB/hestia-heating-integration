@@ -466,6 +466,15 @@ class Fan(unittest.TestCase):
         few = stove("chauffe", 3, ventilation="1", ecritures=19, **HOT, **self.LEVELS)   # 6 left
         self.assertEqual(self.fans(p.look(few, boost, timedelta(minutes=20))), [])
 
+    def test_the_flame_set_counts_not_a_dip_of_the_real_one(self):
+        # 1.0.0b6: on 24 November the real flame showed 1 a moment while 2 was set, and the fan went to 2, then back to
+        # 3 ten minutes later: two orders for nothing.
+        p = Pilot(ventilation="flamme")
+        boost = thermostat("boost")
+        p.look(stove(**self.LEVELS), thermostat("eco"))
+        dip = {**stove("chauffe", 2, ventilation="3", **HOT, **self.LEVELS), "flamme": 1}
+        self.assertEqual(self.fans(p.look(dip, boost, timedelta(minutes=30))), [])
+
     def test_auto_or_a_fan_without_levels_is_left_alone(self):
         for ctx, more in (({}, self.LEVELS), ({"ventilation": "flamme"}, {})):
             p = Pilot(**ctx)
