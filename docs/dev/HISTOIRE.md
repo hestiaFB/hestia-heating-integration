@@ -44,8 +44,9 @@ La v0.1 ne commandait rien. Les versions, et la suite proposée :
 6. **Avant d’essayer « Flamme » à la maison** — fait le 22 novembre : la température lissée, le plafond d’ordres lu dans l’extension, jamais « 1 sur 5 » poêle éteint, l’exception de la saison douce, et pas de faux écart après un redémarrage.
 7. **0.6** — les granulés : débit, kilos, nettoyage du brasier (compteur, seuil, calage sur les sacs, « J’ai nettoyé »), énergie et prix ; l’énergie du poêle donnée à Hestia Énergie sur les kilos. Rien n’est envoyé au poêle pour ça.
 8. **0.7** — le pilote entier, profil Micronova, en option (Réglages, « Entier ») : le démarrage et ses cas, le contrôle d’allumage, l’arrêt vérifié et son escalade, les sécurités, la reprise après un redémarrage, les questions et les notifications. Il faut d’abord couper toutes les automatisations du poêle de la maison : deux pilotes en même temps se contrediraient. Revenir « À l’ombre » est le retour arrière en un clic. Jamais au labo : rien n’est envoyé à un poêle ou à un thermostat recopié, ni ordre ni notification.
-9. Ensuite : les boutons Allumer et Éteindre de la page Poêle.
-10. Les autres profils (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un, avec des testeurs.
+9. **1.0** — la version de production (1.0.0b1, b2), puis le panneau technique (1.0.0b3) : le poêle réglé comme sur son application, « Entier » de retour sous « Par Hestia », les chiffres réglables.
+10. Ensuite : les boutons Allumer et Éteindre de la page Poêle.
+11. Les autres profils (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un, avec des testeurs.
 
 ## Le dépôt, les tests, le labo
 
@@ -60,6 +61,15 @@ La v0.1 ne commandait rien. Les versions, et la suite proposée :
 **Au labo** : la v0.1 ne commande rien, donc elle peut tourner au labo sans risque pour un vrai poêle. Il faut ajouter `chauffage` à `hestia-labo/deployer.sh`, puis mesurer le panneau avec `mesurer-hub.py`. Un seul déploiement à la fois.
 
 ## Décisions prises
+
+Le 24 novembre 2026 :
+
+- 1.0.0b1 et 1.0.0b2 : la version de production (sans mots d’essai), la phrase du poêle, le simulateur du mode Entier, la ventilation au choix, les cartes compactes.
+- Frank veut un panneau technique et simple, pensé pour tous les foyers. La maquette « panneau technique » est validée le soir : une Vue d’ensemble (est-ce que tout marche, ce que Hestia fait, ce qu’elle a changé aujourd’hui), la page technique du poêle, le Planning gardé tel quel, Réglages en onglets (La maison, Thermostats, Poêle à granulés et son « Avancé »), un guide en cinq étapes. Les pages des pièces quittent le panneau : leurs températures sont sur les cartes.
+- Le poêle se règle comme sur son application : la flamme Automatique ou Manuel, la ventilation par le poêle, par Hestia ou à la main, l’ÉCO Stop expliqué (activé, le poêle s’éteint seul une fois sa propre température atteinte). Ces boutons vont tout de suite au poêle : c’est l’utilisateur qui appuie.
+- « Entier » revient dans Réglages, sous les mots « Qui allume et éteint le poêle : Par Hestia », avec la flamme qui peut rester à la main.
+- Tous les chiffres du pilote deviennent réglables (Avancé), avec leurs valeurs par défaut d’avant.
+- Codé en 1.0.0b3.
 
 Le 22 novembre 2026 :
 

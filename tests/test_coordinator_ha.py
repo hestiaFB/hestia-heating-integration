@@ -440,6 +440,35 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         self.assertEqual(card_view(c.data)["prix_kwh"], 0.2516)
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
+    async def test_the_technical_panel_s_settings(self):
+        """1.0.0b3: the stove's figures (Avancé), the flame left to the user, the ÉCO Stop wanted, what a thermostat
+        drives and what heats the house; each checked, and the figures read by the engine once saved."""
+        from custom_components.hestia_heating.engine import tuning
+        entry, c = await self._setup()
+        try:
+            for wrong in ({"avance": {"garde": 1}}, {"avance": {"palier_3": 80}}, {"flamme_manuelle": "oui"},
+                          {"poele_eco_stop": 1}, {"types": {"climate.vt_bureau": "volcan"}},
+                          {"types": {"sensor.x": "clim"}}, {"equipements": ["cheminee"]}):
+                with self.assertRaises(ValueError, msg=wrong):
+                    await c.async_set_settings(wrong)
+            self.assertEqual(tuning.get("garde"), 4)
+            await c.async_set_settings({"avance": {"garde": 5, "consigne_poele": 22}, "poele_eco_stop": False,
+                                        "flamme_manuelle": True, "types": {"climate.vt_bureau": "plancher"},
+                                        "equipements": ["radiateur", "poele"]})
+            await self.hass.async_block_till_done()
+            self.assertEqual((tuning.get("garde"), tuning.get("consigne_poele")), (5, 22))
+            self.assertEqual(tuning.stove_setting({"role": "eco_stop"})["service"], "switch.turn_off")
+            self.assertEqual(next(s for s in c.data["sources"] if s["id"] == "climate.vt_bureau")["type"], "plancher")
+            self.assertEqual(c.settings["equipements"], ["radiateur", "poele"])
+            self.assertEqual(c.data["changements"], {"modes": 0, "flamme": 0, "allumer": 0, "eteindre": 0,
+                                                     "ventilation": 0, "autres": 0, "total": 0})
+            self.assertTrue(c.data["poele"]["lues"])
+            await c.async_set_settings({"avance": {}, "types": None})
+            self.assertEqual(tuning.get("garde"), 4)
+        finally:
+            tuning.set_values(None)
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
     async def test_the_daily_orders_come_from_the_stove_integrations_options(self):
         """The stove integration lets so many orders through a day, set in its own options: Hestia reads it there."""
         stove_entry = next(e for e in self.hass.config_entries._entries.values() if e.domain == "aguaiot")

@@ -4,17 +4,17 @@
 
 Elle ne remplace pas votre thermostat : elle s’appuie sur les intégrations que vous avez déjà.
 
-> **Elle ne commande que ce que vous lui confiez.** Un planning Hestia commence « En pause » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Même actif, il ne règle que les thermostats que vous avez cochés dans Réglages, « Ce que Hestia peut régler » : aucun au départ. Le pilote du poêle est sur « Conseil » au départ : il dit ce qu’il ferait. En option, il peut régler la flamme, et seulement elle. Son simulateur rejoue à blanc la conduite entière du poêle (démarrer, arrêter, tenir les sécurités), sans rien envoyer, à côté de ce que font vos automatisations. Hestia compte aussi les granulés brûlés et dit quand nettoyer le brasier, sans rien envoyer au poêle. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
+> **Elle ne commande que ce que vous lui confiez.** Un planning Hestia commence « En pause » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Même actif, il ne règle que les thermostats pour lesquels vous avez coché « Le planning change son mode » dans Réglages : aucun au départ. Le pilote du poêle est sur « Conseil » au départ : il dit ce qu’il ferait. En option, il règle la flamme (Automatique), la ventilation, ou allume et éteint le poêle (« par Hestia ») ; son essai à blanc rejoue d’abord la conduite entière du poêle, sans rien envoyer, à côté de ce que font vos automatisations. Hestia compte aussi les granulés brûlés et dit quand nettoyer le brasier, sans rien envoyer au poêle. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
 
 ## Ce qu’elle montre
 
 Un onglet **Chauffage** dans le panneau Hestia-FB :
 
-- **Accueil** : la maison en une phrase (« Le poêle chauffe, flamme 3. Un radiateur en appoint. »), le froid de la nuit, puis chaque pièce avec sa température, sa consigne, ce qu’elle fait et pourquoi.
-- **Poêle** : son état traduit dans vos mots, la flamme demandée et la flamme réelle, sa journée, les fumées, l’alarme, la prise mesurée, les granulés qu’il reste. Les granulés qu’il brûle (maintenant, aujourd’hui, cette saison, en kilos, en chaleur et en euros), calés sur les sacs déclarés dans Suivi Stock Pellet, et le brasier : les kilos depuis le dernier nettoyage, avec un bouton « J’ai nettoyé ». Et son pilote, sur « Conseil » au départ : ce que Hestia ferait (démarrer, quelle flamme, arrêter), à côté de ce que font vos automatisations. En option, Hestia règle la flamme elle-même.
-- **Une pièce** : son thermostat, sa journée (température et consigne), ce qui vient ensuite.
+- **Vue d’ensemble** : si tout marche (les thermostats qui répondent, les mesures reçues), vos appareils avec leur dernière nouvelle, ce que Hestia fait pour vous et ce qu’elle a changé aujourd’hui. La température de chaque pièce est sur les cartes.
+- **Le poêle, côté technique** : chaque entité lue, sa valeur et son âge, ce que Hestia y a changé, le journal du jour, l’essai à blanc, le brasier avec « J’ai nettoyé ».
 - **Planning** : la liste de vos plannings. Un planning, c’est une semaine en couleurs (tous les jours pareils, semaine et week-end, ou jour par jour) et les thermostats qu’il règle, « En pause » ou « Actif ». Les plannings de Scheduler sont lus, et se reprennent dans Hestia en un clic.
-- **Réglages** et **Extensions** : ce que la brique a trouvé, le thermostat et la prise du poêle, les thermostats à ne pas lire.
+- **Réglages**, en onglets : La maison, Thermostats, Poêle à granulés (la flamme et la ventilation en Automatique ou en Manuel, l’ÉCO Stop, qui allume et éteint le poêle, les granulés) et son écran Avancé, où se trouvent tous les chiffres du pilote. Un **guide** en cinq étapes les passe en revue.
+- **Extensions** : les intégrations que la brique lit.
 
 Et une **carte** pour vos tableaux de bord, sous quatre formes :
 
@@ -31,7 +31,7 @@ La carte d’une pièce et celle du poêle sont une **horloge de 24 heures** : l
 
 Sous le nom du poêle, une phrase dit ce qu’il fait, dans la couleur de son état (« Consigne atteinte, le poêle entretient », « 21,5 °C vers 18 h 30 », « Brasier à nettoyer »…) ; la page Poêle commence par elle. Le poêle et une pièce ont aussi une version compacte, environ deux fois moins haute.
 
-La carte d’une pièce a les modes de son thermostat (Hors gel, Éco, Confort, Boost) : c’est vous qui choisissez, la carte les envoie depuis votre navigateur, comme la carte thermostat de Home Assistant. La carte du poêle a trois boutons, Éteindre (ou Allumer), Gestion auto et J’ai nettoyé, envoyés de la même façon ; ils sont grisés sur un poêle recopié d’une autre maison.
+La carte d’une pièce a les modes de son thermostat (Hors gel, Éco, Confort, Boost) : c’est vous qui choisissez, la carte les envoie depuis votre navigateur, comme la carte thermostat de Home Assistant. La carte du poêle a trois boutons, Éteindre (ou Allumer), Flamme auto et J’ai nettoyé, et, dans « Le feu et les réglages », la flamme, la ventilation et l’ÉCO Stop, envoyés de la même façon ; ils sont grisés sur un poêle recopié d’une autre maison.
 
 Elle publie aussi quelques entités (l’état de la maison, de chaque pièce et du poêle, la flamme, l’alarme, les jours de granulés, les kilos brûlés, l’énergie du poêle à déclarer dans la page Énergie, le brasier à nettoyer) pour vos automatisations. Le détail est dans [docs/technique.md](docs/technique.md).
 
@@ -62,8 +62,7 @@ Hestia Chauffage rejoint [Hestia Weather](https://github.com/hestiaFB/hestia-wea
 ## Ce qui viendra ensuite
 
 - **D’autres conseils** : quand le poêle chauffe moins cher que l’électrique.
-- **Les boutons Allumer et Éteindre** de la page Poêle.
-- **Le poêle conduit en entier** (démarrer, arrêter, tenir les sécurités, à la place de vos automatisations) : il sera proposé une fois essayé dans une vraie maison. Son simulateur, dans Réglages, permet déjà de voir ce qu’il ferait chez vous.
+- **Les boutons Allumer et Éteindre** de la page technique du poêle.
 - **D’autres poêles** : un profil par intégration, après Micronova Agua IOT.
 
 ## Licence

@@ -22,7 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from . import reader
 from .const import API_KEY, DOMAIN, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
-from .engine import driver, granules, home_planning, house, phrases, pilot, profiles
+from .engine import driver, granules, home_planning, house, phrases, pilot, profiles, sources, tuning
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +44,13 @@ DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_pr
             "brasier_kg": None, "granules_prix_sac": None, "granules_poids_sac": None,
             "pilote_notifier": None, "poele_prise_switch": None, "couper_prise": True,
             "prix_kwh": None, "pilote_auto": None, "trop_chaud_ecart": None, "pilote_ventilation": "auto",
-            "pilote_simulateur": False}
+            "pilote_simulateur": False,
+            # 1.0.0b3, the panel made technical: « La flamme : Manuel » while Hestia lights and stops the stove; the
+            # stove's figures (Réglages › Avancé, engine/tuning.py); what each thermostat drives when the guess is
+            # wrong; the ÉCO Stop wanted; what heats the house (the guide's first step).
+            "flamme_manuelle": False, "avance": {}, "types": {}, "poele_eco_stop": True, "equipements": None}
+# What heats a house, as the guide asks it (1.0.0b3).
+EQUIPMENT = ("radiateur", "poele", "clim", "plancher")
 # What the pellets settings may be (Réglages): the fire pot's threshold, a bag's price and weight.
 PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granules_poids_sac": (5, 30),
                  "prix_kwh": (0.01, 2), "trop_chaud_ecart": pilot.OVER_LIMITS}
@@ -146,6 +152,12 @@ class HeatingCoordinator:
     async def async_prepare(self) -> None:
         stored = await self.store.async_load() or {}
         self.settings = {**DEFAULTS, **{k: v for k, v in stored.items() if k in DEFAULTS}}
+        try:
+            tuning.set_values(tuning.clean(self.settings.get("avance")), self.settings.get("poele_eco_stop"))
+        except ValueError:
+            # Figures that no longer fit their bounds (a newer version narrowed them): the defaults, said once.
+            _LOGGER.warning("Hestia Chauffage : réglages avancés hors limites, valeurs par défaut")
+            tuning.set_values({}, self.settings.get("poele_eco_stop"))
         self.model = home_planning.loaded(self.settings.get("planning"))
         state = await self.state_store.async_load() or {}
         self.applied = state.get("thermostats") or {}
@@ -258,6 +270,8 @@ class HeatingCoordinator:
             answers = dict(self.answers)
             snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
                         pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory,
+                        flamme_manuelle=self.settings.get("flamme_manuelle") is True,
+                        types=self.settings.get("types") or {},
                         trop_chaud=self.settings.get("trop_chaud_ecart"),
                         simulateur=self.settings.get("pilote_simulateur") is True,
                         autorises=self.settings.get("planning_autorises") or [],
@@ -292,6 +306,7 @@ class HeatingCoordinator:
         # the same heat bought as electricity. None: the cards say where to set it.
         view["prix_kwh"] = self.settings.get("prix_kwh")
         view["extensions"] = self._extensions()
+        view["changements"] = self._changes(today)
         self.data = view
         self.last_build_ms = round((time.perf_counter() - started) * 1000, 2)
         self._notify()
@@ -320,6 +335,25 @@ class HeatingCoordinator:
             stove["pilote"]["accord_jour"] = _tally(day)
             stove["pilote"]["accord_semaine"] = {**_tally(self.pilot_journal), "depuis": min(
                 (j["jour"] for j in self.pilot_journal), default=today), "ecarts": _gaps(self.pilot_journal)}
+
+    def _changes(self, today: str) -> dict:
+        """What Hestia changed today, counted (the panel's overview, 1.0.0b3): the thermostats' modes it set, and what
+        it sent to the stove, from the pilot's journal (only gestures actually sent)."""
+        modes = sum(len(j.get("thermostats") or []) for j in self.journal
+                    if j.get("jour") == today and j.get("statut") == "envoye")
+        counts = {"modes": modes, "flamme": 0, "allumer": 0, "eteindre": 0, "ventilation": 0, "autres": 0}
+        for e in self.pilot_journal:
+            if e.get("jour") != today or e.get("qui") != "hestia" or not e.get("envoye"):
+                continue
+            text = e.get("texte") or ""
+            key = ("flamme" if text.startswith("Hestia met la flamme") else
+                   "ventilation" if text.startswith("Hestia met la ventilation") else
+                   "allumer" if text.startswith("Hestia allume") else
+                   "eteindre" if text.startswith(("Hestia éteint", "Hestia renvoie l’ordre d’arrêt", "Le poêle chauffe encore"))
+                   else "autres")
+            counts[key] += 1
+        counts["total"] = sum(counts.values())
+        return counts
 
     def _flame_order(self, order: dict) -> None:
         """« Flamme » mode: the stove's flame, as the house's modulation sets it (number.set_value), without waiting
@@ -430,6 +464,8 @@ class HeatingCoordinator:
             target = entities.get(order.get("role"))
             if not spec or not self._sendable(target):
                 return []
+            # The stove's own set point and its ÉCO Stop as Réglages want them (1.0.0b3).
+            spec = tuning.stove_setting(spec)
             domain, service = spec["service"].split(".", 1)
             return [(domain, service, {"entity_id": target, **(spec.get("donnees") or {})})]
         if gesture == "ventilation":
@@ -648,7 +684,19 @@ class HeatingCoordinator:
         if "pilote_simulateur" in changes and not isinstance(changes["pilote_simulateur"], bool):
             raise ValueError("simulateur du mode Entier : oui ou non")
         if "pilote_ventilation" in changes and changes["pilote_ventilation"] not in driver.FAN_MODES:
-            raise ValueError("ventilation : « auto » ou « flamme »")
+            raise ValueError("ventilation : « auto », « flamme » ou « manuel »")
+        for key in ("flamme_manuelle", "poele_eco_stop"):
+            if key in changes and not isinstance(changes[key], bool):
+                raise ValueError(f"{key} : oui ou non")
+        if "avance" in changes:
+            changes = {**changes, "avance": tuning.clean(changes["avance"])}
+        kinds = changes.get("types") or {}
+        if not isinstance(kinds, dict) or not all(isinstance(k, str) and k.startswith("climate.") and v in sources.KINDS
+                                                  for k, v in kinds.items()):
+            raise ValueError("type d’un thermostat illisible")
+        kit = changes.get("equipements")
+        if kit is not None and not (isinstance(kit, list) and all(k in EQUIPMENT for k in kit)):
+            raise ValueError("ce qui chauffe la maison : illisible")
         for key, (low_v, high_v) in PELLET_LIMITS.items():
             value = changes.get(key)
             if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
@@ -664,15 +712,22 @@ class HeatingCoordinator:
             if key in DEFAULTS:
                 settings[key] = value
         self.settings = settings
+        tuning.set_values(settings.get("avance"), settings.get("poele_eco_stop"))
         await self.store.async_save(settings)
         self._started()
 
     async def async_auto(self, on: bool) -> str:
-        """The card's « Gestion auto »: off, the pilot goes back to looking only (« ombre ») and keeps the mode it had;
-        on, it takes that mode back (else « flamme »; « entier » only for a stove the profile can light and stop).
-        Returns the mode now in force. Never switched on for a stove copied from another house (a lab)."""
+        """The card's « Flamme : Automatique » (« Gestion auto » before 1.0.0b3): off, the pilot goes back to looking
+        only (« ombre ») and keeps the mode it had; on, it takes that mode back (else « flamme »; « entier » only for a
+        stove the profile can light and stop). While Hestia lights and stops the stove (« entier »), only the flame
+        changes hands (`flamme_manuelle`). Returns the mode now in force. Never switched on for a stove copied from
+        another house (a lab)."""
         mode = self.settings.get("pilote") or "ombre"
         if on and (self.data.get("poele") or {}).get("copie"):
+            return mode
+        if mode == "entier":
+            if (self.settings.get("flamme_manuelle") is True) == on:
+                await self.async_set_settings({"flamme_manuelle": not on})
             return mode
         if on:
             wanted = self.settings.get("pilote_auto") if self.settings.get("pilote_auto") in AUTO_MODES else "flamme"

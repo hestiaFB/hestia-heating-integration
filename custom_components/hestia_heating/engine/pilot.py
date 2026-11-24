@@ -35,9 +35,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from . import tuning
 from .phrases import degrees, hour, number
 
-# The demand's steps, from the highest: (lowest demand, flame).
+# The figures below are the defaults: since 1.0.0b3 each one may be set in Réglages › Avancé (engine/tuning.py, which
+# the code reads at the time it decides). The demand's steps, from the highest: (lowest demand, flame).
 STEPS = ((85, 5), (65, 4), (45, 3), (0, 2))
 MARGIN = 7                      # points of demand around the current step
 AHEAD_H, OVER_C = 0.25, 2.0     # flame 1 when the room would pass its set point by 2 °C in 15 min (Réglages)
@@ -65,14 +67,17 @@ TONE = {"demarrer": "stove", "flamme": "stove", "garder": "stove", "arreter": "c
 
 
 def _step(demand: float) -> int:
-    return next((flame for low, flame in STEPS if demand >= low), STEPS[-1][1])
+    # The steps come from Réglages › Avancé (1.0.0b3), STEPS being their defaults.
+    steps = tuning.steps()
+    return next((flame for low, flame in steps if demand >= low), steps[-1][1])
 
 
 def flame_for(demand: float | None, current: int | None) -> int | None:
     """The flame the demand asks for, kept at `current` while the steps of the demand ± 7 points surround it."""
     if demand is None:
         return None
-    if current is not None and 2 <= current <= 5 and _step(demand - MARGIN) <= current <= _step(demand + MARGIN):
+    margin = tuning.get("marge")
+    if current is not None and 2 <= current <= 5 and _step(demand - margin) <= current <= _step(demand + margin):
         return current
     return _step(demand)
 
@@ -99,7 +104,7 @@ def warm_enough(house_c: float | None, target_c: float | None, preset: str | Non
     house temperature counts as warm, like the house's own rule: no stove on a guess."""
     if house_c is None or target_c is None:
         return True
-    return not (target_c - house_c > GAP_C or (preset == "boost" and target_c > house_c))
+    return not (target_c - house_c > tuning.get("arret_ecart_c") or (preset == "boost" and target_c > house_c))
 
 
 def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datetime,
@@ -159,12 +164,14 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
         mem["arret_vrai"] = None
     off_since = _held(mem, "arret_a", mode == "off" and bool(mem.get("arret_vrai")), None, now)
     wants_off = preset == "frost" or bool(off_since and now - off_since >= OFF_HELD)
-    overheat = room is not None and room > OVERHEAT_C
+    overheat_c = tuning.get("surchauffe_c")
+    overheat = room is not None and room > overheat_c
     # The fire pot, counted by Hestia (engine/granules.py): full, the next start waits for « J'ai nettoyé ».
     fire_pot = (stove.get("conso") or {}).get("brasier") or {}
     warm = warm_enough(house_c, target_c, preset)
     warm_since = _held(mem, "assez_chaud", warm, None, now)
-    mild = not (house_c is not None and house_c < (MILD_OFF_C if not mem.get("saison_douce", True) else MILD_ON_C))
+    mild_c = tuning.get("saison_douce_c")
+    mild = not (house_c is not None and house_c < (mild_c + 1 if not mem.get("saison_douce", True) else mild_c))
     mem["saison_douce"] = mild
     house_text = (f"la maison est à {degrees(house_c)}" if house_c is not None
                   else "la température de la maison est inconnue")
@@ -178,7 +185,7 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
         if mode == "off":
             refusal = "le thermostat est éteint"
         elif overheat:
-            refusal = (f"la pièce du poêle est à {degrees(room)}, au-dessus de {degrees(OVERHEAT_C)} : il éteindrait "
+            refusal = (f"la pièce du poêle est à {degrees(room)}, au-dessus de {degrees(overheat_c)} : il éteindrait "
                        "son thermostat")
         elif fire_pot.get("a_nettoyer"):
             refusal = (f"le brasier est à nettoyer ({number(fire_pot.get('kg') or 0, 1)} kg brûlés depuis le dernier "
@@ -196,9 +203,10 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
             mem.update(refus={"a": now.isoformat(), "texte": start["texte"]}, demarrage=None, demande=None)
         elif mild:
             start = _decision("demander", "Démarrer ?", f"Le thermostat est passé en boost à {at}, mais {house_text} "
-                              "(saison douce, 18 °C ou plus). Le pilote vous demanderait d’abord votre accord ; sans "
-                              "réponse en 15 min, il remettrait le thermostat hors gel, sauf si le poêle est déjà "
-                              "en route : alors il ne couperait rien.", None, stove)
+                              f"(saison douce, {degrees(mild_c)} ou plus). Le pilote vous demanderait d’abord "
+                              f"votre accord ; sans réponse en {number(tuning.get('reponse_min'), 0)} min, il "
+                              "remettrait le thermostat hors gel, sauf si le poêle est déjà en route : alors il ne "
+                              "couperait rien.", None, stove)
             mem.update(demande=now.isoformat(), demarrage=None, refus=None)
         else:
             start = _decision("demarrer", "Démarrer le poêle", f"Le thermostat est passé en boost à {at}, le poêle "
@@ -208,29 +216,33 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
 
     # 1. Safety: an alarm that lasts, a room too hot while the stove burns.
     cut = None
-    if alarm and alarm_since and now - alarm_since >= HELD and (burning or mode != "off"):
-        cut = f"Le poêle est en alarme ({stove.get('alarme_texte') or 'alarme'}) depuis 2 minutes."
+    if alarm and alarm_since and now - alarm_since >= tuning.minutes("alarme_min") and (burning or mode != "off"):
+        cut = (f"Le poêle est en alarme ({stove.get('alarme_texte') or 'alarme'}) depuis "
+               f"{number(tuning.get('alarme_min'), 0)} minutes.")
     elif overheat and burning:
-        cut = f"La pièce du poêle est à {degrees(room)}, au-dessus de {degrees(OVERHEAT_C)}."
+        cut = f"La pièce du poêle est à {degrees(room)}, au-dessus de {degrees(overheat_c)}."
     if cut:
         decision = _decision("couper", "Couper le poêle", cut + " Le pilote éteindrait son thermostat, puis le poêle.",
                              None, stove)
     # 2. A silent stove: say so (its plug tells whether it still heats).
-    elif silent and silent_since and now - silent_since >= SILENT:
+    elif silent and silent_since and now - silent_since >= tuning.minutes("muet_min"):
         plug = stove.get("prise_w")
-        tail = ("" if plug is None else f" Sa prise tire {number(plug, 0)} W : il chauffe encore." if plug > HOT_PLUG_W
+        tail = ("" if plug is None else f" Sa prise tire {number(plug, 0)} W : il chauffe encore." if plug > tuning.get("prise_brule_w")
                 else " Sa prise est au repos.")
-        decision = _decision("alerter", "Poêle injoignable", "Le poêle ne répond plus depuis 15 minutes : le pilote "
-                             "vous préviendrait." + tail, None, stove)
+        decision = _decision("alerter", "Poêle injoignable", f"Le poêle ne répond plus depuis "
+                             f"{number(tuning.get('muet_min'), 0)} minutes : le pilote vous préviendrait." + tail,
+                             None, stove)
     # 3. Stop: the thermostat says hors gel or is off, or the house is warm enough. A stove that burnt at the last word
     #    it said counts as burning (the house's stop waits 2 minutes for its state, then sends anyway).
     elif (burning or (silent and known_before in BURNING)) and (
-            wants_off or (warm and warm_since and now - warm_since >= HELD)):
+            wants_off or (warm and warm_since and now - warm_since >= tuning.minutes("chaud_min"))):
         why = ("Le thermostat est passé hors gel." if preset == "frost" else "Le thermostat est éteint." if wants_off
                else f"Assez chaud : {house_text} pour {degrees(target_c)} visés. Le pilote passerait le thermostat "
                     "hors gel.")
-        decision = _decision("arreter", "Arrêter le poêle", why + " Il éteindrait le poêle (3 tentatives au plus), puis "
-                             "vérifierait l’arrêt : son état, ses fumées sous 60 °C ou sa prise sous 70 W.", None, stove)
+        decision = _decision("arreter", "Arrêter le poêle", why + f" Il éteindrait le poêle "
+                             f"({number(tuning.get('arret_ordres'), 0)} tentatives au plus), puis vérifierait l’arrêt : "
+                             f"son état, ses fumées sous {degrees(tuning.get('fumees_froides_c'))} ou sa prise sous "
+                             f"{number(tuning.get('prise_repos_w'), 0)} W.", None, stove)
     # 4. Start, on the step up only (shown a few minutes, while the stove lights).
     elif start and not burning:
         decision = start
@@ -246,7 +258,8 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     elif burning and alarm:
         decision = _decision("garder", f"Flamme {flame_set}" if flame_set else "Flamme",
                              f"Le poêle signale une alarme ({stove.get('alarme_texte') or 'alarme'}) : le pilote ne "
-                             "touche plus à la flamme, et coupe si elle dure 2 minutes.", flame_set, stove)
+                             f"touche plus à la flamme, et coupe si elle dure {number(tuning.get('alarme_min'), 0)} "
+                             "minutes.", flame_set, stove)
     elif burning:
         decision = _flame(stove, now, demand, smooth, target_c, slope, flame_set, flame_since, lo, hi, low,
                           OVER_C if over_c is None else over_c)
@@ -273,9 +286,10 @@ def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo
     if low:
         hot, why = True, f"« {low} » demande la flamme au plus bas."
     elif room is not None and room > 0 and target_c is not None:
-        projected = room + max(slope or 0, 0) * AHEAD_H
+        ahead = tuning.get("avance_min")
+        projected = room + max(slope or 0, 0) * ahead / 60
         if projected > target_c + over_c:
-            hot, why = True, (f"La pièce serait à {degrees(projected)} dans 15 min, plus de {degrees(over_c)} au-dessus "
+            hot, why = True, (f"La pièce serait à {degrees(projected)} dans {number(ahead, 0)} min, plus de {degrees(over_c)} au-dessus "
                               f"de sa consigne ({degrees(target_c)}) : flamme au plus bas.")
         elif current == lo and room >= target_c:
             hot, why = True, (f"La pièce est à {degrees(room)}, à sa consigne ({degrees(target_c)}) ou au-dessus : "
@@ -290,11 +304,13 @@ def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo
         why = f"Le thermostat demande {number(demand, 0)} % : palier {wanted}."
     wanted = max(lo, min(hi, wanted))
     if (current is not None and wanted > current and wanted - current < 2 and flame_since
-            and now - flame_since < RAISE_EVERY):
-        wait = int((RAISE_EVERY - (now - flame_since)).total_seconds() // 60) + 1
-        wanted, why = current, why + f" Il monterait dans {wait} min : au plus une hausse par demi-heure."
+            and now - flame_since < tuning.minutes("monter_min")):
+        every = tuning.minutes("monter_min")
+        wait = int((every - (now - flame_since)).total_seconds() // 60) + 1
+        wanted, why = current, why + (f" Il monterait dans {wait} min : au plus une hausse toutes les "
+                                      f"{number(tuning.get('monter_min'), 0)} min.")
     writes, cap = stove.get("ecritures"), stove.get("ecritures_max") or WRITES_DEFAULT
-    if current is not None and wanted != current and writes is not None and writes >= cap - WRITES_KEPT:
+    if current is not None and wanted != current and writes is not None and writes >= cap - tuning.get("garde"):
         wanted, why = current, why + (f" {writes} ordres sur {cap} aujourd’hui : il garde les derniers pour pouvoir "
                                       "l’éteindre.")
     action = "garder" if wanted == flame_set else "flamme"
@@ -310,17 +326,17 @@ def _rest(stove, state, preset, wants_off, silent) -> dict:
         return _decision("attendre", "En alarme", "Le poêle est en alarme : aucun démarrage tant qu’elle dure.", None, stove)
     if silent:
         return _decision("attendre", "Poêle muet", "Le poêle ne dit pas son état : le pilote attend, et vous "
-                         "préviendrait au bout de 15 minutes.", None, stove)
+                         f"préviendrait au bout de {number(tuning.get('muet_min'), 0)} minutes.", None, stove)
     if state != "eteint":
         return _decision("attendre", "État à traduire", "Le profil du poêle ne connaît pas ce mot : le pilote "
                          "attend.", None, stove)
     smoke, plug = stove.get("fumees"), stove.get("prise_w")
     text = "Le poêle est éteint"
-    if smoke is not None and smoke >= STOP_SMOKE_C:
+    if smoke is not None and smoke >= tuning.get("fumees_froides_c"):
         text += f", ses fumées encore à {degrees(smoke)} : il refroidit"
     else:
         text += ", fumées froides" if smoke is not None else ""
-        text += ", prise au repos" if plug is not None and plug < STOP_PLUG_W else ""
+        text += ", prise au repos" if plug is not None and plug < tuning.get("prise_repos_w") else ""
     text += "."
     if preset == "boost" and not wants_off:
         text += " Le thermostat est déjà en boost : le pilote attend son prochain passage en boost."
@@ -359,7 +375,7 @@ def _would(decision: dict) -> str:
     if action == "arreter":
         return "Hestia arrêterait le poêle."
     if action == "alerter":
-        return "Hestia vous préviendrait : le poêle ne répond plus depuis 15 minutes."
+        return f"Hestia vous préviendrait : le poêle ne répond plus depuis {number(tuning.get('muet_min'), 0)} minutes."
     if action == "couper":
         return f"Hestia couperait le poêle : {decision['texte'][0].lower()}{decision['texte'][1:]}"
     return f"Hestia ne démarrerait pas : {decision['texte'].split(', mais ', 1)[-1]}"
@@ -407,19 +423,20 @@ def steer(decision: dict, stove: dict, mem: dict, events: list[dict], now: datet
             events.append({"heure": at, "qui": "maison", "texte": f"La flamme est passée à {flame_set} sans Hestia : "
                            "Hestia la laisse jusqu’à demain.", "accord": False})
     # An order not followed after 5 minutes.
-    if sent_at and not sent.get("fin") and now - sent_at >= CONFIRM:
+    if sent_at and not sent.get("fin") and now - sent_at >= tuning.minutes("verif_min"):
         sent["fin"] = "rate"
         mem["echecs"] = mem.get("echecs", 0) + 1
         events.append({"heure": at, "qui": "hestia", "texte": f"Le poêle n’a pas suivi : sa flamme est à "
                        f"{flame_set if flame_set is not None else '?'}, pas à {sent.get('valeur')}.", "accord": None})
-        if mem["echecs"] >= FAILS and not mem.get("lache"):
-            mem["lache"] = (f"Le poêle n’a pas suivi {FAILS} ordres aujourd’hui : Hestia ne touche plus à la flamme "
+        if mem["echecs"] >= tuning.get("echecs") and not mem.get("lache"):
+            mem["lache"] = (f"Le poêle n’a pas suivi {number(tuning.get('echecs'), 0)} ordres aujourd’hui : Hestia ne touche plus à la flamme "
                             "jusqu’à demain.")
     mem["envoi"] = sent or None
     # In this mode Hestia does what it would have done: its « would » lines give way to what it sends.
     for e in [e for e in events if e["qui"] == "hestia" and e["texte"].startswith("Hestia mettrait la flamme")]:
         events.remove(e)
-    status = {"envois": mem.get("envois", 0), "max": HESTIA_WRITES, "lache": mem.get("lache"), "copie": copy,
+    most = int(tuning.get("flamme_max_jour"))
+    status = {"envois": mem.get("envois", 0), "max": most, "lache": mem.get("lache"), "copie": copy,
               "attente": sent.get("valeur") if sent_at and not sent.get("fin") else None}
     target = decision.get("flamme")
     if copy or not entity or mem.get("lache") or decision["action"] != "flamme" or target is None:
@@ -427,8 +444,8 @@ def steer(decision: dict, stove: dict, mem: dict, events: list[dict], now: datet
     if sent_at and (not sent.get("fin") or now - sent_at < GAP
                     or (sent.get("fin") == "rate" and sent.get("valeur") == target and now - sent_at < RESEND)):
         return None, status
-    if mem.get("envois", 0) >= HESTIA_WRITES:
-        status["texte"] = f"{HESTIA_WRITES} ordres de Hestia aujourd’hui : elle n’en envoie plus jusqu’à demain."
+    if mem.get("envois", 0) >= most:
+        status["texte"] = f"{most} ordres de Hestia aujourd’hui : elle n’en envoie plus jusqu’à demain."
         return None, status
     mem["envoi"] = {"a": now.isoformat(), "valeur": target}
     mem["envois"] = mem.get("envois", 0) + 1

@@ -65,6 +65,12 @@ def build(snap: dict) -> dict:
     # 1. The sources, from every thermostat found and not switched off in Réglages.
     found = [sources.read(c) for c in snap.get("climates") or []]
     srcs = [s for s in found if s["id"] not in off]
+    # What each one drives: guessed, unless chosen in Réglages › Thermostats (1.0.0b3).
+    kinds = snap.get("types") or {}
+    for s in srcs:
+        s["type_devine"] = s["type"]
+        if kinds.get(s["id"]) in sources.KINDS:
+            s["type"] = kinds[s["id"]]
     raw_stove = snap.get("stove")
     stove_entities = set((raw_stove or {}).get("entities") or ())
     chosen = snap.get("stove_thermostat")
@@ -179,6 +185,8 @@ def build(snap: dict) -> dict:
         stove["flamme_basse"] = {"entity_id": low_switch["entity_id"], "nom": low_switch["nom"],
                                  "on": low_switch["on"]} if low_switch else None
         stove["prise_switch"] = dict(plug_switch) if plug_switch else None
+        # Who sets the front fan (Réglages, 1.0.0b3): « auto » the stove, « flamme » Hestia, « manuel » the user.
+        stove["ventilation_choix"] = (snap.get("conduite") or {}).get("ventilation") or "auto"
         if mode in ("ombre", "flamme", "entier"):
             # The house's temperature: the sensor chosen in Réglages (the automations' own), else the rooms' average.
             sensor, low = snap.get("house_sensor"), snap.get("flamme_basse")
@@ -190,15 +198,27 @@ def build(snap: dict) -> dict:
                                    thermometre_lu=sensor is None or sensor["c"] is not None,
                                    flamme_basse=low["nom"] if low else None)
             order, orders, wake = None, [], None
-            if mode in ("flamme", "entier"):
+            # « La flamme : Manuel » with « Allumer et éteindre : par Hestia » (1.0.0b3): Hestia lights and stops the
+            # stove, the flame stays the user's.
+            manual = mode == "entier" and snap.get("flamme_manuelle") is True
+            stove["pilote"]["flamme_manuelle"] = manual or mode == "ombre"
+            if mode == "flamme" or (mode == "entier" and not manual):
                 order, stove["pilote"]["commande"] = pilot.steer(decision, stove, memory, events, now, copy)
+            fan = (snap.get("conduite") or {}).get("ventilation")
+            if mode != "entier" and fan == "flamme" and snap.get("pret", True):
+                # The fan by Hestia (flamme + 1), while the house lights and stops the stove.
+                orders, fan_events, wake = driver.fan_only(stove, memory, now, copy)
+                events = fan_events + events
+            elif mode != "entier":
+                memory.pop("ventilation_seule", None)
             if mode == "entier":
                 orders, events, stove["pilote"]["conduite"], wake = _drive(snap, decision, stove, stove_thermostat,
                                                                            memory, events, now, copy)
             elif snap.get("simulateur"):
                 # The simulator (1.0): « Entier » rehearsed, nothing sent.
-                events, stove["pilote"]["simulation"], wake = _rehearse(snap, decision, stove, stove_thermostat,
-                                                                        memory, events, now, copy)
+                events, stove["pilote"]["simulation"], rehearse_wake = _rehearse(snap, decision, stove, stove_thermostat,
+                                                                                 memory, events, now, copy)
+                wake = rehearse_wake if wake is None else wake if rehearse_wake is None else min(wake, rehearse_wake)
             else:
                 memory.pop("conduite_blanc", None)
             pilot_state = {"memoire": memory, "evenements": events, "ordre": order, "ordres": orders, "reveil": wake}
@@ -289,8 +309,10 @@ def _rehearse(snap, decision, stove, thermostat, memory, events, now, copy) -> t
     if not snap.get("pret", True):
         return events, None, None
     base = snap.get("conduite") or {}
+    # The fan by Hestia is real outside « Entier » (driver.fan_only): the rehearsal leaves it alone.
+    fan = "manuel" if base.get("ventilation") == "flamme" else base.get("ventilation")
     ctx = {"blanc": True, "copie": copy, "brasier": (stove.get("conso") or {}).get("brasier"),
-           "ventilation": base.get("ventilation"), "ha_depuis": base.get("ha_depuis")}
+           "ventilation": fan, "ha_depuis": base.get("ha_depuis")}
     shadow = {**memory, "conduite": memory.get("conduite_blanc")}
     _, said, status, wake = driver.drive(decision, stove, thermostat, shadow, now, ctx)
     memory["conduite_blanc"] = shadow["conduite"]
@@ -303,7 +325,7 @@ def _public(s: dict) -> dict:
     """A source as the panel, the card and the other bricks see it (sources() of the interface)."""
     keys = ("id", "nom", "type", "piece", "etat", "mode", "preset", "temperature", "consigne", "demande_pct",
             "puissance_w", "fenetre", "delestage", "securite", "pente", "humidite", "integration", "entite",
-            "energie_stat", "granules_stat")
+            "energie_stat", "granules_stat", "vu", "type_devine")
     return {k: s.get(k) for k in keys}
 
 
@@ -529,7 +551,7 @@ def _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules) -> list[di
     for s in srcs:
         if s["etat"] == "inconnu" and s["type"] != "poele":
             out.append({"titre": f"{s['nom']} ne répond pas", "texte": "Le thermostat est indisponible dans Home Assistant.",
-                        "page": "pieces/" + (s["piece"] or "")})
+                        "page": "reglages/thermostats"})
     if stove and stove["a_traduire"] and stove["texte"]:
         out.append({"titre": f"Le poêle dit « {stove['texte']} »",
                     "texte": "Ce mot n’est pas encore dans son profil : il est montré tel quel. Signalez-le pour qu’il soit traduit.",
@@ -537,7 +559,7 @@ def _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules) -> list[di
     if raw_stove and stove_thermostat is None:
         out.append({"titre": "Le poêle n’a pas de thermostat",
                     "texte": "Choisissez le Versatile Thermostat qui le pilote : la demande du thermostat sera lue face à sa flamme.",
-                    "page": "reglages"})
+                    "page": "reglages/poele"})
     if any(s.partial for s in schedules):
         out.append({"titre": "Un planning n’est pas lu en entier",
                     "texte": "Un créneau commence au lever ou au coucher du soleil : Hestia ne le devine pas.",
@@ -630,9 +652,9 @@ def _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, ai
             elif p["actif"] and t not in allowed and t not in copies:
                 todo.append({"titre": f"Hestia n’a pas le droit de régler {s['nom']}",
                              "texte": f"Il est dans « {p['nom']} », qui est actif, mais il n’est pas coché dans Réglages, "
-                                      "« Ce que Hestia peut régler » : Hestia ne lui envoie rien. Cochez-le, ou remettez "
-                                      "le planning en pause.",
-                             "page": "reglages"})
+                                      "onglet Thermostats, « Le planning change son mode » : Hestia ne lui envoie rien. "
+                                      "Cochez-le, ou remettez le planning en pause.",
+                             "page": "reglages/thermostats"})
             try:
                 last = datetime.fromisoformat((applied.get(t) or {}).get("a") or "")
             except ValueError:

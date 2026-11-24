@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from . import tuning
 from .profiles import BURNING, Profile
 
 # The plug of a stove that draws this much runs (fans, auger, ignition); stopped it draws next to nothing.
@@ -52,6 +53,7 @@ def _orders(profile: Profile, roles: dict) -> dict:
     lit = None if lit_state in (None, "unknown", "unavailable") or not lit_spec else lit_state == lit_spec.get("etat")
     settings = []
     for s in orders.get("reglages") or ():
+        s = tuning.stove_setting(s)
         r = _role(roles, s.get("role"))
         if not r.get("entity_id"):
             continue
@@ -106,6 +108,8 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "piece": device.get("room"),
         "profil": profile.id,
         "profil_nom": profile.name,
+        # The pellets burnt per hour by the profile (Réglages › Avancé shows them as the débits' defaults, 1.0.0b3).
+        "debits": dict(profile.rates),
         "cloud": bool(profile.limits.get("cloud")),
         "etat": state,
         "texte": text if text not in (None, "unknown", "unavailable") else None,
@@ -127,6 +131,12 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "alarme_texte": None if alarm_text in (None, "unknown", "unavailable") else alarm_text,
         "alarme_depuis": min(alarm_since).isoformat() if alarm_since else None,
         "eco_stop": None if eco in (None, "unknown", "unavailable") else eco == "on",
+        # The stove's own set point and its ÉCO Stop delay (1.0.0b3, Réglages › Poêle à granulés): what the ÉCO Stop
+        # compares the room with, and how long it waits before stopping the stove.
+        "consigne_poele": _number((_role(roles, "thermostat").get("attributes") or {}).get("temperature")),
+        "eco_stop_delai": _number(_role(roles, "eco_stop_delai").get("state")),
+        # Every entity read, its value and when it last said something (the stove's technical page, 1.0.0b3).
+        "lues": [_read_line(role, r) for role, r in roles.items() if r.get("entity_id")],
         "ecritures": None if writes is None else int(writes),
         "ecritures_max": writes_cap or profile.limits.get("ecritures_par_jour"),
         "ecritures_lues": writes_cap is not None,
@@ -145,6 +155,17 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "granules": pellets,
         **_orders(profile, roles),
     }
+
+
+def _read_line(role: str, r: dict) -> dict:
+    attrs = r.get("attributes") or {}
+    seen = r.get("last_updated") or r.get("last_changed")
+    state = r.get("state")
+    return {"role": role, "entite": r.get("entity_id"),
+            "valeur": None if state in (None, "unknown", "unavailable") else state,
+            "unite": attrs.get("unit_of_measurement"), "mode_ventilation": attrs.get("fan_mode"),
+            "consigne": attrs.get("temperature") if role == "thermostat" else None,
+            "vu": seen.isoformat() if isinstance(seen, datetime) else None}
 
 
 def pellets(found: dict | None) -> dict | None:

@@ -38,11 +38,13 @@ from __future__ import annotations
 import copy
 from datetime import datetime, timedelta
 
+from . import tuning
 from .phrases import degrees, hour, number
 
 BURNING = ("allumage", "chauffe", "nettoyage")
 STOPPED = ("extinction", "eteint", "nettoyage")       # what a stop order is waiting for
 SETTLE = timedelta(seconds=2)                         # the settings, then the order to light
+# The figures below are the defaults: since 1.0.0b3 each one may be set in Réglages › Avancé (engine/tuning.py).
 IGNITION = timedelta(minutes=3)                       # the stove must take the order to light
 RELOAD_WAIT = timedelta(seconds=20)
 STATE_WAIT = timedelta(minutes=2)                     # before a stop, the stove's state known
@@ -57,7 +59,9 @@ SETTINGS_KEPT = 6                                     # the ventilation only wit
 COLD_SMOKE_C, PLUG_OFF_W, PLUG_HOT_W = 60, 70, 60
 HOUSE_STOP = timedelta(minutes=5)                     # the simulator: the house's own stop, after Hestia's would-be one
 FAN_HOT_C, FAN_TOP, FAN_EVERY = 110, 5, timedelta(minutes=10)   # « flamme + 1 »: hot smoke, its top, its pace
-FAN_MODES = ("auto", "flamme")
+# « auto »: the stove leads its fan (AUTO set before a start); « flamme »: flamme + 1 by Hestia; « manuel » (1.0.0b3):
+# the speed the user chose, never touched by Hestia.
+FAN_MODES = ("auto", "flamme", "manuel")
 # What a person answers, on the phone (mobile_app_notification_action) or on the Poêle page.
 ANSWERS = {"oui": "HESTIA_POELE_OUI", "non": "HESTIA_POELE_NON", "nettoye": "HESTIA_POELE_NETTOYE",
            "couper": "HESTIA_POELE_COUPER", "ignorer": "HESTIA_POELE_IGNORER"}
@@ -158,7 +162,7 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
     if mem.get("jour") != today:
         mem.update(jour=today, demarrages=0)
     status = {"actif": not blank, "blanc": blank, "copie": bool(ctx.get("copie")),
-              "demarrages": mem.get("demarrages", 0), "max_demarrages": STARTS_A_DAY,
+              "demarrages": mem.get("demarrages", 0), "max_demarrages": int(tuning.get("demarrages_max")),
               "pilotable": bool(stove.get("pilotable"))}
     # The simulator sends nothing: it may rehearse on a copy (a lab).
     if (ctx.get("copie") and not blank) or not thermostat or not stove.get("pilotable"):
@@ -204,10 +208,11 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
         mem["muet_dit"] = True
         plug = stove.get("prise_w")
         tail = ("" if plug is None else f" Sa prise tire {number(plug, 0)} W : il chauffe encore et ne reçoit plus "
-                "d’ordre." if plug > PLUG_HOT_W else " Sa prise est au repos : il est à l’arrêt.")
-        run.say("muet", "Poêle injoignable", "Le poêle ne répond plus depuis 15 minutes." + tail,
+                "d’ordre." if plug > tuning.get("prise_brule_w") else " Sa prise est au repos : il est à l’arrêt.")
+        silent_min = number(tuning.get("muet_min"), 0)
+        run.say("muet", "Poêle injoignable", f"Le poêle ne répond plus depuis {silent_min} minutes." + tail,
                 ("couper",) if ctx.get("prise_switch") else (), lasting=True)
-        run.log("Le poêle ne répond plus depuis 15 minutes : Hestia vous prévient." + tail, sent=False)
+        run.log(f"Le poêle ne répond plus depuis {silent_min} minutes : Hestia vous prévient." + tail, sent=False)
     elif state != "inconnu" and mem.get("muet_dit"):
         mem["muet_dit"] = None
         run.clear("muet")
@@ -228,7 +233,9 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
         run.log("Hestia demande votre accord pour démarrer le poêle (saison douce).", sent=False)
     _question(run, mem, stove, thermostat, answers)
     fan = ctx.get("ventilation") if ctx.get("ventilation") in FAN_MODES else "auto"
-    _start(run, mem, stove, thermostat, skip=("ventilation",) if fan == "flamme" else ())
+    # The fan's AUTO goes before a start only when the stove leads it; the ÉCO Stop and the stove's own set point as
+    # chosen in Réglages (ctx « reglages_poele »).
+    _start(run, mem, stove, thermostat, skip=("ventilation",) if fan != "auto" else ())
     _fan(run, mem, stove, fan)
     # 3. The fire pot full: said once (the burning goes on, the next start waits for « J'ai nettoyé »).
     fire_pot = ctx.get("brasier") or {}
@@ -251,6 +258,20 @@ def _lower(text: str | None) -> str:
 
 # --- the front fan -------------------------------------------------------------------------------------------------
 
+def fan_only(stove: dict, pilot_mem: dict, now: datetime, copy_of: bool) -> tuple[list[dict], list[dict], float | None]:
+    """The fan « Automatique, par Hestia » (flamme + 1) while Hestia does not light and stop the stove (1.0.0b3): the
+    same rule as in « Entier », from its own memory (`ventilation_seule`). Nothing for a stove copied from another
+    house. (the gestures, the journal's events, in how many seconds to look again)."""
+    if copy_of:
+        pilot_mem.pop("ventilation_seule", None)
+        return [], [], None
+    run = _Run(now)
+    holder = {"ventilation": copy.deepcopy(pilot_mem.get("ventilation_seule"))}
+    _fan(run, holder, stove, "flamme")
+    pilot_mem["ventilation_seule"] = holder.get("ventilation")
+    return run.orders, run.events, run.wake
+
+
 def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
     """« Flamme + 1 » (1.0): while the stove lights or burns, its front fan at its lowest until the smoke reaches 110 °C
     (then it stays warm until the stove stops), then at the flame + 1, 5 at most. One order at most every 10 minutes,
@@ -263,7 +284,7 @@ def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
             mem["ventilation"] = None
         return
     smoke, flame = stove.get("fumees"), stove.get("flamme")
-    warm = bool(seq.get("chaud")) or (state == "chauffe" and smoke is not None and smoke >= FAN_HOT_C)
+    warm = bool(seq.get("chaud")) or (state == "chauffe" and smoke is not None and smoke >= tuning.get("ventil_fumees_c"))
     seq["chaud"] = warm
     mem["ventilation"] = seq
     if warm and flame is not None:
@@ -271,16 +292,17 @@ def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
         want = max((x for x in levels if int(x) <= top), key=int, default=levels[0])
         why = f"flamme {int(flame)} + 1"
     else:
-        want, why = levels[0], f"au plus bas tant que les fumées sont sous {FAN_HOT_C} °C"
+        want, why = levels[0], f"au plus bas tant que les fumées sont sous {degrees(tuning.get('ventil_fumees_c'))}"
     current = stove.get("ventilation")
     if current is None or str(current).casefold() == want.casefold() or (run.blank and seq.get("voulu") == want):
         return
     last = _iso(seq.get("a"))
-    if last and run.now - last < FAN_EVERY:
-        run.again(FAN_EVERY, last)
+    every = tuning.minutes("ventil_rythme_min")
+    if last and run.now - last < every:
+        run.again(every, last)
         return
     writes, cap = stove.get("ecritures"), stove.get("ecritures_max")
-    if writes is not None and cap and cap - writes <= SETTINGS_KEPT:
+    if writes is not None and cap and cap - writes <= tuning.get("garde_ventil"):
         return
     seq.update(a=run.now.isoformat(), voulu=want)
     run.stove("ventilation", valeur=want)
@@ -292,10 +314,11 @@ def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
 def _start_begin(run: _Run, mem: dict, now: datetime, why: str) -> None:
     if mem.get("allumage") and not mem["allumage"].get("fin"):
         return  # one start at a time: a second step up during a start is ignored, on purpose
-    if mem.get("demarrages", 0) >= STARTS_A_DAY:
-        run.say("refus", "Pas de démarrage", f"Hestia a déjà démarré le poêle {STARTS_A_DAY} fois aujourd’hui : "
+    most = int(tuning.get("demarrages_max"))
+    if mem.get("demarrages", 0) >= most:
+        run.say("refus", "Pas de démarrage", f"Hestia a déjà démarré le poêle {most} fois aujourd’hui : "
                 "allumez-le vous-même si vous le voulez.")
-        run.log(f"Pas de démarrage : déjà {STARTS_A_DAY} aujourd’hui.", sent=False)
+        run.log(f"Pas de démarrage : déjà {most} aujourd’hui.", sent=False)
         return
     mem["allumage"] = {"a": now.isoformat(), "phase": "reglages", "essai": 1, "pourquoi": why}
     mem["arret"] = None
@@ -334,7 +357,7 @@ def _start(run: _Run, mem: dict, stove: dict, thermostat: dict, skip: tuple = ()
         mem["demarrages"] = mem.get("demarrages", 0) + 1
         run.log(f"Hestia allume le poêle ({seq.get('pourquoi')}).")
         seq.update(phase="controle", depuis=now.isoformat())
-        run.again(IGNITION)
+        run.again(tuning.minutes("allumage_verif_min"))
         return
     if seq["phase"] == "controle":
         if stove.get("allume") or stove.get("etat") in BURNING:
@@ -344,19 +367,19 @@ def _start(run: _Run, mem: dict, stove: dict, thermostat: dict, skip: tuple = ()
                 run.clear("injoignable")
             run.log("Le poêle a pris l’ordre d’allumage.", sent=False)
             return
-        if now - since < IGNITION:
-            run.again(IGNITION, since)
+        if now - since < tuning.minutes("allumage_verif_min"):
+            run.again(tuning.minutes("allumage_verif_min"), since)
             return
         if run.blank:
             # The simulator: the house did not light it; Hestia would have reloaded the stove's integration.
             seq.update(fin="maison", depuis=now.isoformat())
-            run.house_did_not("La maison n’a pas allumé le poêle dans les 3 minutes.")
+            run.house_did_not(f"La maison n’a pas allumé le poêle dans les {number(tuning.get('allumage_verif_min'), 0)} minutes.")
             return
         if seq.get("essai", 1) == 1:
             run.stove("recharger")
-            run.log("Le poêle n’a pas pris l’ordre en 3 minutes : Hestia recharge son intégration et réessaie.")
+            run.log(f"Le poêle n’a pas pris l’ordre en {number(tuning.get('allumage_verif_min'), 0)} minutes : Hestia recharge son intégration et réessaie.")
             seq.update(phase="relance", essai=2, depuis=now.isoformat())
-            run.again(RELOAD_WAIT)
+            run.again(tuning.seconds("recharge_s"))
             return
         seq.update(fin="rate", depuis=now.isoformat())
         mem["injoignable"] = True
@@ -365,13 +388,13 @@ def _start(run: _Run, mem: dict, stove: dict, thermostat: dict, skip: tuple = ()
         run.log("L’ordre d’allumage n’est pas passé.", sent=False)
         return
     if seq["phase"] == "relance":
-        if now - since < RELOAD_WAIT:
-            run.again(RELOAD_WAIT, since)
+        if now - since < tuning.seconds("recharge_s"):
+            run.again(tuning.seconds("recharge_s"), since)
             return
         run.stove("allumer")
         run.log("Hestia renvoie l’ordre d’allumage.")
         seq.update(phase="controle", depuis=now.isoformat())
-        run.again(IGNITION)
+        run.again(tuning.minutes("allumage_verif_min"))
 
 
 def _reason(decision: dict) -> str:
@@ -431,8 +454,8 @@ def _question(run: _Run, mem: dict, stove: dict, thermostat: dict, answers: dict
         run.thermostat("set_preset_mode", preset_mode="frost")
         run.log("Vous avez dit non : Hestia remet le thermostat du poêle hors gel.")
         return
-    if run.now - asked < QUESTION:
-        run.again(QUESTION, asked)
+    if run.now - asked < tuning.minutes("reponse_min"):
+        run.again(tuning.minutes("reponse_min"), asked)
         return
     mem["question"] = None
     run.clear("saison")
@@ -440,7 +463,8 @@ def _question(run: _Run, mem: dict, stove: dict, thermostat: dict, answers: dict
         run.log("Pas de réponse, mais le poêle est déjà en route : Hestia ne coupe rien.", sent=False)
         return
     run.thermostat("set_preset_mode", preset_mode="frost")
-    run.log("Pas de réponse en 15 minutes : Hestia remet le thermostat du poêle hors gel.")
+    run.log(f"Pas de réponse en {number(tuning.get('reponse_min'), 0)} minutes : Hestia remet le thermostat du "
+            "poêle hors gel.")
 
 
 # --- stop ----------------------------------------------------------------------------------------------------------
@@ -476,11 +500,11 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
         since = _iso(seq["depuis"])
     if seq["phase"] == "ordres":
         if state in STOPPED and seq["essais"]:
-            _verify_later(run, seq, "Le poêle a pris l’ordre d’arrêt : il s’éteint. Hestia vérifie dans 25 minutes.")
+            _verify_later(run, seq, f"Le poêle a pris l’ordre d’arrêt : il s’éteint. Hestia vérifie dans {_verify_min()} minutes.")
             return
         if state in STOPPED and not seq["essais"]:
             seq.update(phase="verif", depuis=now.isoformat())
-            run.again(VERIFY)
+            run.again(tuning.minutes("arret_verif_min"))
             return
         if run.blank and seq["essais"]:
             # The simulator: the house's own stop is waited for, never a second order.
@@ -493,20 +517,21 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
         if now - since < STOP_EVERY:
             run.again(STOP_EVERY, since)
             return
-        if seq["essais"] >= STOP_TRIES:
-            run.say("arret", "Ordre d’extinction non confirmé", "Le poêle n’a pas confirmé son arrêt après 3 ordres. "
-                    "Hestia vérifie dans 25 minutes.")
-            _verify_later(run, seq, "Ordre d’extinction non confirmé : vérification dans 25 minutes.")
+        tries = int(tuning.get("arret_ordres"))
+        if seq["essais"] >= tries:
+            run.say("arret", "Ordre d’extinction non confirmé", f"Le poêle n’a pas confirmé son arrêt après {tries} "
+                    f"ordres. Hestia vérifie dans {_verify_min()} minutes.")
+            _verify_later(run, seq, f"Ordre d’extinction non confirmé : vérification dans {_verify_min()} minutes.")
             return
         seq["essais"] += 1
         seq["depuis"] = now.isoformat()
         run.stove("eteindre")
-        run.log("Hestia éteint le poêle." if seq["essais"] == 1 else f"Hestia renvoie l’ordre d’arrêt ({seq['essais']}/3).")
+        run.log("Hestia éteint le poêle." if seq["essais"] == 1 else f"Hestia renvoie l’ordre d’arrêt ({seq['essais']}/{tries}).")
         run.again(HOUSE_STOP if run.blank else STOP_EVERY)
         return
     if seq["phase"] == "verif":
-        if now - since < VERIFY:
-            run.again(VERIFY, since)
+        if now - since < tuning.minutes("arret_verif_min"):
+            run.again(tuning.minutes("arret_verif_min"), since)
             return
         if not _wanted_off(decision, thermostat):
             seq.update(fin="annule", depuis=now.isoformat())
@@ -516,10 +541,10 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
             seq.update(fin="ok", depuis=now.isoformat())
             run.log(f"Arrêt vérifié : {done}.", sent=False)
             return
-        run.say("arret", "Le poêle chauffe encore", "25 minutes après l’ordre d’arrêt, le poêle chauffe encore. Hestia "
-                "renvoie l’ordre.")
+        run.say("arret", "Le poêle chauffe encore", f"{_verify_min()} minutes après l’ordre d’arrêt, le poêle chauffe "
+                "encore. Hestia renvoie l’ordre.")
         run.stove("eteindre")
-        run.log("Le poêle chauffe encore 25 minutes après : Hestia renvoie l’ordre d’arrêt.")
+        run.log(f"Le poêle chauffe encore {_verify_min()} minutes après : Hestia renvoie l’ordre d’arrêt.")
         if run.blank:
             seq.update(fin="encore", depuis=now.isoformat())
             return
@@ -531,7 +556,7 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
             run.again(RESEND_CHECK, since)
             return
         plug = stove.get("prise_w")
-        if (plug is not None and plug < PLUG_OFF_W) or state in ("extinction", "eteint"):
+        if (plug is not None and plug < tuning.get("prise_repos_w")) or state in ("extinction", "eteint"):
             seq.update(fin="ok", depuis=now.isoformat())
             run.say("arret", "Poêle arrêté", "Le poêle a pris l’ordre d’arrêt.")
             run.log("Le poêle a pris le second ordre d’arrêt.", sent=False)
@@ -543,10 +568,10 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
             run.log("Le poêle ne prend pas l’ordre d’arrêt, et Hestia ne connaît pas sa prise.", sent=False)
             return
         run.say("alerte", "Alerte : le poêle chauffe toujours", "Il ne prend pas l’ordre d’arrêt. Couper la prise ? Sans "
-                "réponse en 5 minutes, " + ("Hestia la coupe." if ctx.get("couper_prise") else "Hestia ne fait rien."),
+                f"réponse en {number(tuning.get('prise_reponse_min'), 0)} minutes, " + ("Hestia la coupe." if ctx.get("couper_prise") else "Hestia ne fait rien."),
                 ("couper", "ignorer"), lasting=True)
         seq.update(phase="prise", depuis=now.isoformat())
-        run.again(PLUG_ANSWER)
+        run.again(tuning.minutes("prise_reponse_min"))
         return
     if seq["phase"] == "prise":
         if answers.get("ignorer"):
@@ -554,8 +579,8 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
             run.clear("alerte")
             run.log("Vous avez choisi de ne pas couper la prise.", sent=False)
             return
-        if not answers.get("couper") and now - since < PLUG_ANSWER:
-            run.again(PLUG_ANSWER, since)
+        if not answers.get("couper") and now - since < tuning.minutes("prise_reponse_min"):
+            run.again(tuning.minutes("prise_reponse_min"), since)
             return
         if not answers.get("couper") and not ctx.get("couper_prise"):
             seq.update(fin="rate", depuis=now.isoformat())
@@ -571,7 +596,11 @@ def _stop(run: _Run, mem: dict, stove: dict, thermostat: dict, decision: dict, c
 def _verify_later(run: _Run, seq: dict, text: str) -> None:
     seq.update(phase="verif", depuis=run.now.isoformat())
     run.log(text, sent=False)
-    run.again(VERIFY)
+    run.again(tuning.minutes("arret_verif_min"))
+
+
+def _verify_min() -> str:
+    return number(tuning.get("arret_verif_min"), 0)
 
 
 def _stopped(stove: dict) -> str | None:
@@ -581,9 +610,9 @@ def _stopped(stove: dict) -> str | None:
         return "il finit son cycle d’extinction"
     if state == "eteint":
         return "il est éteint"
-    if state not in ("inconnu", None) and smoke is not None and smoke < COLD_SMOKE_C:
+    if state not in ("inconnu", None) and smoke is not None and smoke < tuning.get("fumees_froides_c"):
         return f"ses fumées sont à {degrees(smoke)}"
-    if plug is not None and plug < PLUG_OFF_W:
+    if plug is not None and plug < tuning.get("prise_repos_w"):
         return f"sa prise tire {number(plug, 0)} W"
     return None
 
@@ -639,14 +668,14 @@ def _status(mem: dict, stove: dict, now: datetime, blank: bool = False) -> dict:
                                                   "aussi ?")
         elif stop and not stop.get("fin"):
             since = _iso(stop.get("depuis")) or _iso(stop.get("a")) or now
-            out.update(sequence="arret", texte=f"Hestia vérifierait l’arrêt à {hour(since + VERIFY)}."
+            out.update(sequence="arret", texte=f"Hestia vérifierait l’arrêt à {hour(since + tuning.minutes("arret_verif_min"))}."
                        if stop.get("phase") == "verif" else "Hestia éteindrait le poêle maintenant : la maison le "
                        "fait-elle aussi ?")
         return out
     out: dict = {"question": None, "sequence": None, "texte": None, "verrou": mem.get("verrou"),
                  "injoignable": bool(mem.get("injoignable"))}
     if q:
-        left = max(0, int((QUESTION - (now - _iso(q["a"]))).total_seconds() // 60))
+        left = max(0, int((tuning.minutes("reponse_min") - (now - _iso(q["a"]))).total_seconds() // 60))
         out["question"] = {"sujet": q["sujet"], "texte": "Saison douce : allumer le poêle ?",
                            "reste_min": left, "reponses": ["oui", "non"]}
         out["texte"] = f"Saison douce : Hestia attend votre accord pour allumer le poêle, encore {left} min."
@@ -656,14 +685,14 @@ def _status(mem: dict, stove: dict, now: datetime, blank: bool = False) -> dict:
     if start and not start.get("fin"):
         out["sequence"] = "allumage"
         out["texte"] = {"reglages": "Hestia prépare l’allumage.", "ordre": "Hestia prépare l’allumage.",
-                        "controle": "Allumage envoyé : Hestia vérifie que le poêle le prend (3 minutes).",
+                        "controle": f"Allumage envoyé : Hestia vérifie que le poêle le prend ({number(tuning.get('allumage_verif_min'), 0)} minutes).",
                         "relance": "Intégration du poêle rechargée : Hestia renvoie l’ordre."}.get(start["phase"])
     elif stop and not stop.get("fin"):
         out["sequence"] = "arret"
         since = _iso(stop.get("depuis")) or _iso(stop.get("a")) or now
         out["texte"] = {"attente": "Hestia attend que le poêle dise son état pour l’éteindre.",
                         "ordres": f"Hestia éteint le poêle ({stop.get('essais', 0)}/3).",
-                        "verif": f"Arrêt en cours : vérification à {hour(since + VERIFY)}.",
+                        "verif": f"Arrêt en cours : vérification à {hour(since + tuning.minutes("arret_verif_min"))}.",
                         "renvoi": "Le poêle chauffait encore : ordre d’arrêt renvoyé.",
                         "prise": "Le poêle chauffe toujours : couper sa prise ?"}.get(stop["phase"])
     elif mem.get("injoignable"):

@@ -13,6 +13,7 @@
     "flamme_reelle": {"domaine": "sensor", "fin": "_real_power"},
     "ecritures": {"domaine": "sensor", "fin": "_eeprom_writes_today"},
     "eco_stop": {"domaine": "switch", "fin": "_eco_stop"},
+    "eco_stop_delai": {"domaine": "number", "fin": "_eco_temp_stop"},
     "ventilation": {"domaine": "climate", "fin": "_vent_front"}
   },
   "etats": {
