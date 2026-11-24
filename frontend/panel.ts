@@ -60,7 +60,8 @@ type View={pret:boolean;version:string;maison:House;pieces:Room[];sources:Source
  mis_a_jour:string;calcul_ms:number|null};
 type Day={debut:string;maintenant_min:number;series:Record<string,[number,number|null][]>};
 type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null;planning:Model;pilote:string;pilote_thermometre:string|null;planning_autorises:string[];pilote_flamme_basse:string|null;
-  brasier_kg?:number|null;granules_prix_sac?:number|null;granules_poids_sac?:number|null;pilote_notifier?:string|null;poele_prise_switch?:string|null;couper_prise?:boolean;prix_kwh?:number|null};
+  brasier_kg?:number|null;granules_prix_sac?:number|null;granules_poids_sac?:number|null;pilote_notifier?:string|null;poele_prise_switch?:string|null;couper_prise?:boolean;prix_kwh?:number|null;
+  trop_chaud_ecart?:number|null;pilote_ventilation?:string};
  trouve:{thermostats:{id:string;nom:string;piece:string}[];coupes:{id:string;nom:string}[];poele:boolean;poele_thermostat:string|null;
   prises:{id:string;nom:string;poele:boolean}[];prise:string|null;thermometres:{id:string;nom:string;maison:boolean}[];interrupteurs?:{id:string;nom:string}[];poele_copie?:boolean;
   notifieurs?:string[];coupures?:{id:string;nom:string;poele:boolean}[];coupure?:string|null;pilotable?:boolean;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null}}};
@@ -748,6 +749,10 @@ export class HestiaHeatingSetup extends LitElement {
     value:html`<select aria-label="Interrupteur de la prise du poêle" @change=${(e:Event)=>{const x=(e.target as HTMLSelectElement).value;this.set('poele_prise_switch',x||null);}}>
      <option value="" ?selected=${!cut}>${f.coupure?'Trouvé seul':'Aucun'}</option>${switches.map(x=>html`<option value=${x.id} ?selected=${cut===x.id}>${x.nom}</option>`)}
      ${cut&&!switches.some(x=>x.id===cut)?html`<option value=${cut} selected>${cut}</option>`:nothing}</select>`}),
+   listRow({label:'Ventilation',control:true,sub:this.val<string>('pilote_ventilation')==='flamme'
+     ?'Flamme + 1 : au plus bas tant que les fumées sont sous 110 °C, puis la flamme + 1, 5 au plus. Chaque changement coûte un ordre du jour : un toutes les 10 minutes au plus, et seulement s’il en reste plus de 6.'
+     :'AUTO : réglée une fois avant chaque démarrage (s’il reste plus de 6 ordres), puis le poêle la mène seul.',
+    value:segmented<string>('Ventilation',[['auto','AUTO'],['flamme','Flamme + 1']],this.val<string>('pilote_ventilation')??'auto',x=>this.set('pilote_ventilation',x))}),
    listRow({label:'Couper la prise sans réponse',control:true,sub:'En dernier recours : 25 min après l’arrêt et deux ordres, le poêle chauffe encore. Sans réponse en 5 min à « Couper la prise ? », Hestia la coupe.',
     value:toggle('Couper la prise sans réponse',this.val<boolean>('couper_prise')!==false,on=>this.set('couper_prise',on))}),
   ];

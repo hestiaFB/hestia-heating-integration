@@ -24,6 +24,9 @@ cloud's delays, one at a time:
 - A silent stove for 15 minutes: said, with what its plug draws, and the plug offered; nothing else.
 - After a restart of Home Assistant: 3 minutes later, once the stove's state is known, a stove that burns with its
   thermostat off gets its thermostat back on, in boost. Nothing is sent to the stove.
+- The front fan (1.0, Réglages « Ventilation »): AUTO, set once before a start (the default); or « flamme + 1 »: at
+  its lowest while the smoke is under 110 °C, then the flame + 1 (5 at most), one order at most every 10 minutes and
+  only while more than 6 orders are left; nothing is set before a start then.
 """
 from __future__ import annotations
 
@@ -47,6 +50,8 @@ RESYNC_AFTER, RESYNC_UNTIL = timedelta(minutes=3), timedelta(minutes=8)
 STARTS_A_DAY = 3
 SETTINGS_KEPT = 6                                     # the ventilation only with more orders left than this
 COLD_SMOKE_C, PLUG_OFF_W, PLUG_HOT_W = 60, 70, 60
+FAN_HOT_C, FAN_TOP, FAN_EVERY = 110, 5, timedelta(minutes=10)   # « flamme + 1 »: hot smoke, its top, its pace
+FAN_MODES = ("auto", "flamme")
 # What a person answers, on the phone (mobile_app_notification_action) or on the Poêle page.
 ANSWERS = {"oui": "HESTIA_POELE_OUI", "non": "HESTIA_POELE_NON", "nettoye": "HESTIA_POELE_NETTOYE",
            "couper": "HESTIA_POELE_COUPER", "ignorer": "HESTIA_POELE_IGNORER"}
@@ -103,7 +108,8 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
     `pilot_mem`: the memory pilot.decide() returned (its « conduite » is this module's); `ctx`: `copie` (a stove
     copied from another house: nothing is ever sent), `reponses` ({answer: iso} since the last look), `brasier` (the
     fire pot's view), `prise_switch` (the plug's switch, or None), `couper_prise` (Réglages: cut the plug without an
-    answer), `ha_depuis` (since when Home Assistant runs, None when it was already running)."""
+    answer), `ha_depuis` (since when Home Assistant runs, None when it was already running), `ventilation` (Réglages:
+    « auto » or « flamme », for flamme + 1)."""
     run = _Run(now)
     # A copy: the view may be built twice from the same memory in one look (the planning's orders), and only the last
     # one's gestures are made.
@@ -179,7 +185,9 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
         run.say("saison", "Saison douce : allumer le poêle ?", decision.get("texte") or "", ("oui", "non"), lasting=True)
         run.log("Hestia demande votre accord pour démarrer le poêle (saison douce).", sent=False)
     _question(run, mem, stove, thermostat, answers)
-    _start(run, mem, stove, thermostat)
+    fan = ctx.get("ventilation") if ctx.get("ventilation") in FAN_MODES else "auto"
+    _start(run, mem, stove, thermostat, skip=("ventilation",) if fan == "flamme" else ())
+    _fan(run, mem, stove, fan)
     # 3. The fire pot full: said once (the burning goes on, the next start waits for « J'ai nettoyé »).
     fire_pot = ctx.get("brasier") or {}
     if fire_pot.get("a_nettoyer") and not mem.get("brasier_dit"):
@@ -199,6 +207,44 @@ def _lower(text: str | None) -> str:
     return text[:1].lower() + text[1:]
 
 
+# --- the front fan -------------------------------------------------------------------------------------------------
+
+def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
+    """« Flamme + 1 » (1.0): while the stove lights or burns, its front fan at its lowest until the smoke reaches 110 °C
+    (then it stays warm until the stove stops), then at the flame + 1, 5 at most. One order at most every 10 minutes,
+    and only while more than 6 of the day's orders are left: the start and the stop come first."""
+    seq = mem.get("ventilation") or {}
+    levels = stove.get("ventilation_niveaux") or []
+    state = stove.get("etat")
+    if fan != "flamme" or not levels or state not in ("allumage", "chauffe"):
+        if state not in BURNING:
+            mem["ventilation"] = None
+        return
+    smoke, flame = stove.get("fumees"), stove.get("flamme")
+    warm = bool(seq.get("chaud")) or (state == "chauffe" and smoke is not None and smoke >= FAN_HOT_C)
+    seq["chaud"] = warm
+    mem["ventilation"] = seq
+    if warm and flame is not None:
+        top = min(int(flame) + 1, FAN_TOP)
+        want = max((x for x in levels if int(x) <= top), key=int, default=levels[0])
+        why = f"flamme {int(flame)} + 1"
+    else:
+        want, why = levels[0], f"au plus bas tant que les fumées sont sous {FAN_HOT_C} °C"
+    current = stove.get("ventilation")
+    if current is None or str(current).casefold() == want.casefold():
+        return
+    last = _iso(seq.get("a"))
+    if last and run.now - last < FAN_EVERY:
+        run.again(FAN_EVERY, last)
+        return
+    writes, cap = stove.get("ecritures"), stove.get("ecritures_max")
+    if writes is not None and cap and cap - writes <= SETTINGS_KEPT:
+        return
+    seq["a"] = run.now.isoformat()
+    run.stove("ventilation", valeur=want)
+    run.log(f"Hestia met la ventilation à {want} : {why}.")
+
+
 # --- start ---------------------------------------------------------------------------------------------------------
 
 def _start_begin(run: _Run, mem: dict, now: datetime, why: str) -> None:
@@ -213,7 +259,7 @@ def _start_begin(run: _Run, mem: dict, now: datetime, why: str) -> None:
     mem["arret"] = None
 
 
-def _start(run: _Run, mem: dict, stove: dict, thermostat: dict) -> None:
+def _start(run: _Run, mem: dict, stove: dict, thermostat: dict, skip: tuple = ()) -> None:
     seq = mem.get("allumage")
     if not seq or seq.get("fin"):
         return
@@ -227,6 +273,8 @@ def _start(run: _Run, mem: dict, stove: dict, thermostat: dict) -> None:
         writes, cap = stove.get("ecritures"), stove.get("ecritures_max")
         left = None if writes is None or not cap else cap - writes
         for s in stove.get("reglages") or ():
+            if s["role"] in skip:
+                continue
             if s.get("a_changer") and (not s.get("reserve") or left is None or left > s["reserve"]):
                 run.stove("reglage", role=s["role"], nom=s["nom"])
         seq.update(phase="ordre", depuis=now.isoformat())

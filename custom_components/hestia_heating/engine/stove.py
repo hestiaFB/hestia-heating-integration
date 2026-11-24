@@ -33,6 +33,13 @@ def _fan(role: dict) -> str | None:
     return None if mode in (None, "unknown", "unavailable", "") else str(mode)
 
 
+def _fan_levels(role: dict) -> list[str]:
+    """The front fan's numbered modes (« 1 » to « 5 »), lowest first, for « flamme + 1 » (1.0); AUTO and OFF left out."""
+    modes = (role.get("attributes") or {}).get("fan_modes") if role.get("entity_id") else None
+    levels = [str(m) for m in modes or () if str(m).strip().isdigit() and int(str(m)) > 0]
+    return sorted(levels, key=lambda m: int(m))
+
+
 def _orders(profile: Profile, roles: dict) -> dict:
     """What the whole pilot (0.7) needs to know of the stove: whether it can be lit and stopped (the profile says how,
     and the entities are there), whether it took the order to light, and its settings to set before a start, each
@@ -134,6 +141,7 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "entites": {role: r.get("entity_id") for role, r in roles.items() if r.get("entity_id")},
         # The front fan's mode (« AUTO », « 3 »), for the card's « Ventilation » (0.8).
         "ventilation": _fan(_role(roles, "ventilation")),
+        "ventilation_niveaux": _fan_levels(_role(roles, "ventilation")),
         "granules": pellets,
         **_orders(profile, roles),
     }

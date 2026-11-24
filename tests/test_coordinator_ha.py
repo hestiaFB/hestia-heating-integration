@@ -25,8 +25,8 @@ import maison_fictive as m
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from custom_components.hestia_heating.const import API_KEY, DOMAIN  # noqa: E402
-from custom_components.hestia_heating.websocket import CARD_KEYS, card_view  # noqa: E402
-from custom_components.hestia_heating.coordinator import _burning_only  # noqa: E402
+from custom_components.hestia_heating.websocket import CARD_KEYS, SETTING_KEYS, card_view  # noqa: E402
+from custom_components.hestia_heating.coordinator import DEFAULTS, _burning_only  # noqa: E402
 from homeassistant.util import dt as dt_util  # noqa: E402
 
 
@@ -185,6 +185,11 @@ class HomeAssistantWithAHouse(unittest.IsolatedAsyncioTestCase):
         entities.async_get_or_create("climate", "aguaiot", "essai", suggested_object_id="poele", device_id=device.id,
                                      config_entry=stove_entry)
         hass.states.async_set("climate.poele", "heat", {"current_temperature": 19.5, "temperature": 21})
+        # Its front fan (the profile's « ventilation »), in AUTO.
+        entities.async_get_or_create("climate", "aguaiot", "essai_vent_front", suggested_object_id="poele_vent_front",
+                                     device_id=device.id, config_entry=stove_entry)
+        hass.states.async_set("climate.poele_vent_front", "heat", {"fan_mode": "AUTO",
+                                                                    "fan_modes": ["OFF", "AUTO", "1", "2", "3", "4", "5"]})
         # The thermostats' energy counters (and a longer id that is not the bureau's own).
         for object_id in ("vt_poele_energy", "vt_bureau_energy", "vt_bureau_test_energy"):
             hass.states.async_set(f"sensor.{object_id}", "12.5", {"device_class": "energy", "state_class": "total_increasing",
@@ -539,6 +544,19 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         with self.assertRaises(ValueError):
             await c.async_answer("peut-etre")
         self.assertTrue(await hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_flame_plus_one_goes_to_the_front_fan(self):
+        """1.0, Réglages « Ventilation »: the level the driver chose, through the profile's own fan setting."""
+        entry, c = await self._whole_mode("sensor.poele_status", "climate.poele")
+        self.assertEqual(c.data["poele"]["ventilation_niveaux"], ["1", "2", "3", "4", "5"])
+        with self.assertRaises(ValueError):
+            await c.async_set_settings({"pilote_ventilation": "6"})
+        await c.async_set_settings({"pilote_ventilation": "flamme"})
+        self.assertEqual(c._calls_of({"geste": "ventilation", "valeur": "4"}, c.data["poele"]),
+                         [("climate", "set_fan_mode", {"entity_id": "climate.poele_vent_front", "fan_mode": "4"})])
+        # Réglages can save every setting the tab shows (the card's « Gestion auto » has its own command).
+        self.assertEqual(set(DEFAULTS) - set(SETTING_KEYS), {"pilote_auto"})
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_whole_mode_survives_a_restart_without_its_sequences(self):
         entry, c = await self._whole_mode("sensor.poele_status", "climate.poele")

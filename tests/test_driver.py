@@ -371,6 +371,58 @@ class Restart(unittest.TestCase):
         self.assertEqual(kept["verrou"], "surchauffe")
 
 
+class Fan(unittest.TestCase):
+    """1.0, Réglages « Ventilation »: AUTO before each start (the default), or « flamme + 1 »."""
+    LEVELS = {"ventilation_niveaux": ["1", "2", "3", "4", "5"]}
+
+    def fans(self, orders):
+        return [o["valeur"] for o in orders if o["geste"] == "ventilation"]
+
+    def test_flame_plus_one_sets_nothing_before_a_start(self):
+        p = Pilot(ventilation="flamme")
+        self.assertEqual(gestures(boosted(p, stove(**self.LEVELS))), ["reglage:eco_stop"])
+
+    def test_lowest_while_the_smoke_is_cold_then_the_flame_plus_one(self):
+        p = Pilot(ventilation="flamme")
+        boost = thermostat("boost")
+        p.look(stove(**self.LEVELS), thermostat("eco"))
+        # Lighting, the fan in AUTO: at its lowest.
+        orders = p.look(stove("allumage", ventilation="AUTO", **self.LEVELS), boost, timedelta(minutes=1))
+        self.assertEqual(self.fans(orders), ["1"])
+        self.assertIn("Hestia met la ventilation à 1 : au plus bas tant que les fumées sont sous 110 °C.",
+                      [e["texte"] for e in p.events])
+        # Burning, the smoke at 150 °C, flame 3: 4, but not within 10 minutes of the last order.
+        hot = stove("chauffe", 3, ventilation="1", **HOT, **self.LEVELS)
+        self.assertEqual(self.fans(p.look(hot, boost, timedelta(minutes=4))), [])
+        self.assertEqual(p.wake, 360.0)
+        self.assertEqual(self.fans(p.look(hot, boost, timedelta(minutes=6))), ["4"])
+        # Flame 5: 5 at most; the smoke cooling under 110 °C later does not bring it down to the lowest.
+        top = stove("chauffe", 5, ventilation="4", **HOT, **self.LEVELS)
+        self.assertEqual(self.fans(p.look(top, boost, timedelta(minutes=10))), ["5"])
+        cooler = stove("chauffe", 1, ventilation="5", fumees=95.0, prise_w=120.0, **self.LEVELS)
+        self.assertEqual(self.fans(p.look(cooler, boost, timedelta(minutes=10))), ["2"])
+        # Stopped: nothing more, and the next burn starts at the lowest again.
+        p.look(stove("extinction", ventilation="2", **self.LEVELS), boost, timedelta(minutes=10))
+        self.assertIsNone(p.run.get("ventilation"))
+
+    def test_the_fan_already_right_or_few_orders_left_nothing_is_sent(self):
+        p = Pilot(ventilation="flamme")
+        boost = thermostat("boost")
+        p.look(stove(**self.LEVELS), thermostat("eco"))
+        self.assertEqual(self.fans(p.look(stove("allumage", ventilation="1", **self.LEVELS), boost,
+                                          timedelta(minutes=1))), [])
+        few = stove("chauffe", 3, ventilation="1", ecritures=19, **HOT, **self.LEVELS)   # 6 left
+        self.assertEqual(self.fans(p.look(few, boost, timedelta(minutes=20))), [])
+
+    def test_auto_or_a_fan_without_levels_is_left_alone(self):
+        for ctx, more in (({}, self.LEVELS), ({"ventilation": "flamme"}, {})):
+            p = Pilot(**ctx)
+            p.look(stove(), thermostat("eco"))
+            orders = p.look(stove("chauffe", 3, ventilation="AUTO", **HOT, **more), thermostat("boost"),
+                            timedelta(minutes=1))
+            self.assertEqual(self.fans(orders), [])
+
+
 class Never(unittest.TestCase):
     def test_nothing_to_a_stove_copied_from_another_house(self):
         p = Pilot(copie=True)
