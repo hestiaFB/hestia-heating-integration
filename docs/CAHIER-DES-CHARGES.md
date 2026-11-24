@@ -1,14 +1,14 @@
 # Hestia Chauffage — cahier des charges
 
-Version du 22 novembre 2026 (première version le 20 novembre). Document vivant : il suit la brique à chaque version.
+Version du 24 novembre 2026 (première version le 20 novembre). Document vivant : il décrit la brique telle qu’elle est.
 
-**Où en est la brique** : la v0.1 (lecture seule) est codée le 20 novembre 2026 et tourne au labo. La 0.2 donne à Hestia Énergie le compteur d’énergie de chaque source et le poêle. La 0.3 ajoute les plannings Hestia, simples, d’après la maquette « planning simple » validée le 20 novembre : une liste de plannings, chacun une semaine en couleurs et les thermostats qu’il règle, « En essai » d’abord. La 0.4 ajoute le pilote du poêle « à l’ombre » : il dit ce qu’il ferait, à côté de ce que font les automatisations de la maison, sans rien envoyer. La 0.5 lui permet, en option, de régler la flamme, et seulement elle. La 0.6 compte les granulés et le brasier. La 0.7 ajoute, toujours en option, le pilote entier : Hestia démarre et arrête le poêle et tient ses sécurités, comme les automatisations de la maison. Le 22 novembre, le fonctionnement complet du poêle de la maison d’essai devient la base de la gestion des poêles (« Le poêle : la base de sa gestion », plus bas), avec ce qu’il reste à faire pour le rejoindre. Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md).
+**Ce que fait la brique** : elle lit et explique le chauffage de la maison (thermostats, poêle à granulés, plannings). Elle a ses propres plannings, « En pause » d’abord, « Actif » quand vous le décidez, et un pilote du poêle, sur « Conseil » au départ (il dit ce qu’il ferait), qui peut en option régler la flamme ou conduire le poêle entier. Elle compte aussi les granulés et le brasier. Le fonctionnement complet du poêle de la maison de référence est la base de la gestion des poêles (« Le poêle : la base de sa gestion », plus bas). Le détail technique (entités, interface, commandes, profils) est dans [technique.md](technique.md) ; l’histoire des versions et les décisions, dans [dev/HISTOIRE.md](dev/HISTOIRE.md).
 
 ## Place dans l’écosystème
 
-Hestia Chauffage dit, pour toute la maison, qui chauffe ou rafraîchit, pourquoi, et ce qui vient ensuite. En v0.1 elle ne commande rien : elle lit et elle explique. Elle est prévue dans `ECOSYSTEME.md` de `hestia-ecosysteme` (« Pilote la chaleur, seul propriétaire des commandes thermiques ») ; le pilote du poêle arrive en 0.4.
+Hestia Chauffage dit, pour toute la maison, qui chauffe ou rafraîchit, pourquoi, et ce qui vient ensuite. Elle lit et explique d’abord, et ne commande que ce que vous lui confiez : les préréglages d’un planning actif, et en option la flamme ou le poêle entier. Elle est prévue dans `ECOSYSTEME.md` de `hestia-ecosysteme` (« Pilote la chaleur, seul propriétaire des commandes thermiques »).
 
-| Sens | Ce qui circule | Intensité | En v0.1 |
+| Sens | Ce qui circule | Intensité | Aujourd’hui |
 | --- | --- | --- | --- |
 | Weather → Chauffage | froid et soleil à venir, degrés-jours (`hestia_weather_api` v1, déjà publiée) | forte | lu, affiché (« −3 °C cette nuit ») |
 | Chauffage → Énergie | chaque source de chaleur : en marche, puissance, compteurs (`hestia_heating_api` v1) | moyenne | publiée, Énergie ne la lit pas encore |
@@ -17,7 +17,7 @@ Hestia Chauffage dit, pour toute la maison, qui chauffe ou rafraîchit, pourquoi
 
 Sans les autres briques, elle reste utile : thermostats, poêle et planning sur une même page. Un lien absent est dit (« Hestia Weather non installé »), jamais simulé.
 
-## Ce que la v0.1 lit
+## Ce qu’elle lit
 
 Tout est trouvé seul, rangé par pièce (les pièces de Home Assistant), et chaque source se coupe d’un interrupteur dans Réglages, comme les extensions des autres briques.
 
@@ -31,27 +31,27 @@ Tout est trouvé seul, rangé par pièce (les pièces de Home Assistant), et cha
 | Le planning existant | Scheduler (entités `switch.schedule_*` qui visent un thermostat) et l’assistant Planning de Home Assistant | prochain changement de chaque pièce et du poêle |
 | Le temps | `hestia_weather_api` v1 (`hourly`, `degree_days`) | froid de la nuit et du lendemain |
 
-La prise mesurée du poêle, si elle existe, sert de témoin hors cloud (le poêle tourne-t-il vraiment ?). Rien n’est écrit nulle part : pas d’appel de service, pas de réglage changé dans une autre intégration.
+La prise mesurée du poêle, si elle existe, sert de témoin hors cloud (le poêle tourne-t-il vraiment ?). La lecture n’écrit rien : pas d’appel de service, pas de réglage changé dans une autre intégration. Ce que Hestia peut commander (un planning actif, le pilote du poêle) est toujours en option, et dit plus bas.
 
-La clim est prévue dès la v0.1. Elle est développée et testée sur un thermostat simulé tant qu’aucune maison d’essai n’en a.
+La clim est lue comme un thermostat. Elle est développée sur un thermostat simulé, faute d’une maison de référence qui en ait une.
 
-## Ce que la v0.1 montre
+## Ce qu’elle montre
 
 Un onglet **Chauffage** dans le panneau Hestia-FB (adresse `/hestia/chauffage`) et une carte pour les tableaux de bord, sur le socle commun, comme Weather, Confort et Énergie.
 
 | Page | Ce qu’on y voit |
 | --- | --- |
 | Accueil | La maison en une phrase (« Le poêle chauffe, flamme 3. 2 radiateurs en appoint. »), puis une ligne par pièce : température, consigne, en chauffe ou non, fenêtre ouverte, prochain changement du planning |
-| Poêle | État traduit, flamme demandée par le thermostat face à la flamme réelle, sa journée (flamme et température de la pièce), fumées, alarme, ordres reçus dans la journée, stock et jours restants, ce que dit la prise. Le nettoyage à venir viendra plus tard |
+| Poêle | État traduit, flamme demandée par le thermostat face à la flamme réelle, sa journée (flamme et température de la pièce), fumées, alarme, ordres reçus dans la journée, stock et jours restants, granulés brûlés et brasier à nettoyer, ce que dit la prise |
 | Une pièce | Son thermostat, sa journée (courbe température et consigne), pourquoi elle chauffe ou non (préréglage, fenêtre, délestage, sécurité) |
-| Planning | En v0.1, la journée lue dans Scheduler. Depuis la 0.3, la liste des plannings Hestia (une semaine en couleurs, ses thermostats, En essai ou Actif), un éditeur par planning, et les plannings de Scheduler, lus et repris en un clic |
+| Planning | La liste des plannings Hestia (une semaine en couleurs, ses thermostats, En pause ou Actif), un éditeur par planning, et les plannings de Scheduler, lus et repris en un clic |
 | Réglages et Extensions | Les sources trouvées et leurs interrupteurs, le lien poêle ↔ thermostat, le lieu d’Hestia Weather |
 
-La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce (longue ou courte) et le planning du jour. La carte d’une pièce a aussi, depuis le 23 novembre (demande de Frank), les modes de son thermostat en bas (Hors gel, Éco, Confort, Boost, ceux qu’il propose) et un clic qui ouvre le thermostat (au choix dans ses réglages : le thermostat, la page de la pièce, ou rien). Le mode est choisi par l’utilisateur et envoyé depuis son navigateur, comme avec la carte thermostat de Home Assistant : ce n’est pas une commande de Hestia, et jamais vers un thermostat recopié (boutons grisés). Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire pour la première bêta publique.
+La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce (longue ou courte) et le planning du jour. La carte d’une pièce a aussi, depuis le 23 novembre (demande de Frank), les modes de son thermostat en bas (Hors gel, Éco, Confort, Boost, ceux qu’il propose) et un clic qui ouvre le thermostat (au choix dans ses réglages : le thermostat, la page de la pièce, ou rien). Le mode est choisi par l’utilisateur et envoyé depuis son navigateur, comme avec la carte thermostat de Home Assistant : ce n’est pas une commande de Hestia, et jamais vers un thermostat recopié (boutons grisés). Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire avant la 1.0.0.
 
 ## Ce qu’elle publie
 
-Peu d’entités, aux identifiants stables dès la v0.1 (`<entrée>_<clé>`, jamais changés ensuite sauf majeur avec migration), et une interface Python versionnée pour les autres briques.
+Peu d’entités, aux identifiants stables (`<entrée>_<clé>`, jamais changés ensuite sauf majeur avec migration), et une interface Python versionnée pour les autres briques.
 
 | Entité | Clé stable | Valeurs |
 | --- | --- | --- |
@@ -68,11 +68,11 @@ Peu d’entités, aux identifiants stables dès la v0.1 (`<entrée>_<clé>`, jam
 - `maison()` : l’état de la maison en une phrase et ses chiffres.
 - `add_listener(update, brick="hestia_energy")` : prévenir une brique abonnée, qui apparaît alors « reliée » des deux côtés.
 
-Dans la version 1, une méthode s’ajoute, ne se renomme ni ne se retire. Le contrat sera décrit dans `docs/technique.md`, et la ligne ajoutée au tableau des interfaces d’`ECOSYSTEME.md`.
+Dans la version 1, une méthode s’ajoute, ne se renomme ni ne se retire. Le contrat est décrit dans [technique.md](technique.md) ; la ligne reste à ajouter au tableau des interfaces d’`ECOSYSTEME.md`.
 
 ## Le profil de poêle
 
-Un profil est un fichier de données par intégration, sans code : il dit où trouver chaque rôle sur l’appareil du poêle et comment traduire ses mots. En v0.1 seuls les rôles de lecture servent ; le pilote (0.4 et 0.5) utilise aussi `thermostat`, `flamme` et la limite d’ordres par jour ; le pilote entier (0.7), le rôle `ventilation` et les `ordres`. Les textes ci-dessous ont été relevés sur un poêle Micronova par Agua IOT, en français (« Éteindre » est le poêle éteint), avec les mots anglais du même poêle.
+Un profil est un fichier de données par intégration, sans code : il dit où trouver chaque rôle sur l’appareil du poêle et comment traduire ses mots. La lecture se sert des rôles de lecture ; le pilote utilise aussi `thermostat`, `flamme` et la limite d’ordres par jour ; le pilote entier, le rôle `ventilation` et les `ordres`. Les textes ci-dessous ont été relevés sur un poêle Micronova par Agua IOT, en français (« Éteindre » est le poêle éteint), avec les mots anglais du même poêle.
 
 ```json
 {
@@ -127,13 +127,13 @@ Depuis la 0.5, le profil dit où lire le plafond d’ordres (`option_ecritures`)
 
 ## Le poêle : la base de sa gestion
 
-Écrit le 22 novembre 2026 d’après le fonctionnement complet du poêle de la maison d’essai : un poêle à granulés Micronova de 7 kW, par le cloud Agua IOT, piloté depuis l’automne par des automatisations Home Assistant et un Versatile Thermostat. Ce document de référence reste hors du dépôt, car il contient les entités de la maison. On en garde ici les règles, les chiffres et leurs raisons. C’est la base de la gestion des poêles dans la brique : le pilote de Hestia les reprend une à une, et un autre poêle les reçoit par son profil.
+Écrit le 22 novembre 2026 d’après le fonctionnement complet du poêle de la maison de référence : un poêle à granulés Micronova de 7 kW, par le cloud Agua IOT, piloté depuis l’automne par des automatisations Home Assistant et un Versatile Thermostat. Ce document de référence reste hors du dépôt, car il contient les entités de la maison. On en garde ici les règles, les chiffres et leurs raisons. C’est la base de la gestion des poêles dans la brique : le pilote de Hestia les reprend une à une, et un autre poêle les reçoit par son profil.
 
 **Presque chaque règle vient d’un incident vécu.** Avant d’en simplifier une, lire sa raison (colonne « Pourquoi »).
 
 ### Les principes
 
-Quatre règles de la maison d’essai, dont tout le reste découle :
+Quatre règles de la maison de référence, dont tout le reste découle :
 
 1. **Le poêle est le chauffage principal, l’électrique est un tampon.** Le kWh utile du poêle coûte 2 à 2,6 fois moins cher.
 2. **Le poêle ne se rallume jamais seul.** Une extinction impose un cycle d’environ 20 minutes, et chaque allumage use la bougie d’allumage. Un seul organe envoie l’ordre d’allumage.
@@ -161,7 +161,7 @@ Et des règles de conception, valables pour toute la brique :
 | Au démarrage de Home Assistant, l’intégration du poêle peut ne pas être chargée pendant quelques minutes | tout ce qui agit au démarrage attend que l’état du poêle soit connu | fausse alerte d’extinction sur un poêle « indisponible » |
 | Au redémarrage, Versatile Thermostat passe parfois par « éteint », ou restaure « éteint » alors que le poêle brûle ; son préréglage passe par « vide » | une transition depuis « indisponible », « inconnu », « éteint » ou un préréglage vide n’est jamais une demande d’arrêt ; Hestia resynchronise (voir « Démarrer ») | deux heures sans pilotage après un redémarrage, le bouton Éteindre sans effet |
 
-**Le plafond d’ordres** (intégration Agua IOT 2.3 et suivantes) : réglable dans les options de l’intégration (`max_eeprom_writes_per_day`, 20 par défaut), remis à zéro à minuit, heure locale. Les essais ratés comptent ; la flamme, la ventilation et la consigne comptent ; l’ordre d’arrêt ne compte pas. Plafond atteint : plus aucun réglage ne passe avant minuit, sans erreur visible. Hestia lit ce plafond dans les options de l’entrée de l’intégration (le profil ne donne que la valeur par défaut) et le nombre d’ordres du jour sur le compteur de l’intégration. Elle garde 4 ordres de réserve pour pouvoir éteindre et régler le poêle au démarrage suivant (6 avant de régler la ventilation).
+**Le plafond d’ordres** (intégration Agua IOT 2.3 et suivantes) : réglable dans les options de l’intégration (`max_eeprom_writes_per_day`, 20 par défaut), remis à zéro à minuit, heure locale. Les tentatives ratées comptent ; la flamme, la ventilation et la consigne comptent ; l’ordre d’arrêt ne compte pas. Plafond atteint : plus aucun réglage ne passe avant minuit, sans erreur visible. Hestia lit ce plafond dans les options de l’entrée de l’intégration (le profil ne donne que la valeur par défaut) et le nombre d’ordres du jour sur le compteur de l’intégration. Elle garde 4 ordres de réserve pour pouvoir éteindre et régler le poêle au démarrage suivant (6 avant de régler la ventilation).
 
 ### Le montage, à ne pas défaire
 
@@ -197,7 +197,7 @@ Puis la première raison vraie :
 | la maison est assez chaude | refuse et le dit ; le préréglage reste boost : le poêle partira au prochain passage en boost |
 | sinon | démarre |
 
-*Corrigé le 22 novembre* : l’ancienne ligne disait « le poêle partira dès que l’écart se creusera ». Rien dans la maison d’essai ne relance le démarrage quand l’écart se creuse, et c’est voulu (le poêle ne se rallume jamais seul) : seul un nouveau passage en boost le relance. Hestia fait de même.
+*Corrigé le 22 novembre* : l’ancienne ligne disait « le poêle partira dès que l’écart se creusera ». Rien dans la maison de référence ne relance le démarrage quand l’écart se creuse, et c’est voulu (le poêle ne se rallume jamais seul) : seul un nouveau passage en boost le relance. Hestia fait de même.
 
 **Hestia ne démarre pas le poêle plus de 3 fois par jour** (une garde de Hestia : au-delà, c’est un geste de la personne). Un démarrage refusé, une question et ses réponses, chaque ordre et son résultat sont écrits dans le journal du jour.
 
@@ -224,7 +224,7 @@ Dans tous les états où le poêle brûle (allumage, chauffe, nettoyage), sauf a
 - **Rien à changer, rien envoyé** : la demande bouge à chaque calcul, un ordre qui redonne la même flamme vide le quota.
 - **Réserve** : avec 4 ordres ou moins sous le plafond, la flamme ne change plus.
 
-L’escalier est **une seule fonction**, appelée par le pilote et par l’affichage (« la flamme devrait être à X ») : dans la maison d’essai, sa copie pour l’affichage a pris du retard sur celle qui agit.
+L’escalier est **une seule fonction**, appelée par le pilote et par l’affichage (« la flamme devrait être à X ») : dans la maison de référence, sa copie pour l’affichage a pris du retard sur celle qui agit.
 
 ### Arrêter
 
@@ -241,7 +241,7 @@ Un thermostat **déjà** éteint ne déclenche rien : les sécurités et le bout
 1. Attendre que l’état du poêle soit connu (2 minutes au plus).
 2. Jusqu’à 3 ordres d’arrêt, 15 s entre deux, jusqu’à ce que le poêle soit en extinction, éteint, en veille ou en nettoyage. Sinon, prévenir (« Ordre d’extinction non confirmé, vérification dans 25 minutes »).
 3. **La vérification, 25 minutes après** (le cycle d’extinction dure 20 minutes : 10 criaient au loup), si le préréglage est toujours hors gel, du plus sûr au moins sûr : en extinction ou en nettoyage, c’est normal ; éteint ou en veille, c’est fait ; état connu et fumées sous 60 °C, c’est fait ; prise sous 70 W, c’est fait.
-4. Sinon : prévenir et renvoyer l’arrêt. 30 s plus tard, prise sous 70 W ou poêle éteint : confirmé. Sinon, une alerte « Le poêle chauffe toujours. Couper la prise ? » avec Couper et Ignorer. **Sans réponse en 5 minutes, la prise est coupée** (le choix de la maison d’essai, un réglage chez Hestia).
+4. Sinon : prévenir et renvoyer l’arrêt. 30 s plus tard, prise sous 70 W ou poêle éteint : confirmé. Sinon, une alerte « Le poêle chauffe toujours. Couper la prise ? » avec Couper et Ignorer. **Sans réponse en 5 minutes, la prise est coupée** (le choix de la maison de référence, un réglage chez Hestia).
 
 Couper la prise en pleine chauffe arrête aussi l’extracteur qui refroidit le poêle : c’est un dernier recours. La page n’offre jamais la prise en bascule : elle ouvre sa fiche. Le bouton « Couper la prise » d’une alerte, d’où qu’elle vienne, coupe la prise et le confirme.
 
@@ -255,9 +255,9 @@ Couper la prise en pleine chauffe arrête aussi l’extracteur qui refroidit le 
 | Brasier à nettoyer | aucun | prévient : la chauffe en cours finit, le prochain démarrage est bloqué |
 | Maison assez chaude | 2 min | hors gel, donc arrêt |
 
-- **Un poêle muet ne coupe pas le thermostat** (le choix de la maison d’essai) : les ordres ne passent plus, couper ne ferait qu’arrêter la modulation et perdre la trace. Le seul levier qui marche encore est la prise.
+- **Un poêle muet ne coupe pas le thermostat** (le choix de la maison de référence) : les ordres ne passent plus, couper ne ferait qu’arrêter la modulation et perdre la trace. Le seul levier qui marche encore est la prise.
 - **Les 2 minutes de la maison assez chaude** : au redémarrage de Home Assistant, la condition s’est éteinte 14 secondes, le temps que ses sondes reviennent ; sans délai, le poêle passait en hors gel en pleine chauffe.
-- **La veille** : dans la maison d’essai, les sécurités partent sur un changement d’état, qui peut être manqué (un redémarrage, un rechargement) ; une veille repasse toutes les 2 minutes et au démarrage. Hestia décide sur l’état à chaque calcul, pas sur les changements : la veille est faite à chaque calcul.
+- **La veille** : dans la maison de référence, les sécurités partent sur un changement d’état, qui peut être manqué (un redémarrage, un rechargement) ; une veille repasse toutes les 2 minutes et au démarrage. Hestia décide sur l’état à chaque calcul, pas sur les changements : la veille est faite à chaque calcul.
 
 ### Les granulés
 
@@ -274,7 +274,7 @@ Ce sont des ordres de grandeur, pas des mesures : la forme est bonne, l’échel
 
 **Les kilos** : le débit intégré dans le temps, puis par jour et par saison. La saison va du 1er septembre au 31 août, ou part du mois où Suivi Stock Pellet commence la sienne, pour que les deux comptent la même saison (une saison au 1er janvier couperait l’hiver en deux). Un arrêt de Home Assistant ne compte rien : plutôt rien qu’une supposition.
 
-**Le nettoyage du brasier** : seuil réglable, **15 kg** par défaut (un sac). Le brasier était déjà sale à 18 kg. Les kilos depuis le dernier nettoyage se calent sur les sacs déclarés dans Suivi Stock Pellet : un sac déclaré, c’est un réservoir vide, donc un sac entier brûlé depuis le remplissage précédent. La correction apprise (sac ÷ estimation) est bornée entre 0,7 et 1,6 ; l’estimation seule comptait 30 % trop bas. Hestia n’apprend pas du premier sac qu’elle voit : elle ne sait pas si le réservoir était vide quand elle a commencé à compter. « J’ai nettoyé » remet le compteur à zéro (arrondi vers le bas, avec une marge de 0,5 kg), et remet le thermostat en hors gel et allumé, ce qui lève le verrou. **Le nettoyage bloque le prochain démarrage, jamais la chauffe en cours.** Avec le pilote entier (0.7), un démarrage refusé pour le brasier éteint le thermostat, et « J’ai nettoyé », sur la page Poêle ou le téléphone, le remet en hors gel et allumé. À l’ombre ou en « Flamme », « J’ai nettoyé » ne fait que remettre le compteur à zéro, et le refus n’est que dit.
+**Le nettoyage du brasier** : seuil réglable, **15 kg** par défaut (un sac). Le brasier était déjà sale à 18 kg. Les kilos depuis le dernier nettoyage se calent sur les sacs déclarés dans Suivi Stock Pellet : un sac déclaré, c’est un réservoir vide, donc un sac entier brûlé depuis le remplissage précédent. La correction apprise (sac ÷ estimation) est bornée entre 0,7 et 1,6 ; l’estimation seule comptait 30 % trop bas. Hestia n’apprend pas du premier sac qu’elle voit : elle ne sait pas si le réservoir était vide quand elle a commencé à compter. « J’ai nettoyé » remet le compteur à zéro (arrondi vers le bas, avec une marge de 0,5 kg), et remet le thermostat en hors gel et allumé, ce qui lève le verrou. **Le nettoyage bloque le prochain démarrage, jamais la chauffe en cours.** Avec le pilote entier (0.7), un démarrage refusé pour le brasier éteint le thermostat, et « J’ai nettoyé », sur la page Poêle ou le téléphone, le remet en hors gel et allumé. En « Conseil » ou en « Flamme », « J’ai nettoyé » ne fait que remettre le compteur à zéro, et le refus n’est que dit.
 
 **L’énergie et le prix** :
 
@@ -308,10 +308,10 @@ Toute la logique d’affichage vit dans le calcul, la page ne fait que la mettre
 - **Oui** et **Non**, seulement quand une question attend. Sans Non, il faudrait attendre 15 minutes, la page en alerte tout ce temps.
 - **Les notifications** vont au destinataire choisi dans Réglages, avec une étiquette par sujet (une nouvelle remplace l’ancienne) : thermostat éteint, saison douce, refus, ordre d’allumage refusé, alarme, surchauffe, poêle muet, brasier, arrêt non confirmé, prise coupée, coupure de rattrapage, reprise après un redémarrage. Les plus graves restent aussi dans les notifications de Home Assistant. Leurs boutons : Oui, Non, J’ai nettoyé, Couper la prise, Ignorer.
 
-## Les pièces, le planning et le bilan : ce que la maison d’essai apprend
+## Les pièces, le planning et le bilan : ce que la maison de référence apprend
 
 - **Une pièce chauffe** quand son thermostat chauffe **ou** que sa puissance moyenne du cycle est au-dessus de zéro : `hvac_action` seul disait « poêle seul » au-dessus de « électrique 3 % ».
-- **L’ouvrant** se lit dans le Versatile Thermostat, à chaque fois, jamais recopié : une pièce recâblée suit seule. Une chauffe avec l’ouvrant ouvert est urgente ; l’ouvrant ouvert sans chauffe est une info. L’ouvrant de la pièce du poêle n’est pas suivi par son thermostat : Hestia alerte, elle ne coupe pas (point ouvert n° 6).
+- **L’ouvrant** se lit dans le Versatile Thermostat, à chaque fois, jamais recopié : une pièce recâblée suit seule. Une chauffe avec l’ouvrant ouvert est urgente ; l’ouvrant ouvert sans chauffe est une info. L’ouvrant de la pièce du poêle n’est pas suivi par son thermostat : Hestia alerte, elle ne coupe pas (point ouvert n° 5).
 - **Pas de consigne affichée pour un thermostat éteint** (« 20,3 → 18 » laissait croire que la pièce visait 18 °C alors que le poêle la chauffait). Pas de jauge de demande si elle est inconnue. Seuls les préréglages que le thermostat propose ; « manuel » n’est jamais un bouton. Les boutons − et + suivent le pas du thermostat (au moins 0,5 °C), dans ses bornes.
 - **Une pièce à 100 % qui ne monte pas** (pente sous 0,2 °C par heure) : « consigne hors d’atteinte ». La sécurité du Versatile Thermostat déclenchée : urgent.
 - **Les sèche-serviettes** sont dans le planning, **jamais dans le bilan** : ils sèchent du linge, le poêle ne peut pas les remplacer. Un sèche-serviettes oublié une douzaine de jours avait faussé le bilan et trois conseils. Allumé depuis plus de 24 h : « oublié ? ».
@@ -326,7 +326,7 @@ Ce qui dépend du foyer, avec sa valeur par défaut. | Réglage | Par défaut | 
 | --- | --- | --- |
 | Thermostat pilote du poêle | à choisir (trouvé seul quand c’est possible) | 0.1 |
 | Température de la maison | la moyenne des pièces chauffées, ou un capteur choisi | 0.4 |
-| Le pilote : à l’ombre, flamme, entier, éteint | à l’ombre | 0.4, 0.5, 0.7 |
+| Le pilote : Conseil, Flamme, Entier, Éteint | Conseil | 0.4, 0.5, 0.7 |
 | Flamme au plus bas (un interrupteur) | aucun | 0.5 |
 | Paliers de flamme | 45 · 65 · 85 % | 0.4, fixe |
 | Marge de flamme | 7 points | 0.4, fixe |
@@ -351,32 +351,6 @@ Ce qui dépend du foyer, avec sa valeur par défaut. | Réglage | Par défaut | 
 
 « Fixe » : une constante du pilote aujourd’hui, à ouvrir en réglage quand un deuxième foyer en aura besoin. Les constantes qui restent fixes : 4,8 kWh par kg, rendement 0,87, base des degrés-jours 18 °C, fumées froides sous 60 °C, prise en veille sous 70 W, prise active au-dessus de 60 W, alarme tenue 2 minutes.
 
-## Hestia face à la maison d’essai
-
-Où en est Hestia 0.7 par rapport à ce fonctionnement. Le pilote « à l’ombre » compare ses gestes à ceux de la maison chaque jour ; le pilote entier, en option, les fait.
-
-| Règle | Hestia 0.7 | À faire |
-| --- | --- | --- |
-| Escalier, marge de 7 points, hausse par demi-heure, réserve de 4, flamme au plus bas | pareil, en une seule fonction | — |
-| Pièce trop chaude, sur la température **lissée** | pareil depuis le 22 novembre (`ema_temp`) ; la sécurité des 28 °C lit la température en direct | — |
-| Plafond d’ordres lu dans les options de l’intégration | lu dans l’entrée de l’extension (`max_eeprom_writes_per_day`), sinon 20 | — |
-| Jamais « 1 sur 5 » poêle éteint | pas de flamme poêle éteint, seulement la flamme réglée en pâle ; courbe à 0 | — |
-| Débit, kilos, énergie et prix des granulés | pareil depuis la 0.6 : débit par état et flamme, facteur appris sur les sacs, saison | — |
-| Énergie du poêle sur les kilos | depuis la 0.6, l’interface donne à Énergie l’énergie comptée par Hestia, jamais le compteur du thermostat | Énergie : la lire (son fil) |
-| Saison douce sans réponse, poêle déjà en route : rien coupé | pareil | — |
-| Arrêt après 30 s d’« éteint », pas au retour d’un redémarrage | pareil ; un poêle relu au redémarrage n’est pas non plus un démarrage | — |
-| Brasier : compteur, seuil, « J’ai nettoyé » | pareil depuis la 0.6 (sur les sacs, sinon sur les kilos de Hestia) | — |
-| Brasier : blocage du prochain démarrage, thermostat remis en hors gel | pilote entier : thermostat éteint au refus, « J’ai nettoyé » le remet en hors gel et allumé ; à l’ombre, le refus est dit | — |
-| Démarrage : réglages seulement s’ils changent, contrôle d’allumage, rechargement | pilote entier : pareil (le poêle a pris l’ordre quand son thermostat interne passe en « chauffe »), 3 démarrages par jour au plus | l’essayer à la maison |
-| Arrêt vérifié à 25 min, escalade, prise | pilote entier : pareil, la prise coupée sans réponse si Réglages le permettent | l’essayer à la maison |
-| Alarme, thermostat déjà éteint | pilote entier : Hestia lance l’arrêt elle-même | — |
-| Reprise après un redémarrage | pilote entier : pareil (rien n’est envoyé au poêle) | — |
-| Veille des sécurités | faite à chaque calcul, sur l’état | — |
-| Question de saison douce, notifications, boutons | pilote entier : sur le téléphone choisi (Oui, Non, J’ai nettoyé, Couper la prise, Ignorer) et sur la page Poêle ; les plus graves aussi dans les notifications de Home Assistant | — |
-| Les boutons Allumer et Éteindre de la page | non | plus tard |
-| Gestion automatique (un interrupteur) | le réglage du pilote (à l’ombre, flamme, entier, éteint) | — |
-| Montage du poêle (consigne interne, ECO Stop) | ECO Stop lu | lire aussi la consigne interne, et le signaler s’il change |
-
 ## Points ouverts
 
 À trancher avec Frank avant de les figer dans Hestia.
@@ -389,48 +363,12 @@ Où en est Hestia 0.7 par rapport à ce fonctionnement. Le pilote « à l’ombr
 6. ~~**La saison des compteurs**~~ : tranché dans la 0.6, du 1er septembre au 31 août, ou du mois où Suivi Stock Pellet commence la sienne.
 7. **Le conseil « allumer le poêle »** part même hors saison, ou quand la température dehors est inconnue ; rien ne traite un granulé plus cher que l’électricité.
 8. **L’anticipation du démarrage** est reportée : montrer le prochain changement de préréglage du planning, pas une heure calculée.
-9. **Le plafond d’ordres de la maison d’essai** : le document de la maison et son capteur de quota ne donnent pas le même plafond. Hestia le lira à la source, dans les options de l’intégration.
+9. **Le plafond d’ordres de la maison de référence** : le document de la maison et son capteur de quota ne donnent pas le même plafond. Hestia le lira à la source, dans les options de l’intégration.
 10. **Pourquoi Versatile Thermostat restaure parfois « éteint » au redémarrage** : inconnu. La reprise corrige l’effet, pas la cause.
 
 ## La suite
 
-La v0.1 ne commandait rien. Les versions, et la suite proposée :
-
-1. **0.1** — la brique en lecture seule.
-2. **0.2** — l’interface vers Énergie, puis Énergie l’affiche à la place de sa devinette par une source « gaz ».
-3. **0.3** — les plannings maison, simples : une semaine en couleurs (tous les jours pareils, semaine et week-end, ou jour par jour), des plages, le niveau du reste du temps, et les thermostats cochés. Un thermostat suit un seul planning. Scheduler reste lu, et un de ses plannings se reprend dans Hestia en un clic. Chaque planning commence « En essai » et n’envoie, une fois « Actif », que des préréglages, jamais un allumage ou un arrêt (détail dans [technique.md](technique.md#le-planning-hestia)). Les matins froids et le prix de l’électricité, prévus d’abord, sont laissés de côté pour rester simple.
-4. **0.4** — le pilote de poêle « à l’ombre » : il calcule ce qu’il ferait (démarrer, flamme 3, refuser pour surchauffe…) et l’affiche à côté de ce que font les automatisations de la maison, sans rien envoyer.
-5. **0.5** — le pilote règle la flamme, en option (Réglages, « Flamme ») : la flamme selon la demande du thermostat, un ordre à la fois, vérifié 5 min après, 12 ordres par jour au plus, et jamais dans la réserve de 4 sous le plafond de l’extension. Le démarrage, l’arrêt et les sécurités restent aux automatisations de la maison. Si la flamme change sans Hestia, ou si le poêle ne suit pas trois fois, Hestia la laisse jusqu’au lendemain. Revenir « À l’ombre » est le retour arrière en un clic. Jamais au labo.
-6. **Avant d’essayer « Flamme » à la maison** — fait le 22 novembre : la température lissée, le plafond d’ordres lu dans l’extension, jamais « 1 sur 5 » poêle éteint, l’exception de la saison douce, et pas de faux écart après un redémarrage.
-7. **0.6** — les granulés : débit, kilos, nettoyage du brasier (compteur, seuil, calage sur les sacs, « J’ai nettoyé »), énergie et prix ; l’énergie du poêle donnée à Hestia Énergie sur les kilos. Rien n’est envoyé au poêle pour ça.
-8. **0.7** — le pilote entier, profil Micronova, en option (Réglages, « Entier ») : le démarrage et ses cas, le contrôle d’allumage, l’arrêt vérifié et son escalade, les sécurités, la reprise après un redémarrage, les questions et les notifications. Il faut d’abord couper toutes les automatisations du poêle de la maison : deux pilotes en même temps se contrediraient. Revenir « À l’ombre » est le retour arrière en un clic. Jamais au labo : rien n’est envoyé à un poêle ou à un thermostat recopié, ni ordre ni notification.
-9. Ensuite : les boutons Allumer et Éteindre de la page Poêle.
-10. Les autres profils (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un, avec des testeurs.
-
-## Le dépôt, les tests, le labo
-
-**Le dépôt**, sur le modèle d’Énergie :
-
-- `custom_components/hestia_heating/` : `__init__.py`, `config_flow.py`, `coordinator.py`, `reader.py` (tout ce qui touche Home Assistant), `engine/` (Python pur, testé sans Home Assistant), `profiles/*.json`, `api.py`, `websocket.py`, `sensor.py`, `binary_sensor.py`, `panel.py`, les copies du socle ; `frontend/` compilé.
-- `frontend/` (le panneau), `card/` (la carte), `tests/` (avec une maison inventée, `maison_fictive.py`), `docs/` (ce cahier, `technique.md`), `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `hacs.json`, la CI (tests, hassfest, HACS, fichiers compilés à jour).
-- Version `0.1.0b1`. Commits au nom de hestiaFB.
-
-**Vitesse** : la brique écoute seulement les entités qu’elle a trouvées, recalcule la pièce qui a changé, et répond au panneau en moins de 0,25 s au labo. Aucun calcul sur l’historique en v0.1, sauf la courbe d’une pièce à la demande.
-
-**Au labo** : la v0.1 ne commande rien, donc elle peut tourner au labo sans risque pour un vrai poêle. Il faut ajouter `chauffage` à `hestia-labo/deployer.sh`, puis mesurer le panneau avec `mesurer-hub.py`. Un seul déploiement à la fois.
-
-## Décisions prises
-
-Le 22 novembre 2026 :
-
-- Le fonctionnement du poêle de la maison d’essai, écrit par Frank, est la base de la gestion des poêles dans la brique. Ses règles, leurs chiffres et leurs raisons sont repris plus haut, sans les données de la maison.
-- Frank : « allons-y » pour les granulés et le brasier (0.6), puis le pilote entier (0.7 : le démarrage et l’arrêt complets), en option éteinte par défaut.
-
-Le 20 novembre 2026 :
-
-- Nom : Hestia Chauffage, domaine `hestia_heating`, onglet `chauffage`.
-- La brique pilotera le poêle, en option éteinte par défaut, après une phase « à l’ombre ».
-- La clim fait partie de la v0.1 (testée sur un thermostat simulé).
-- Le planning maison est la plus-value de la brique.
-- Hestia Énergie ne change pas d’ici là.
-- Une maquette de l’Accueil et de la page Poêle avant le code.
+- Les boutons Allumer et Éteindre de la page Poêle (la carte du poêle les a déjà).
+- Les autres profils de poêle (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un.
+- Hestia Énergie qui lit Chauffage pour le bilan en euros.
+- L’onglet et les cartes en anglais.

@@ -605,7 +605,7 @@ def _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, ai
                 todo.append({"titre": f"Hestia n’a pas le droit de régler {s['nom']}",
                              "texte": f"Il est dans « {p['nom']} », qui est actif, mais il n’est pas coché dans Réglages, "
                                       "« Ce que Hestia peut régler » : Hestia ne lui envoie rien. Cochez-le, ou remettez "
-                                      "le planning en essai.",
+                                      "le planning en pause.",
                              "page": "reglages"})
             try:
                 last = datetime.fromisoformat((applied.get(t) or {}).get("a") or "")

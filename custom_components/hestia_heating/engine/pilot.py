@@ -226,7 +226,7 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
         why = ("Le thermostat est passé hors gel." if preset == "frost" else "Le thermostat est éteint." if wants_off
                else f"Assez chaud : {house_text} pour {degrees(target_c)} visés. Le pilote passerait le thermostat "
                     "hors gel.")
-        decision = _decision("arreter", "Arrêter le poêle", why + " Il éteindrait le poêle (3 essais au plus), puis "
+        decision = _decision("arreter", "Arrêter le poêle", why + " Il éteindrait le poêle (3 tentatives au plus), puis "
                              "vérifierait l’arrêt : son état, ses fumées sous 60 °C ou sa prise sous 70 W.", None, stove)
     # 4. Start, on the step up only (shown a few minutes, while the stove lights).
     elif start and not burning:
