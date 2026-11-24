@@ -31,10 +31,13 @@ type FirePot={kg:number|null;seuil_kg:number;a_nettoyer:boolean;bientot?:boolean
 type Use={debit_kg_h:number;kg_jour:number;kg_saison:number;prix_kg:number|null;cout_jour:number|null;cout_heure:number|null;brasier?:FirePot};
 type Stove={nom:string;modele?:string|null;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;
  fumees:number|null;prise:string|null;prise_w:number|null;demande_pct:number|null;consigne?:number|null;ecritures:number|null;ecritures_max:number|null;
- alarme:boolean|null;alarme_texte:string|null;allume?:boolean|null;conso?:Use;pilote?:{mode:string;titre?:string;texte?:string};
+ alarme:boolean|null;alarme_texte:string|null;allume?:boolean|null;conso?:Use;pilote?:{mode:string;titre?:string;texte?:string;flamme?:number|null;flamme_manuelle?:boolean};
  boutons?:{allumer?:Order;eteindre?:Order};ventilation?:string|null;copie?:boolean;entites?:Record<string,string>;
+ flamme_min?:number;ventilation_niveaux?:string[];ventilation_choix?:string;eco_stop?:boolean|null;eco_stop_delai?:number|null;consigne_poele?:number|null;air?:number|null;
  flamme_basse?:{entity_id:string;nom:string;on:boolean|null}|null;prise_switch?:{entity_id:string;on:boolean|null}|null;
  phrase?:{texte:string;ton:string}};
+/** Hestia sets the flame (« Flamme : Automatique », 1.0.0b3). */
+const flameByHestia=(s:Stove)=>s.pilote?.mode==='flamme'||s.pilote?.mode==='entier'&&!s.pilote.flamme_manuelle;
 type Pellets={stock_sacs:number|null;stock_kg:number|null;jours:number|null;kg_par_jour?:number|null};
 type Lane={id:string;nom:string;segments:{de:number;a:number;ton:string}[];source?:string|null;bloque?:boolean};
 type Planning={source:string|null;jour?:string;jour_nom:string;labo?:boolean;essai?:boolean;maintenant_min:number;lignes:Lane[];
@@ -310,7 +313,9 @@ class HestiaHeatingCard extends LitElement {
   const s=v.poele;
   if(!s)return html`<div class="head"><h2 class="nw-title">${this._config.name||'Poêle'}</h2></div><p class="empty">Aucun poêle trouvé.</p>`;
   const room=v.pieces.find(r=>r.poele),{d,series,span}=this._window(v);
-  const auto=s.pilote?.mode==='flamme'||s.pilote?.mode==='entier',max=s.flamme_max||5,level=s.en_feu?s.flamme??0:0;
+  // « Flamme : Automatique » (1.0.0b3): Hestia sets the flame, in « Flamme » or in « Entier » unless the flame is left
+  // to the user there.
+  const auto=flameByHestia(s),max=s.flamme_max||5,level=s.en_feu?s.flamme??0:0;
   const lane=v.planning.lignes.find(l=>l.id==='poele'),segments=lane?.segments??[],tones=[...new Set(segments.map(x=>x.ton))];
   const flame=series.flamme??[];
   // The last start within the trace, and the stop the planning has next while the stove burns.
@@ -346,7 +351,7 @@ class HestiaHeatingCard extends LitElement {
     `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
     <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`,'poele','Réglages du poêle')}
    <div class="pair">${clock}<div class="side">${why?html`<p class="why">${why}</p>`:nothing}
-    <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Gestion auto':'À la main'}</span></div></div>
+    <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Flamme auto':'Flamme à la main'}</span></div></div>
    ${this._stoveButtons(s,auto)}
   </div>
   ${this._fireDrawer(v,s,room)}
@@ -354,7 +359,7 @@ class HestiaHeatingCard extends LitElement {
   return html`<div class="top">
    ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
     `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
-    <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Gestion auto':'À la main'}</span>
+    <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Flamme auto':'Flamme à la main'}</span>
     <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`,'poele','Réglages du poêle')}
    ${clock}
    <div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
@@ -384,10 +389,10 @@ class HestiaHeatingCard extends LitElement {
   const since=s.depuis?` depuis ${hm(new Date(s.depuis))}`:'';
   const now=s.en_feu&&level?`Flamme ${level}.${room&&room.temperature!=null?` ${room.nom} : ${deg(room.temperature)}${s.consigne!=null?`, consigne ${deg(s.consigne)}`:''}.`:''}`:
    `${({eteint:'Poêle éteint',allumage:'Le poêle s’allume',chauffe:'En chauffe',nettoyage:'Le poêle se nettoie',extinction:'Le poêle s’éteint'} as Record<string,string>)[s.etat]??'Le poêle ne dit pas son état'}${since}.`;
-  return (s.pilote&&!auto?'Gestion auto coupée : Hestia ne touche pas au poêle. ':'')+now;
+  return (s.pilote&&!auto?'Flamme à la main : Hestia ne la change pas. ':'')+now;
  }
- /* « Éteindre » or « Allumer » (the profile's own orders), « Gestion auto » (Hestia's pilot, in the mode chosen in
-    Réglages), « J’ai nettoyé » (Hestia's count only). The first two and « J’ai nettoyé » ask again before they are
+ /* « Éteindre » or « Allumer » (the profile's own orders), « Flamme auto » (Hestia sets the flame, « Gestion auto »
+    before 1.0.0b3), « J’ai nettoyé » (Hestia's count only). The first two and « J’ai nettoyé » ask again before they are
     sent; nothing is sent to a stove copied from another house. */
  private _stoveButtons(s:Stove,auto:boolean){
   const lit=s.allume??(s.en_feu||s.etat==='allumage'),order=s.boutons?.[lit?'eteindre':'allumer'];
@@ -396,7 +401,7 @@ class HestiaHeatingCard extends LitElement {
    ${order?html`<button class=${'btn'+(ask==='power'?' ask':'')} ?disabled=${locked||this._busy==='power'} title=${why}
      @click=${()=>this._press('power',()=>this._service(order),true)}>${POWER}${ask==='power'?lit?'Vraiment éteindre ?':'Vraiment allumer ?':lit?'Éteindre':'Allumer'}</button>`:nothing}
    <button class=${'btn auto'+(auto?' on':'')} aria-pressed=${auto?'true':'false'} ?disabled=${locked||this._busy==='auto'} title=${why}
-     @click=${()=>this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:!auto}))}><span class="switch"><i></i></span>Gestion auto</button>
+     @click=${()=>this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:!auto}))}><span class="switch"><i></i></span>Flamme auto</button>
    ${pot?html`<button class=${'btn'+(pot.a_nettoyer?' due':'')+(ask==='clean'?' ask':'')} ?disabled=${this._busy==='clean'}
      @click=${()=>this._press('clean',()=>this._hass!.callWS({type:'hestia_heating/brasier_nettoye'}),true)}>${BRUSH}${ask==='clean'?'Remettre à zéro ?':'J’ai nettoyé'}</button>`:nothing}
   </div>
@@ -406,12 +411,10 @@ class HestiaHeatingCard extends LitElement {
   const c=s.conso,rate=s.en_feu&&c?.debit_kg_h?c.debit_kg_h:null,hour=rate&&c?.cout_heure!=null?`${eur(c.cout_heure)} de l’heure`:null;
   const say=[s.fumees!=null?`fumées ${num(s.fumees,0)} °C`:null,rate?`${num(rate,2)} kg/h`:s.en_feu?null:'à l’arrêt',hour].filter(Boolean).join(' · ');
   return this._drawer('feu','Le feu et les réglages',say,!this._config.compacte,()=>{
-   const locked=!!s.copie,low=s.flamme_basse,fan=s.ventilation,fanId=s.entites?.ventilation,plug=s.prise_switch,next=this._soon(room?.prochain);
+   const locked=!!s.copie,low=s.flamme_basse,plug=s.prise_switch,next=this._soon(room?.prochain);
    const chips=[
     low?html`<button class=${'chip'+(low.on?' on stove':'')} aria-pressed=${low.on?'true':'false'} ?disabled=${locked||this._busy==='low'} title=${low.nom}
       @click=${()=>this._press('low',()=>this._hass!.callService(low.entity_id.split('.')[0],low.on?'turn_off':'turn_on',{entity_id:low.entity_id}))}><i class="dot"></i>Flamme réduite</button>`:null,
-    fan!=null&&fanId?html`<button class=${'chip'+(fan.toLowerCase()!=='auto'?' on cold':'')} ?disabled=${locked} title="Ouvrir la ventilation"
-      @click=${()=>this._more(fanId)}><i class="dot"></i>Ventilation ${fan.toLowerCase()==='auto'?'auto':fan}</button>`:null,
     plug?html`<button class=${'chip'+(plug.on?' on calm':'')} ?disabled=${locked} title="Ouvrir la prise"
       @click=${()=>this._more(plug.entity_id)}><i class="dot"></i>${plug.on?'Prise allumée':plug.on===false?'Prise coupée':'Prise'}</button>`:null,
    ].filter(Boolean);
@@ -421,8 +424,38 @@ class HestiaHeatingCard extends LitElement {
    ].filter(Boolean);
    return html`<div class="tiles">${this._tile(room?.temperature!=null?num(room.temperature):'—',`${room?room.nom.toLowerCase():'pièce'}, °C`,s.consigne!=null?`→ ${num(s.consigne)}`:'')}
      ${this._tile(s.fumees!=null?num(s.fumees,0):'—','fumées','°C')}${this._tile(rate?num(rate,2):'—',hour??'granulés','kg/h')}</div>
+    ${this._controls(s)}
     ${chips.length?html`<div class="chips">${chips}</div>`:nothing}${rows.length?html`<div class="rows boxed">${rows}</div>`:nothing}`;
   },'fire');
+ }
+ /** The stove's settings on its card (1.0.0b3), as in Réglages › Poêle à granulés: the flame (Automatique or a
+     power from 1 to 5), the fan (by the stove, by Hestia, or a speed) and the ÉCO Stop. The user presses them: a power
+     or a speed goes to the stove at once, as from its app; greyed out on a stove copied from another house. */
+ private _controls(s:Stove){
+  const locked=!!s.copie,ids=s.entites??{},auto=flameByHestia(s),busy=!!this._busy;
+  const lo=s.flamme_min??1,hi=s.flamme_max||5,set=s.flamme_reglee;
+  const settings=(reglages:Record<string,unknown>)=>this._hass!.callWS({type:'hestia_heating/set_settings',reglages});
+  const power=(n:number)=>this._press('flame',async()=>{
+   if(auto)await this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:false});
+   await this._hass!.callService('number','set_value',{entity_id:ids.flamme,value:n});});
+  const levels=s.ventilation_niveaux??[],fanBy=s.ventilation_choix??'auto',fanNow=s.ventilation;
+  const fanAuto=()=>this._press('fan',async()=>{await settings({pilote_ventilation:'auto'});
+   if(fanNow&&fanNow.toLowerCase()!=='auto'){const modes=(this._hass as unknown as {states?:Record<string,{attributes:Record<string,unknown>}>}).states?.[ids.ventilation]?.attributes.fan_modes as string[]|undefined;
+    await this._hass!.callService('climate','set_fan_mode',{entity_id:ids.ventilation,fan_mode:(modes??[]).find(m=>String(m).toLowerCase()==='auto')??'AUTO'});}});
+  const speed=(n:string)=>this._press('fan',async()=>{if(fanBy!=='manuel')await settings({pilote_ventilation:'manuel'});
+   await this._hass!.callService('climate','set_fan_mode',{entity_id:ids.ventilation,fan_mode:n});});
+  const eco=s.eco_stop,delay=s.eco_stop_delai??5;
+  const ecoSay=eco?`Le poêle s’éteint seul si sa sonde reste ${num(delay,0)} min au-dessus de ${s.consigne_poele!=null?`${num(s.consigne_poele)} °C`:'sa consigne'}${s.air!=null?` (elle lit ${num(s.air)} °C)`:''}, même sans Home Assistant.`
+   :'Le poêle ne s’éteint jamais seul : il descend à la flamme 1 et continue de brûler.';
+  const seg=(on:boolean,label:string,run:()=>void,dis=false)=>html`<button class=${'seg'+(on?' on':'')} aria-pressed=${on?'true':'false'} ?disabled=${locked||busy||dis} @click=${run}>${label}</button>`;
+  return html`<div class="ctl" @click=${(e:Event)=>e.stopPropagation()}>
+   ${ids.flamme?html`<div class="ctl-row"><b>Flamme</b><span class="segs">${seg(auto,'Auto',()=>void this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:true})),!!s.copie)}${seg(!auto,'Manuel',()=>void this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:false})))}</span>
+    <span class="steps">${Array.from({length:hi-lo+1},(_,i)=>i+lo).map(n=>html`<button class=${'step'+(set===n?' on':'')} aria-label=${`Puissance ${n}`} ?disabled=${locked||busy} @click=${()=>void power(n)}>${n}</button>`)}</span></div>`:nothing}
+   ${ids.ventilation&&levels.length?html`<div class="ctl-row"><b>Ventilation</b><span class="segs">${seg(fanBy==='auto','Par le poêle',()=>void fanAuto())}${seg(fanBy==='flamme','Par Hestia',()=>void this._press('fan',()=>settings({pilote_ventilation:'flamme'})))}${seg(fanBy==='manuel','Manuel',()=>void this._press('fan',()=>settings({pilote_ventilation:'manuel'})))}</span>
+    <span class="steps">${levels.map(n=>html`<button class=${'step'+(fanNow===n?' on':'')} aria-label=${`Vitesse ${n}`} ?disabled=${locked||busy} @click=${()=>void speed(n)}>${n}</button>`)}</span></div>`:nothing}
+   ${ids.eco_stop&&eco!=null?html`<div class="ctl-row"><b>ÉCO Stop</b><span class="segs">${seg(eco,'Activé',()=>void this._press('eco',async()=>{await this._hass!.callService('switch','turn_on',{entity_id:ids.eco_stop});await settings({poele_eco_stop:true});}))}${seg(!eco,'Coupé',()=>void this._press('eco',async()=>{await this._hass!.callService('switch','turn_off',{entity_id:ids.eco_stop});await settings({poele_eco_stop:false});}))}</span>
+    <p class="ctl-say">${ecoSay}</p></div>`:nothing}
+  </div>`;
  }
  private _pelletDrawer(v:View,s:Stove){
   const g=v.granules,c=s.conso,pot=c?.brasier,h=this._hist?.unite==='kg'?this._hist:undefined;

@@ -34,8 +34,9 @@ class Loads(unittest.IsolatedAsyncioTestCase):
 
     def test_one_home_one_entry_and_its_pages(self):
         self.assertEqual(config_flow.HeatingConfigFlow.VERSION, 1)
-        self.assertEqual([m[0] for m in panel.MENU], ["", "poele", "planning", "reglages", "extensions", "a-propos"])
-        self.assertNotIn("poele", [m[0] for m in panel.MENU_NO_STOVE])
+        # 1.0.0b3: the stove's technical page and the guide open from « Vue d'ensemble », not from the menu.
+        self.assertEqual([m[0] for m in panel.MENU], ["", "planning", "reglages", "extensions", "a-propos"])
+        self.assertEqual(panel.MENU[0][1], "Vue d’ensemble")
 
 
 if __name__ == "__main__":

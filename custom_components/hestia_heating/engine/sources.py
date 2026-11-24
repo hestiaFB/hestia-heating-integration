@@ -41,6 +41,11 @@ def is_vt(platform: str | None, attrs: dict) -> bool:
         isinstance(attrs.get("specific_states"), dict) and isinstance(attrs.get("preset_temperatures"), dict))
 
 
+# What a thermostat may be said to drive in Réglages (1.0.0b3), when the guess is wrong: « plancher » for a floor or
+# radiators fed with water.
+KINDS = ("radiateur", "clim", "pac", "vanne", "plancher", "autre")
+
+
 def kind(platform: str | None, attrs: dict) -> str:
     """« radiateur », « clim », « pac » (heats and cools), « vanne » or « autre »."""
     modes = [str(m) for m in attrs.get("hvac_modes") or []]
@@ -136,6 +141,7 @@ def read(climate: dict) -> dict:
         "vt": vt,
         "energie_stat": climate.get("energie"),
         "granules_stat": None,
+        "vu": climate.get("vu"),
     }
 
 

@@ -19,8 +19,10 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 import math
 
+from . import tuning
 from .phrases import number
 
+# Defaults: since 1.0.0b3 the kWh, the efficiency, the rates and « soon » may be set in Réglages › Avancé.
 KWH_PER_KG = round(4.8 * 0.87, 3)
 STEP_MAX = timedelta(minutes=5)
 HOT_PLUG_W = 60
@@ -53,8 +55,8 @@ def bags_of(pellets: dict | None, bag_kg: float | None = None) -> dict | None:
 
 
 def rate(stove: dict, rates: dict | None = None) -> float:
-    """kg/h now, from the stove's state."""
-    rates = rates or RATES
+    """kg/h now, from the stove's state: the profile's rates, each replaced by the one set in Réglages › Avancé."""
+    rates = tuning.rates(rates or RATES)
     flames = rates.get("flammes") or RATES["flammes"]
     middle = flames[len(flames) // 2]
     state = stove.get("etat")
@@ -64,7 +66,7 @@ def rate(stove: dict, rates: dict | None = None) -> float:
         flame = stove.get("flamme")
         return float(flames[flame - 1]) if isinstance(flame, int) and 1 <= flame <= len(flames) else float(middle)
     plug = stove.get("prise_w")
-    if state == "inconnu" and not stove.get("a_traduire") and plug is not None and plug > HOT_PLUG_W:
+    if state == "inconnu" and not stove.get("a_traduire") and plug is not None and plug > tuning.get("prise_brule_w"):
         return float(middle)
     return 0.0
 
@@ -174,11 +176,11 @@ def view(mem: dict, bags: dict | None, threshold_kg: float | None, bag_price: fl
         "kg_saison": round(mem.get("kg_saison", 0.0), 1),
         "saison": mem.get("saison"),
         "total_kg": round(mem.get("total_kg", 0.0), 3),
-        "energie_kwh": round(mem.get("total_kg", 0.0) * KWH_PER_KG, 2),
-        "kwh_jour": round(mem.get("kg_jour", 0.0) * KWH_PER_KG, 1),
+        "energie_kwh": round(mem.get("total_kg", 0.0) * tuning.kwh_per_kg(), 2),
+        "kwh_jour": round(mem.get("kg_jour", 0.0) * tuning.kwh_per_kg(), 1),
         "correction": mem.get("correction", 1.0),
         "prix_kg": None if price_kg is None else round(price_kg, 3),
-        "prix_kwh": None if price_kg is None else round(price_kg / KWH_PER_KG, 3),
+        "prix_kwh": None if price_kg is None else round(price_kg / tuning.kwh_per_kg(), 3),
         "cout_jour": None if price_kg is None else round(mem.get("kg_jour", 0.0) * price_kg, 2),
         "cout_heure": None if price_kg is None or not rate_now else round(rate_now * price_kg, 2),
         "brasier": {
@@ -186,7 +188,7 @@ def view(mem: dict, bags: dict | None, threshold_kg: float | None, bag_price: fl
             "kg": burnt,
             "nettoye_le": mem.get("nettoye_le"),
             "a_nettoyer": burnt is not None and burnt >= threshold,
-            "bientot": burnt is not None and threshold - FIRE_POT_SOON_KG <= burnt < threshold,
+            "bientot": burnt is not None and threshold - tuning.get("brasier_bientot_kg") <= burnt < threshold,
             "par_les_sacs": bool((bags or {}).get("sac_kg") and mem.get("sacs_nettoyage") is not None),
         },
     }

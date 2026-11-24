@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from . import tuning
 from .phrases import degrees, hour, number
-from .pilot import MILD_ON_C, OVERHEAT_C
 
 PLUG_HOT_W = 60            # a silent stove whose plug draws more burns without orders
 SLOW_C_PER_H = 0.4         # under this, the room « monte lentement »
@@ -56,13 +56,13 @@ def sentence(stove: dict, thermostat: dict | None, room: dict | None, now: datet
     if stove.get("alarme") or state == "alarme":
         text = stove.get("alarme_texte")
         return _say(f"En alarme : {text}" if text else "En alarme", "alert")
-    if burning and t is not None and t > OVERHEAT_C:
+    if burning and t is not None and t > tuning.get("surchauffe_c"):
         return _say(f"Surchauffe : la pièce est à {degrees(t)}", "alert")
     if state == "inconnu":
         if stove.get("a_traduire"):
             return _say(f"Le poêle dit « {stove.get('texte')} » : un mot à traduire dans son profil", "off")
         plug = stove.get("prise_w")
-        if plug is not None and plug > PLUG_HOT_W:
+        if plug is not None and plug > tuning.get("prise_brule_w"):
             return _say(f"Ne répond plus, mais sa prise tire {number(plug, 0)} W : il brûle sans commande", "alert")
         return _say("Ne répond plus", "act")
     if drive.get("injoignable"):
@@ -104,6 +104,6 @@ def sentence(stove: dict, thermostat: dict | None, room: dict | None, now: datet
         if house_c is not None and target is not None and house_c >= target:
             return _say(f"Éteint : la maison est déjà à {degrees(house_c)} pour {degrees(target)}", "off")
         return _say("Éteint : le thermostat est déjà en boost, démarrage au prochain passage en boost", "off")
-    if pilot.get("mode") == "entier" and pilot.get("maison_c") is not None and pilot["maison_c"] >= MILD_ON_C:
+    if pilot.get("mode") == "entier" and pilot.get("maison_c") is not None and pilot["maison_c"] >= tuning.get("saison_douce_c"):
         return _say("Éteint : saison douce, le prochain démarrage demandera votre accord", "off")
     return _say("Éteint, démarrage au prochain passage en boost", "off")

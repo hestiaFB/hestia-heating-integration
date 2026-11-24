@@ -340,3 +340,17 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .pt b { font-size:var(--nw-fs-text); } .pt span { font-size:var(--nw-fs-small); line-height:1.4; color:var(--nw-fg2); }
 .note.left { text-align:left; }
 .link { border:0; background:none; padding:0; width:fit-content; color:var(--nw-accent); font-size:var(--nw-fs-small); font-weight:650; cursor:pointer; }
+
+/* The stove's settings in its drawer (1.0.0b3): the flame, the fan, the ÉCO Stop. */
+.ctl { display:flex; flex-direction:column; gap:0; margin:10px 0; padding:4px 14px; border-radius:16px; background:var(--hc-raised); }
+.ctl-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding:10px 0; border-top:1px solid var(--nw-line-soft); }
+.ctl-row:first-child { border-top:0; }
+.ctl-row > b { width:92px; flex:none; font-size:var(--nw-fs-text); }
+.segs, .steps { display:inline-flex; border:1px solid var(--nw-line); border-radius:12px; overflow:hidden; }
+.seg, .step { height:36px; padding:0 12px; border:0; border-left:1px solid var(--nw-line); background:transparent; color:var(--nw-fg); font:inherit; font-size:var(--nw-fs-small); font-weight:650; cursor:pointer; }
+.step { min-width:36px; padding:0 8px; }
+.seg:first-child, .step:first-child { border-left:0; }
+.seg.on, .step.on { background:var(--nw-fg); color:var(--nw-bg); }
+.seg:disabled, .step:disabled { opacity:.5; cursor:not-allowed; }
+.ctl-say { flex-basis:100%; margin:0; font-size:var(--nw-fs-small); color:var(--nw-fg2); line-height:1.4; }
+@media (max-width:420px) { .ctl-row > b { width:100%; } }

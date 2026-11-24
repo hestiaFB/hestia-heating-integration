@@ -1,5 +1,26 @@
 # Changements
 
+## 1.0.0b3 — Un panneau technique et simple, et le poêle réglé comme sur son application
+
+**L’onglet Chauffage devient technique et simple** : une vue d’ensemble qui dit si tout marche et ce que Hestia a changé aujourd’hui, des Réglages en onglets, et tous les chiffres du poêle dans un écran Avancé. **Le poêle se règle comme sur son application** : la flamme et la ventilation en Automatique ou en Manuel, l’ÉCO Stop expliqué, et l’allumage par Hestia de nouveau au choix. Vos réglages restent comme vous les avez laissés.
+
+### Nouveautés
+- **La vue d’ensemble** remplace l’accueil : les thermostats qui répondent, les mesures reçues, les changements faits aujourd’hui ; vos appareils (radiateurs, poêle, clim, stock de granulés, météo, plannings Scheduler) avec leur dernière nouvelle ; ce que Hestia fait pour vous, et ce qu’elle a changé aujourd’hui. La température de chaque pièce reste sur les cartes.
+- **La page technique du poêle** (depuis la vue d’ensemble) : chaque entité lue, sa valeur et son âge ; ce que Hestia y a changé aujourd’hui ; le journal du jour ; l’essai à blanc (« comme vos automatisations 11 fois sur 12 ») et la dernière différence ; le brasier.
+- **Réglages en onglets** : La maison (ce qui chauffe chez vous, la température de la maison, la météo, le prix du kWh, le téléphone qui reçoit les messages), Thermostats (pour chacun : « Le planning change son mode », ce qui chauffe la pièce, le montrer ou non, ses modes, ce que Hestia y lit) et Poêle à granulés.
+- **La flamme : Automatique ou Manuel.** En manuel, la puissance de 1 à 5 et la température réglée dans le poêle partent au poêle dès que vous les touchez, comme depuis son application.
+- **La ventilation à trois choix** : automatique par le poêle, automatique par Hestia (au plus bas tant que le poêle est froid, puis un cran au-dessus de la flamme, maintenant aussi quand vos automatisations allument le poêle), ou manuelle avec sa vitesse.
+- **L’ÉCO Stop** se règle dans Réglages et sur la carte, avec son délai, et dit ce qu’il fait vraiment : le poêle s’éteint seul seulement si sa propre sonde dépasse la température réglée dans le poêle ; avec la flamme automatique, Hestia règle 25 °C, presque jamais atteints.
+- **Allumer et éteindre : par Hestia** est de nouveau proposé, avec la flamme automatique ou manuelle. À choisir après avoir coupé vos automatisations qui allument et éteignent le poêle.
+- **Avancé : comment Hestia conduit le poêle** : les paliers de la flamme, sa marge, l’allumage, l’arrêt, les sécurités, les écritures gardées dans la mémoire du poêle, les débits de granulés, l’énergie d’un kilo et le rendement. Chaque chiffre dit sa valeur par défaut, et « Tout remettre par défaut » les rétablit.
+- **Ce qui chauffe la pièce** se corrige quand Hestia l’a mal reconnu (radiateur électrique, radiateur à eau, plancher chauffant, clim, pompe à chaleur) : il donne le dessin de sa carte.
+- **Un guide en cinq étapes** : ce qui chauffe chez vous, vos thermostats, le poêle, le planning, les prix.
+- **La carte du poêle** règle la flamme (Auto ou une puissance), la ventilation (par le poêle, par Hestia, ou une vitesse) et l’ÉCO Stop, dans « Le feu et les réglages ». Son bouton « Gestion auto » devient « Flamme auto ».
+
+### Améliorations
+- Le menu de l’onglet : Vue d’ensemble, Planning, Réglages, Extensions, À propos. Les pages d’une pièce disparaissent : les cartes les remplacent.
+- Avant un allumage par Hestia, la température réglée dans le poêle et l’ÉCO Stop sont ceux choisis dans Réglages (25 °C et activé par défaut, comme avant).
+
 ## 1.0.0b2 — Le poêle dit ce qu’il fait, et le mode Entier s’essaie à blanc
 
 **Le poêle dit en une phrase ce qu’il fait**, sur sa carte et sur la page Poêle. **Le mode Entier a son simulateur** : il rejoue les démarrages et les arrêts sans rien envoyer, à côté de ce que font vos automatisations.

@@ -316,7 +316,8 @@ def _state(hass: HomeAssistant, entity_id: str | None) -> dict | None:
     if state is None:
         return None
     return {"entity_id": entity_id, "state": state.state, "attributes": dict(state.attributes),
-            "last_changed": dt_util.as_local(state.last_changed)}
+            "last_changed": dt_util.as_local(state.last_changed),
+            "last_updated": dt_util.as_local(state.last_updated)}
 
 
 def _entry_of(hass: HomeAssistant, device, domain: str) -> str | None:
@@ -353,7 +354,9 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
             continue
         attrs = state.attributes
         climates.append({"entity_id": c["entity_id"], "state": state.state, "attributes": attrs, "platform": c["platform"],
-                         "room": c["room"], "name": attrs.get("friendly_name") or c["entity_id"], "energie": c.get("energie")})
+                         "room": c["room"], "name": attrs.get("friendly_name") or c["entity_id"], "energie": c.get("energie"),
+                         # When it last said something (the panel's « Vos appareils », 1.0.0b3).
+                         "vu": dt_util.as_local(state.last_updated).isoformat()})
         window = attrs.get("window_manager")
         sensor = window.get("window_sensor_entity_id") if isinstance(window, dict) else None
         if sensor and (ws := hass.states.get(sensor)) is not None:

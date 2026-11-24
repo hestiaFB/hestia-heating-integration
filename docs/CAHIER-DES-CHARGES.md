@@ -39,15 +39,20 @@ La clim est lue comme un thermostat. Elle est développée sur un thermostat sim
 
 Un onglet **Chauffage** dans le panneau Hestia-FB (adresse `/hestia/chauffage`) et une carte pour les tableaux de bord, sur le socle commun, comme Weather, Confort et Énergie.
 
+Depuis la 1.0.0b3 (maquette « panneau technique » validée par Frank le 24 novembre), l’onglet est technique et simple : il dit si tout marche et ce que Hestia a fait ; la température de chaque pièce vit sur les cartes.
+
 | Page | Ce qu’on y voit |
 | --- | --- |
-| Accueil | La maison en une phrase (« Le poêle chauffe, flamme 3. 2 radiateurs en appoint. »), puis une ligne par pièce : température, consigne, en chauffe ou non, fenêtre ouverte, prochain changement du planning |
-| Poêle | État traduit, flamme demandée par le thermostat face à la flamme réelle, sa journée (flamme et température de la pièce), fumées, alarme, ordres reçus dans la journée, stock et jours restants, granulés brûlés et brasier à nettoyer, ce que dit la prise |
-| Une pièce | Son thermostat, sa journée (courbe température et consigne), pourquoi elle chauffe ou non (préréglage, fenêtre, délestage, sécurité) |
+| Vue d’ensemble | Les thermostats qui répondent, les mesures reçues, les changements faits aujourd’hui ; ce qui est à régler ; vos appareils (par sorte, avec leur dernière nouvelle), ce que Hestia fait pour vous, ce qu’elle a changé aujourd’hui ; le lien vers le guide |
+| Le poêle, côté technique (depuis la vue d’ensemble) | Chaque entité lue, sa valeur et son âge ; ce que Hestia y a changé aujourd’hui ; le journal du jour ; l’essai à blanc et la dernière différence ; la question en attente ; le brasier |
 | Planning | La liste des plannings Hestia (une semaine en couleurs, ses thermostats, En pause ou Actif), un éditeur par planning, et les plannings de Scheduler, lus et repris en un clic |
-| Réglages et Extensions | Les sources trouvées et leurs interrupteurs, le lien poêle ↔ thermostat, le lieu d’Hestia Weather |
+| Réglages | Trois onglets : La maison (ce qui chauffe, la température de la maison, la météo, le prix du kWh, le téléphone), Thermostats (pour chacun : le planning change son mode, ce qui chauffe la pièce, le montrer, ses modes, ce qui est lu, sa pièce), Poêle à granulés (son thermostat et sa prise, la flamme, la ventilation, l’ÉCO Stop, allumer et éteindre, les granulés) et son écran Avancé (tous les chiffres du pilote) |
+| Le guide | Cinq étapes, une question à la fois : ce qui chauffe, vos thermostats, le poêle, le planning, les prix |
+| Extensions, À propos | Les intégrations lues ; les versions |
 
-La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce et le planning du jour. Le poêle et une pièce ont deux versions : complète (l’horloge du jour en grand, sa légende) et compacte (l’horloge en petit à côté de sa phrase, environ deux fois moins haute) ; une pièce a aussi sa version sur une ligne. Sous le nom du poêle, sa phrase (voir « Ce que montre la page Poêle »), dans la couleur de son état. Les réglages de la carte sont ceux des autres briques : les formes en tuiles, puis un formulaire (la pièce, la version, le titre, et l’appui dans « Fonctionnalités »). La carte d’une pièce a aussi, depuis le 23 novembre (demande de Frank), les modes de son thermostat en bas (Hors gel, Éco, Confort, Boost, ceux qu’il propose) et un clic qui ouvre le thermostat (au choix dans ses réglages : le thermostat, la page de la pièce, ou rien). Le mode est choisi par l’utilisateur et envoyé depuis son navigateur, comme avec la carte thermostat de Home Assistant : ce n’est pas une commande de Hestia, et jamais vers un thermostat recopié (boutons grisés). Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire avant la 1.0.0.
+**Ce qui part au poêle depuis l’onglet ou la carte**, appuyé par l’utilisateur et envoyé depuis son navigateur comme depuis l’application du poêle (jamais à un poêle recopié : grisé) : la puissance et la température réglée dans le poêle en flamme manuelle, la vitesse de la ventilation en manuel, l’ÉCO Stop et son délai. Revenir à la flamme automatique remet la température réglée dans le poêle à celle de Hestia (25 °C) ; revenir à la ventilation « par le poêle » la remet en AUTO. Le reste (Automatique ou Manuel, qui allume) s’enregistre avec les réglages.
+
+La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce et le planning du jour. Le poêle et une pièce ont deux versions : complète (l’horloge du jour en grand, sa légende) et compacte (l’horloge en petit à côté de sa phrase, environ deux fois moins haute) ; une pièce a aussi sa version sur une ligne. Sous le nom du poêle, sa phrase (voir « Ce que montre la page Poêle »), dans la couleur de son état. Les réglages de la carte sont ceux des autres briques : les formes en tuiles, puis un formulaire (la pièce, la version, le titre, et l’appui dans « Fonctionnalités »). La carte d’une pièce a aussi, depuis le 23 novembre (demande de Frank), les modes de son thermostat en bas (Hors gel, Éco, Confort, Boost, ceux qu’il propose) et un clic qui ouvre le thermostat (au choix dans ses réglages : le thermostat, la page de la pièce, ou rien). Le mode est choisi par l’utilisateur et envoyé depuis son navigateur, comme avec la carte thermostat de Home Assistant : ce n’est pas une commande de Hestia, et jamais vers un thermostat recopié (boutons grisés). Depuis la 1.0.0b3, le tiroir « Le feu et les réglages » de la carte du poêle a la flamme (Auto ou une puissance), la ventilation (par le poêle, par Hestia, ou une vitesse) et l’ÉCO Stop avec sa phrase ; son bouton « Gestion auto » devient « Flamme auto ». Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire avant la 1.0.0.
 
 ## Ce qu’elle publie
 
@@ -322,7 +327,21 @@ Toute la logique d’affichage vit dans le calcul, la page ne fait que la mettre
 
 ## Les réglages
 
-Ce qui dépend du foyer, avec sa valeur par défaut. | Réglage | Par défaut | Depuis |
+Ce qui dépend du foyer, avec sa valeur par défaut. Depuis la 1.0.0b3, tous les chiffres du pilote sont dans Réglages › Poêle à granulés › Avancé (`engine/tuning.py`, leurs bornes y sont) : ce qui était « fixe » ci-dessous l’est seulement par défaut.
+
+| Réglage | Par défaut | Où |
+| --- | --- | --- |
+| La flamme : Automatique ou Manuel | Automatique en mode Flamme | Poêle à granulés (réglages `pilote` et `flamme_manuelle`) |
+| Allumer et éteindre : par vos automatisations, ou par Hestia | par vos automatisations | Poêle à granulés (`pilote` = `entier`) |
+| La ventilation : par le poêle, par Hestia (flamme + 1), Manuel | par le poêle | Poêle à granulés (`pilote_ventilation`) |
+| ÉCO Stop voulu avant un allumage | activé | Poêle à granulés (`poele_eco_stop`) |
+| Température réglée dans le poêle | 25 °C | Avancé (`consigne_poele`) |
+| Ce qui chauffe chez vous | ce qui est trouvé | La maison (`equipements`) |
+| Ce qui chauffe une pièce | reconnu seul | Thermostats (`types`) |
+
+L’histoire de chaque réglage :
+
+| Réglage | Par défaut | Depuis |
 | --- | --- | --- |
 | Thermostat pilote du poêle | à choisir (trouvé seul quand c’est possible) | 0.1 |
 | Température de la maison | la moyenne des pièces chauffées, ou un capteur choisi | 0.4 |
@@ -366,11 +385,11 @@ Les questions laissées ouvertes par la maison de référence, tranchées par Fr
 7. **Le conseil « allumer le poêle »** et le prix du granulé face à l’électricité : le bilan revient à Hestia Énergie, qui lit Chauffage.
 8. **Le démarrage anticipé** : pas d’heure calculée ; la page montre le prochain changement du planning.
 9. **Le plafond d’ordres** : lu à la source, dans les options de l’intégration du poêle (depuis la 0.5).
-10. **Le mode Entier** n’est plus proposé dans Réglages (sauf à un poêle déjà réglé dessus) tant qu’il n’a pas été essayé dans une vraie maison. Son **simulateur** (Réglages, en Conseil et en Flamme) rejoue ses démarrages, ses arrêts et ses sécurités sans rien envoyer : le journal les dit au conditionnel (« Hestia allumerait le poêle »), et note un désaccord quand la maison n’allume pas ou n’éteint pas le poêle dans les minutes qui suivent. La 1.0.0 stable attend une semaine d’accord de ce simulateur dans la maison de référence.
+10. **Le mode Entier** n’était plus proposé dans Réglages (sauf à un poêle déjà réglé dessus) tant qu’il n’avait pas été essayé dans une vraie maison. Depuis la 1.0.0b3 (maquette validée par Frank le 24 novembre), il revient sous le nom « Allumer et éteindre : par Hestia », avec la flamme automatique ou manuelle. Son **simulateur** (Réglages, en Conseil et en Flamme) rejoue ses démarrages, ses arrêts et ses sécurités sans rien envoyer : le journal les dit au conditionnel (« Hestia allumerait le poêle »), et note un désaccord quand la maison n’allume pas ou n’éteint pas le poêle dans les minutes qui suivent. La 1.0.0 stable attend une semaine d’accord de ce simulateur dans la maison de référence.
 
 ## La suite
 
-- Les boutons Allumer et Éteindre de la page Poêle (la carte du poêle les a déjà).
+- Les boutons Allumer et Éteindre de la page technique du poêle (la carte du poêle les a déjà).
 - Les autres profils de poêle (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un.
 - Hestia Énergie qui lit Chauffage pour le bilan en euros.
 - L’onglet et les cartes en anglais.

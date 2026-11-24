@@ -7,6 +7,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import callback
 
 from .const import DOMAIN
+from .engine import sources, tuning
 
 VIEW_VERSION = 1
 # What the cards read: the extensions, the schedules' details and the « à régler » stay out of their view.
@@ -14,7 +15,8 @@ CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors
 SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote",
                 "pilote_thermometre", "planning_autorises", "pilote_flamme_basse", "brasier_kg", "granules_prix_sac",
                 "granules_poids_sac", "pilote_notifier", "poele_prise_switch", "couper_prise", "prix_kwh",
-                "trop_chaud_ecart", "pilote_ventilation", "pilote_simulateur")
+                "trop_chaud_ecart", "pilote_ventilation", "pilote_simulateur", "flamme_manuelle", "avance", "types",
+                "poele_eco_stop", "equipements")
 # The notify services that are not a phone or a group of phones.
 NOT_PHONES = ("send_message", "persistent_notification")
 # The planning's parts only the tab needs (the plannings, the editor, Scheduler, the journal).
@@ -153,6 +155,9 @@ def ws_settings(hass, connection, msg):
             "pilotable": bool((c.data.get("poele") or {}).get("pilotable")),
             "poele_copie": bool((found.stove or {}).get("copie")),
             "meteo": {k: c.weather.get(k) for k in ("etat", "lieu", "nom", "lieux")},
+            # Réglages › Avancé (1.0.0b3): each figure's default and bounds; what a thermostat may drive.
+            "avance": tuning.defaults(),
+            "types": list(sources.KINDS),
         },
     })
 
