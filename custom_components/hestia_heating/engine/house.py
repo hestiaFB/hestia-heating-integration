@@ -184,7 +184,7 @@ def build(snap: dict) -> dict:
             sensor, low = snap.get("house_sensor"), snap.get("flamme_basse")
             house_c = sensor["c"] if sensor else house["temperature"]
             decision, memory, events = pilot.decide(stove, stove_thermostat, snap.get("pilote_memoire"), now, house_c,
-                                                    low["nom"] if low and low["on"] else None)
+                                                    low["nom"] if low and low["on"] else None, snap.get("trop_chaud"))
             stove["pilote"].update(decision)
             stove["pilote"].update(maison_c=house_c, thermometre=sensor["nom"] if sensor else None,
                                    thermometre_lu=sensor is None or sensor["c"] is not None,

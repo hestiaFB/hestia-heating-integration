@@ -707,7 +707,8 @@ export class HestiaHeatingSetup extends LitElement {
      listRow({label:'Flamme au plus bas',control:true,sub:low?'Quand cet interrupteur est allumé, le pilote met la flamme au plus bas (comme un « forcer flamme 1 »).':'Facultatif : un interrupteur qui demande la flamme au plus bas.',
       value:html`<select aria-label="Flamme au plus bas" @change=${(e:Event)=>{const x=(e.target as HTMLSelectElement).value;this.set('pilote_flamme_basse',x||null);}}>
        <option value="" ?selected=${!low}>Aucun</option>${(f.interrupteurs??[]).map(t=>html`<option value=${t.id} ?selected=${low===t.id}>${t.nom}</option>`)}
-       ${low&&!(f.interrupteurs??[]).some(t=>t.id===low)?html`<option value=${low} selected>${low}</option>`:nothing}</select>`})]:[]),
+       ${low&&!(f.interrupteurs??[]).some(t=>t.id===low)?html`<option value=${low} selected>${low}</option>`:nothing}</select>`}),
+     this.numberRow('trop_chaud_ecart','Pièce trop chaude','°C',0.5,5,0.5,'2','La flamme passe à 1 quand la pièce du poêle dépasserait sa consigne de cet écart dans 15 minutes, et y reste tant que la pièce est à sa consigne. Vide : 2 °C.')]:[]),
    ],{help:'Le thermostat du poêle donne la demande (en %) face à la flamme réelle. La prise sert de témoin hors cloud.'}):nothing}
    ${f.poele?listSection('Les granulés',[
     this.numberRow('brasier_kg','Seuil du brasier','kg',5,60,1,'15','Les kilos brûlés après lesquels le brasier est à nettoyer. Vide : 15 kg, un sac.'),

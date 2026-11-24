@@ -23,6 +23,7 @@
     "extinction": ["Extinction", "Final cleaning", "Shutdown"],
     "alarme": ["ALARM", "MEM. ALARM", "Alarm"]
   },
+  "veille": ["Stand-by", "Standby"],
   "alarme_ok": ["OK", "0", "None", "Aucune"],
   "limites": {"ecritures_par_jour": 20, "option_ecritures": "max_eeprom_writes_per_day", "cloud": true},
   "debits": {"allumage": 1.2, "flammes": [0.55, 0.81, 1.07, 1.34, 1.60]},

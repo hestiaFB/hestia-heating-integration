@@ -43,10 +43,10 @@ DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_pr
             "planning_autorises": [], "pilote_flamme_basse": None,
             "brasier_kg": None, "granules_prix_sac": None, "granules_poids_sac": None,
             "pilote_notifier": None, "poele_prise_switch": None, "couper_prise": True,
-            "prix_kwh": None, "pilote_auto": None}
+            "prix_kwh": None, "pilote_auto": None, "trop_chaud_ecart": None}
 # What the pellets settings may be (Réglages): the fire pot's threshold, a bag's price and weight.
 PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granules_poids_sac": (5, 30),
-                 "prix_kwh": (0.01, 2)}
+                 "prix_kwh": (0.01, 2), "trop_chaud_ecart": pilot.OVER_LIMITS}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en pause, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
@@ -63,7 +63,8 @@ PILOT_GAPS = 5
 PELLETS_SAVE_S = 300
 PELLETS_KEYS = ("sacs", "correction", "nettoye_le", "jour", "saison")
 PELLET_WORDS = {"brasier_kg": "seuil du brasier (kg)", "granules_prix_sac": "prix d’un sac (€)",
-                "granules_poids_sac": "poids d’un sac (kg)", "prix_kwh": "prix du kWh d’électricité (€)"}
+                "granules_poids_sac": "poids d’un sac (kg)", "prix_kwh": "prix du kWh d’électricité (€)",
+                "trop_chaud_ecart": "écart « pièce trop chaude » (°C)"}
 # The card's « Gestion auto » (0.8): off, the pilot only looks (« ombre ») and remembers the mode it had; on again, it
 # takes that mode back, else the gentlest one that acts (« flamme »).
 AUTO_MODES = ("flamme", "entier")
@@ -255,6 +256,7 @@ class HeatingCoordinator:
             answers = dict(self.answers)
             snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
                         pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory,
+                        trop_chaud=self.settings.get("trop_chaud_ecart"),
                         autorises=self.settings.get("planning_autorises") or [],
                         granules_memoire=self.pellets_memory, granules_reglages=self._pellet_settings(),
                         pret=self.hass.state is CoreState.running,

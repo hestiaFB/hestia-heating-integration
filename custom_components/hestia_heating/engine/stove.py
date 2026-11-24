@@ -104,6 +104,8 @@ def read(profile: Profile, device: dict, roles: dict, thermostat: dict | None = 
         "texte": text if text not in (None, "unknown", "unavailable") else None,
         "a_traduire": not known,
         "en_feu": state in BURNING,
+        # On standby (ECO Stop): off for the brick, but it starts again by itself (1.0, the stove's sentence).
+        "veille": state == "eteint" and bool(text) and text.strip().casefold() in {w.casefold() for w in profile.standby},
         "depuis": since.isoformat() if isinstance(since, datetime) else None,
         # Some stoves report a real flame of 1 while off: the flame is only said while the stove burns.
         "flamme": None if state not in BURNING else int(real_flame) if real_flame is not None else (
