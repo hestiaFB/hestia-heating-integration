@@ -47,7 +47,7 @@ Un onglet **Chauffage** dans le panneau Hestia-FB (adresse `/hestia/chauffage`) 
 | Planning | La liste des plannings Hestia (une semaine en couleurs, ses thermostats, En pause ou Actif), un éditeur par planning, et les plannings de Scheduler, lus et repris en un clic |
 | Réglages et Extensions | Les sources trouvées et leurs interrupteurs, le lien poêle ↔ thermostat, le lieu d’Hestia Weather |
 
-La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce (longue ou courte) et le planning du jour. La carte d’une pièce a aussi, depuis le 23 novembre (demande de Frank), les modes de son thermostat en bas (Hors gel, Éco, Confort, Boost, ceux qu’il propose) et un clic qui ouvre le thermostat (au choix dans ses réglages : le thermostat, la page de la pièce, ou rien). Le mode est choisi par l’utilisateur et envoyé depuis son navigateur, comme avec la carte thermostat de Home Assistant : ce n’est pas une commande de Hestia, et jamais vers un thermostat recopié (boutons grisés). Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire avant la 1.0.0.
+La carte a quatre formes (maquette validée le 20 novembre) : la maison, le poêle, une pièce et le planning du jour. Le poêle et une pièce ont deux versions : complète (l’horloge du jour en grand, sa légende) et compacte (l’horloge en petit à côté de sa phrase, environ deux fois moins haute) ; une pièce a aussi sa version sur une ligne. Sous le nom du poêle, sa phrase (voir « Ce que montre la page Poêle »), dans la couleur de son état. Les réglages de la carte sont ceux des autres briques : les formes en tuiles, puis un formulaire (la pièce, la version, le titre, et l’appui dans « Fonctionnalités »). La carte d’une pièce a aussi, depuis le 23 novembre (demande de Frank), les modes de son thermostat en bas (Hors gel, Éco, Confort, Boost, ceux qu’il propose) et un clic qui ouvre le thermostat (au choix dans ses réglages : le thermostat, la page de la pièce, ou rien). Le mode est choisi par l’utilisateur et envoyé depuis son navigateur, comme avec la carte thermostat de Home Assistant : ce n’est pas une commande de Hestia, et jamais vers un thermostat recopié (boutons grisés). Avec le socle 1.24, la porte de l’accueil Hestia-FB prend l’icône « maison » par défaut ; son icône et sa couleur propres demandent un petit ajout au socle (1.25), à faire avant la 1.0.0.
 
 ## Ce qu’elle publie
 
@@ -167,7 +167,7 @@ Et des règles de conception, valables pour toute la brique :
 
 - **La consigne interne du poêle est gardée au plus haut (25 °C), et son ECO Stop reste actif.** Le poêle n’atteint jamais sa consigne, donc il ne se met jamais en veille de lui-même : il applique la flamme qu’on lui envoie. Cette consigne est réaffirmée à chaque allumage, seulement si elle a changé (quota).
 - **Deux filets indépendants** : ECO Stop côté poêle (il survit à une panne de Home Assistant), la sécurité surchauffe à 28 °C côté Home Assistant.
-- **La ventilation est en AUTO**, réglée une fois au démarrage : la régler à chaque variation des fumées vidait le quota. Si AUTO déçoit, l’autre réglage prêt : ventilation = flamme + 1, au plus 5, et au minimum tant que les fumées sont sous 110 °C.
+- **La ventilation est en AUTO**, réglée une fois au démarrage : la régler à chaque variation des fumées vidait le quota. L’autre choix, dans Réglages (mode Entier et son simulateur) : **flamme + 1**, au plus 5, et au plus bas tant que les fumées sont sous 110 °C. Chaque changement coûte alors un ordre : au plus un toutes les 10 minutes, et seulement s’il en reste plus de 6 ; rien n’est réglé avant le démarrage.
 
 Hestia lit ce montage et le signale s’il change (consigne interne plus basse, ECO Stop coupé). Elle ne le règle qu’au démarrage, le jour où c’est elle qui démarre le poêle.
 
@@ -219,7 +219,7 @@ Dans tous les états où le poêle brûle (allumage, chauffe, nettoyage), sauf a
 
 - **L’escalier** : demande ≥ 85 % → 5, ≥ 65 % → 4, ≥ 45 % → 3, sinon 2. La flamme du poêle tient tant qu’elle reste entre le palier de la demande − 7 points et celui de la demande + 7 points. *Pourquoi : cinq paliers et une marge, pour ne pas osciller autour d’un seuil.*
 - **Plancher normal : 2.** Un poêle qui brûle longtemps en flamme 1 a trop d’air, brûle moins bien et encrasse plus par kilo. La flamme 1 est réservée au choix de la personne (« flamme au plus bas ») et à la pièce trop chaude.
-- **La pièce trop chaude, avec anticipation** : sur la température **lissée** `t` de la pièce, prolongée de 15 minutes sur sa pente quand elle monte (`t + max(pente, 0) × 0,25`), au-dessus de la consigne + 0,5 °C ; ou la flamme déjà à 1 et `t` à la consigne ou au-dessus. Retour au palier normal sous la consigne. *Pourquoi : une pièce montée de plus de 3 °C en 35 minutes en flamme 3 ; et la température lissée, parce qu’une bouffée d’air chaud sur la sonde avait fait passer la flamme à 1 pendant 4 minutes, deux ordres perdus.*
+- **La pièce trop chaude, avec anticipation** : sur la température **lissée** `t` de la pièce, prolongée de 15 minutes sur sa pente quand elle monte (`t + max(pente, 0) × 0,25`), au-dessus de la consigne + 2 °C (réglable dans Réglages, « Pièce trop chaude », de 0,5 à 5 °C) ; ou la flamme déjà à 1 et `t` à la consigne ou au-dessus. Retour au palier normal sous la consigne. *Pourquoi : une pièce montée de plus de 3 °C en 35 minutes en flamme 3 ; et la température lissée, parce qu’une bouffée d’air chaud sur la sonde avait fait passer la flamme à 1 pendant 4 minutes, deux ordres perdus.*
 - **Baisser tout de suite, monter au plus une fois par demi-heure** après le dernier changement de flamme (par qui que ce soit), sauf deux paliers d’écart ou la flamme au plus bas choisie.
 - **Rien à changer, rien envoyé** : la demande bouge à chaque calcul, un ordre qui redonne la même flamme vide le quota.
 - **Réserve** : avec 4 ordres ou moins sous le plafond, la flamme ne change plus.
@@ -292,7 +292,7 @@ Le prix ne vit qu’à un seul endroit (le sac et son poids). Un prix « sans re
 Toute la logique d’affichage vit dans le calcul, la page ne fait que la mettre en forme.
 
 - **La couleur**, première vraie : rouge pour une alarme, une surchauffe, un poêle muet dont la prise tire plus de 60 W (« il brûle sans commande »), ou une chauffe avec un ouvrant ouvert dans sa pièce ; orange pour un brasier à nettoyer, un poêle muet, un ordre refusé ; bleu en chauffe ; gris sinon.
-- **La phrase**, première vraie : l’alarme ; la surchauffe ; « ne répond plus mais la prise mesure N W » ; « ne répond plus » ; « l’ordre d’allumage n’est pas passé » ; « brasier à nettoyer : X kg brûlés » ; allumage en cours ; « extinction en cours, comptez vingt minutes » ; nettoyage automatique du brasier ; chauffe avec un ouvrant ouvert ; en chauffe, selon l’arrivée (« consigne atteinte, le poêle entretient », « monte lentement », « consigne à plus de 5 h », ou l’heure : « 21,5 °C vers 18 h 20 ») ; « en veille, il repartira seul » ; « thermostat éteint : le poêle ne démarrera pas » ; « éteint, en hors gel jusqu’au prochain boost du planning » ; « éteint : » et la raison du blocage ; sinon « éteint, démarrage au prochain passage en boost ». *Pourquoi « jusqu’au prochain boost » : l’ancien texte « la relance est manuelle » a fait éteindre le thermostat pour rien.*
+- **La phrase**, sur la page et sur la carte du poêle, première vraie : l’alarme ; la surchauffe ; « ne répond plus mais la prise mesure N W » ; « ne répond plus » ; « l’ordre d’allumage n’est pas passé » ; « brasier à nettoyer : X kg brûlés » ; allumage en cours ; « extinction en cours, comptez vingt minutes » ; nettoyage automatique du brasier ; chauffe avec un ouvrant ouvert ; en chauffe, selon l’arrivée (« consigne atteinte, le poêle entretient », « monte lentement », « consigne à plus de 5 h », ou l’heure : « 21,5 °C vers 18 h 20 ») ; « en veille, il repartira seul » ; « thermostat éteint : le poêle ne démarrera pas » ; « éteint, en hors gel jusqu’au prochain boost du planning » ; « éteint : » et la raison du blocage ; sinon « éteint, démarrage au prochain passage en boost ». *Pourquoi « jusqu’au prochain boost » : l’ancien texte « la relance est manuelle » a fait éteindre le thermostat pour rien.*
 - **Pourquoi il ne démarre pas**, quand il est éteint : une question attend ; la gestion automatique est coupée ; l’alarme ; la surchauffe ; le brasier ; le poêle ne répond pas ; l’ordre d’allumage n’est pas passé ; le thermostat est éteint ; une consigne réglée à la main (le démarrage n’écoute que le boost) ; le thermostat en hors gel ; la maison déjà à X °C pour Y °C ; la saison douce demandera.
 - **Les alertes**, en trois niveaux (urgent, à faire, pour info), **jamais réduites à une seule** : deux blocages sont deux choses à savoir. Dont le quota : atteint (urgent, « réglez le poêle depuis l’appli du fabricant ») ou presque (à faire).
 - **La flamme bloquée** : une ligne seulement pour l’anomalie durable (le poêle brûle, le quota est dans sa réserve, la flamme n’est pas celle visée). Un écart passager est voulu (marge, demi-heure) et ne se signale pas.
@@ -331,7 +331,7 @@ Ce qui dépend du foyer, avec sa valeur par défaut. | Réglage | Par défaut | 
 | Paliers de flamme | 45 · 65 · 85 % | 0.4, fixe |
 | Marge de flamme | 7 points | 0.4, fixe |
 | Flamme minimale de croisière | 2 | 0.4, fixe |
-| Pièce trop chaude | consigne + 0,5 °C, prévue à 15 min | 0.4, fixe |
+| Pièce trop chaude | consigne + 2 °C, prévue à 15 min | 0.4 ; Réglages depuis la 1.0 (0,5 à 5 °C) |
 | Délai entre deux hausses de flamme | 30 min | 0.4, fixe |
 | Réserve d’ordres | 4 (6 avant la ventilation) | 0.4, fixe |
 | Plafond d’ordres du poêle | lu dans les options de son intégration | 0.5, lu (sinon celui du profil) |
@@ -340,6 +340,8 @@ Ce qui dépend du foyer, avec sa valeur par défaut. | Réglage | Par défaut | 
 | Délai de réponse en saison douce | 15 min | 0.4, fixe |
 | Sécurité surchauffe | 28 °C | 0.4, fixe |
 | Vérification d’arrêt | 25 min | 0.7, fixe |
+| Ventilation (mode Entier) | AUTO, une fois avant le démarrage ; ou flamme + 1 | 1.0, Réglages |
+| Simulateur du mode Entier (en Conseil et en Flamme) | non | 1.0, Réglages |
 | Couper la prise sans réponse | oui, après 5 min | 0.7, Réglages |
 | Interrupteur de la prise | trouvé seul (l’appareil de la prise mesurée, ou son nom) | 0.7, Réglages |
 | Démarrages de Hestia par jour | 3 | 0.7, fixe |
@@ -351,20 +353,20 @@ Ce qui dépend du foyer, avec sa valeur par défaut. | Réglage | Par défaut | 
 
 « Fixe » : une constante du pilote aujourd’hui, à ouvrir en réglage quand un deuxième foyer en aura besoin. Les constantes qui restent fixes : 4,8 kWh par kg, rendement 0,87, base des degrés-jours 18 °C, fumées froides sous 60 °C, prise en veille sous 70 W, prise active au-dessus de 60 W, alarme tenue 2 minutes.
 
-## Points ouverts
+## Les choix faits
 
-À trancher avec Frank avant de les figer dans Hestia.
+Les questions laissées ouvertes par la maison de référence, tranchées par Frank pour la 1.0.0 (24 novembre 2026).
 
-1. **Plancher de flamme à 2, ou flamme 1 ?** La flamme 1 « pièce trop chaude » peut durer longtemps en boost, alors que la flamme 1 encrasse plus par kilo. Suivre les kilos par nettoyage pour décider.
-2. **Le boost chauffe la maison par la pièce du poêle.** Il continue tant que la moyenne de la maison est sous la consigne : la pièce du poêle peut finir plusieurs degrés au-dessus des chambres. Pistes : sortir la pièce du poêle de la moyenne, plafonner sa pièce (veille du poêle à consigne + 2 °C), ou une consigne de maison distincte.
-3. **La ventilation** : AUTO depuis la mi-novembre ; « flamme + 1 » attend l’avis de Frank.
-4. **Les seuils TPI du thermostat du poêle** (1 et 0,1, au lieu de 0 et 0 conseillés) écrêtent peut-être la demande. Pas prouvé : des demandes intermédiaires sont vues.
-5. **L’ouvrant de la pièce du poêle** : alerter (aujourd’hui) ou baisser la flamme à 1 à l’ouverture ?
-6. ~~**La saison des compteurs**~~ : tranché dans la 0.6, du 1er septembre au 31 août, ou du mois où Suivi Stock Pellet commence la sienne.
-7. **Le conseil « allumer le poêle »** part même hors saison, ou quand la température dehors est inconnue ; rien ne traite un granulé plus cher que l’électricité.
-8. **L’anticipation du démarrage** est reportée : montrer le prochain changement de préréglage du planning, pas une heure calculée.
-9. **Le plafond d’ordres de la maison de référence** : le document de la maison et son capteur de quota ne donnent pas le même plafond. Hestia le lira à la source, dans les options de l’intégration.
-10. **Pourquoi Versatile Thermostat restaure parfois « éteint » au redémarrage** : inconnu. La reprise corrige l’effet, pas la cause.
+1. **Le plancher de flamme reste à 2.** La flamme 1 ne sert qu’à la pièce trop chaude, et seulement à la consigne + 2 °C (au lieu de + 0,5 °C), un écart réglable : la flamme 1 encrasse plus par kilo, elle doit rester rare.
+2. **Le boost reste tel quel.** Le poêle chauffe d’abord le salon ; les autres pièces en profitent par l’inertie de la maison. La pièce du poêle peut finir plus chaude que les chambres : c’est voulu.
+3. **La ventilation : les deux, au choix.** AUTO par défaut ; flamme + 1 dans Réglages, facile à changer (voir « Le montage »).
+4. **L’ouvrant de la pièce du poêle : prévenir seulement.** Baisser la flamme à chaque ouverture coûterait des ordres du quota ; la carte et la page le disent en rouge (« En chauffe, fenêtre ouverte »).
+5. **Les seuils TPI du thermostat du poêle** et **« éteint » restauré par Versatile Thermostat au redémarrage** : des réglages de Versatile Thermostat, hors de Hestia. Hestia corrige l’effet (la reprise après un redémarrage), pas la cause.
+6. **La saison des compteurs** : du 1er septembre au 31 août, ou du mois où Suivi Stock Pellet commence la sienne (depuis la 0.6).
+7. **Le conseil « allumer le poêle »** et le prix du granulé face à l’électricité : le bilan revient à Hestia Énergie, qui lit Chauffage.
+8. **Le démarrage anticipé** : pas d’heure calculée ; la page montre le prochain changement du planning.
+9. **Le plafond d’ordres** : lu à la source, dans les options de l’intégration du poêle (depuis la 0.5).
+10. **Le mode Entier** n’est plus proposé dans Réglages (sauf à un poêle déjà réglé dessus) tant qu’il n’a pas été essayé dans une vraie maison. Son **simulateur** (Réglages, en Conseil et en Flamme) rejoue ses démarrages, ses arrêts et ses sécurités sans rien envoyer : le journal les dit au conditionnel (« Hestia allumerait le poêle »), et note un désaccord quand la maison n’allume pas ou n’éteint pas le poêle dans les minutes qui suivent. La 1.0.0 stable attend une semaine d’accord de ce simulateur dans la maison de référence.
 
 ## La suite
 

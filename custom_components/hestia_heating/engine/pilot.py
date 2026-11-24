@@ -14,8 +14,8 @@ The thermostat of the stove decides how much to heat (its demand, in %); the pil
   season (the house at 18 °C or more, until it falls under 18 °C; then allowed up to 19 °C) it asks first.
 - Flame, in every burning state: the demand gives the flame (85 % → 5, 65 % → 4, 45 % → 3, else 2); the stove's
   current flame holds while it stays within the steps of the demand ± 7 points. Flame 1 when the room, carried 15
-  minutes ahead on its rising slope, would pass its set point by 0.5 °C, and it stays at 1 while the room is at its
-  set point: on the thermostat's smoothed temperature (`ema_temp`), as the house does. Down at once; up only 30
+  minutes ahead on its rising slope, would pass its set point by 2 °C (Réglages, « Pièce trop chaude », 1.0; the
+  house's own rule said 0.5 °C), and it stays at 1 while the room is at its set point: on the thermostat's smoothed temperature (`ema_temp`), as the house does. Down at once; up only 30
   minutes after the stove's flame last changed, unless two steps apart. The stove's daily writes keep 4 orders aside,
   to be able to stop it.
 - Stop: the thermostat at hors gel (frost), or off for 30 seconds (switched off from a known state with a preset, not
@@ -40,7 +40,8 @@ from .phrases import degrees, hour, number
 # The demand's steps, from the highest: (lowest demand, flame).
 STEPS = ((85, 5), (65, 4), (45, 3), (0, 2))
 MARGIN = 7                      # points of demand around the current step
-AHEAD_H, OVER_C = 0.25, 0.5     # flame 1 when the room would pass its set point by 0.5 °C in 15 min
+AHEAD_H, OVER_C = 0.25, 2.0     # flame 1 when the room would pass its set point by 2 °C in 15 min (Réglages)
+OVER_LIMITS = (0.5, 5.0)
 RAISE_EVERY = timedelta(minutes=30)
 WRITES_KEPT, WRITES_DEFAULT = 4, 20
 HELD = timedelta(minutes=2)     # an alarm, or a house warm enough, counts once it lasts 2 minutes
@@ -102,10 +103,12 @@ def warm_enough(house_c: float | None, target_c: float | None, preset: str | Non
 
 
 def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datetime,
-           house_c: float | None = None, low: str | None = None) -> tuple[dict, dict, list[dict]]:
+           house_c: float | None = None, low: str | None = None, over_c: float | None = None) \
+        -> tuple[dict, dict, list[dict]]:
     """(the decision, the new memory, the day's events: what Hestia would do and what the house did). `house_c`: the
     house's temperature (the sensor chosen in Réglages, else the average of its rooms). `low`: the name of the switch
-    that asks for the lowest flame, when it is on."""
+    that asks for the lowest flame, when it is on. `over_c`: how far over its set point the stove's room is too hot
+    (Réglages, else 2 °C)."""
     mem = {k: v for k, v in (memory or {}).items() if k not in ("jour", "demarrages", "cible", "hausse")}
     events: list[dict] = []
     at = hour(now)
@@ -245,7 +248,8 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
                              f"Le poêle signale une alarme ({stove.get('alarme_texte') or 'alarme'}) : le pilote ne "
                              "touche plus à la flamme, et coupe si elle dure 2 minutes.", flame_set, stove)
     elif burning:
-        decision = _flame(stove, now, demand, smooth, target_c, slope, flame_set, flame_since, lo, hi, low)
+        decision = _flame(stove, now, demand, smooth, target_c, slope, flame_set, flame_since, lo, hi, low,
+                          OVER_C if over_c is None else over_c)
     else:
         decision = _rest(stove, state, preset, wants_off, silent)
 
@@ -262,7 +266,7 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     return decision, mem, events
 
 
-def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo, hi, low=None) -> dict:
+def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo, hi, low=None, over_c=OVER_C) -> dict:
     """The flame, from the stove's current one: the house's modulation, step by step."""
     current = flame_set
     hot, why = False, ""
@@ -270,9 +274,9 @@ def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo
         hot, why = True, f"« {low} » demande la flamme au plus bas."
     elif room is not None and room > 0 and target_c is not None:
         projected = room + max(slope or 0, 0) * AHEAD_H
-        if projected > target_c + OVER_C:
-            hot, why = True, (f"La pièce serait à {degrees(projected)} dans 15 min, plus de 0,5 °C au-dessus de sa "
-                              f"consigne ({degrees(target_c)}) : flamme au plus bas.")
+        if projected > target_c + over_c:
+            hot, why = True, (f"La pièce serait à {degrees(projected)} dans 15 min, plus de {degrees(over_c)} au-dessus "
+                              f"de sa consigne ({degrees(target_c)}) : flamme au plus bas.")
         elif current == lo and room >= target_c:
             hot, why = True, (f"La pièce est à {degrees(room)}, à sa consigne ({degrees(target_c)}) ou au-dessus : "
                               "la flamme reste au plus bas.")

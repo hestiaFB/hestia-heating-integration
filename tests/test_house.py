@@ -66,6 +66,8 @@ class House(unittest.TestCase):
         self.assertTrue(s["prise_tourne"])
         self.assertEqual(s["ecritures"], 4)
         self.assertEqual(s["ecritures_max"], 20)   # the house's own quota of orders a day (20 by default)
+        # 1.0: its sentence, for the card and the Poêle page (engine/stove_says.py).
+        self.assertEqual(s["phrase"], {"texte": "Monte lentement vers 21 °C", "ton": "stove"})
         g = self.view["granules"]
         # 90 kg in 30 days of use: 3 kg a day, 150 kg left.
         self.assertEqual((g["kg_par_jour"], g["jours"], g["stock_sacs"]), (3.0, 50, 10.0))

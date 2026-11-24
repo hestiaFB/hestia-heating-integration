@@ -34,6 +34,9 @@ class Profile:
     # "allume_si": {role, etat}, "recharger": bool, "reglages": [{nom, role, attribut?, valeur, service, donnees?,
     # reserve?}]}. Empty: the stove cannot be driven whole.
     orders: dict = field(default_factory=dict)
+    # The stove's words for its standby (ECO Stop: it waits, warm enough, and starts again by itself), among those of
+    # « eteint » (1.0): only the stove's sentence tells them apart.
+    standby: tuple = ()
 
     def translate(self, text: str | None) -> tuple[str, bool]:
         """The brick's state for the stove's text, and whether the profile knows it. An unknown text is never guessed:
@@ -57,7 +60,8 @@ def parse(data: dict) -> Profile:
     return Profile(id=data["profil"], name=data.get("nom") or data["profil"], integration=data["integration"],
                    roles=dict(data.get("roles") or {}), states={k: list(v) for k, v in (data.get("etats") or {}).items()},
                    alarm_ok=tuple(data.get("alarme_ok") or ()), limits=dict(data.get("limites") or {}),
-                   link=data.get("lien"), rates=dict(data.get("debits") or {}), orders=dict(data.get("ordres") or {}))
+                   link=data.get("lien"), rates=dict(data.get("debits") or {}), orders=dict(data.get("ordres") or {}),
+                   standby=tuple(data.get("veille") or ()))
 
 
 def load_all(folder: Path) -> list[Profile]:

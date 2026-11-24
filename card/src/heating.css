@@ -103,6 +103,11 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .ttl { grid-area:ttl; min-width:0; }
 .ttl .nw-title { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ttl .sub { font-size:var(--nw-fs-small); color:var(--nw-fg2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* 1.0: the stove's sentence under its name, coloured by its tone (engine/stove_says.py). */
+.ttl .sub .say { display:block; white-space:normal; font-weight:600; color:var(--nw-fg); }
+.ttl .sub .say.alert, .ttl .sub .say.act { color:color-mix(in oklab, var(--c) var(--nw-ink), var(--nw-fg)); }
+.ttl .sub .say.alert { --c:var(--nw-alert); } .ttl .sub .say.act { --c:var(--nw-act); }
+.ttl .sub .say.off { font-weight:500; color:var(--nw-fg2); }
 .pills { grid-area:pills; display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; min-width:0; }
 .gear { grid-area:gear; flex:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--nw-line); background:var(--hc-raised2);
   display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
@@ -129,6 +134,17 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
    width, so that they keep their room inside the disc on a phone. Over an hour, it grows, the others fade, and its
    figures take the middle's place. */
 .wheel { position:relative; container-type:inline-size; }
+/* 1.0, the compact version of the stove's and a room's cards: the clock small, beside its sentence; its hours and its
+   scale left out (too small to read), its centre kept readable. */
+.top.compact { gap:14px; }
+.pair { display:grid; grid-template-columns:minmax(140px, 44%) 1fr; gap:16px; align-items:center; }
+.pair .side { display:flex; flex-direction:column; align-items:flex-start; gap:10px; min-width:0; }
+.compact .wheel .hl, .compact .wheel .gt { display:none; }
+.compact .mid { width:34cqi; }
+.compact .mid .ct { font-size:max(17px, 7cqi); }
+.compact .mid .art { width:max(24px, 13cqi); }
+.compact .mid .cs { display:none; }
+@container (max-width:300px) { .pair { grid-template-columns:1fr; } }
 .wheel > svg { width:100%; height:auto; display:block; overflow:visible; font-family:inherit; touch-action:manipulation; }
 .wheel .disc { fill:var(--hc-disc); stroke:var(--nw-line); stroke-width:1; r:64px; transition:r .28s var(--hc-ease); outline:none; }
 .wheel.picking .disc { r:69px; }

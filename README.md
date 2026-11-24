@@ -4,7 +4,7 @@
 
 Elle ne remplace pas votre thermostat : elle s’appuie sur les intégrations que vous avez déjà.
 
-> **Elle ne commande que ce que vous lui confiez.** Un planning Hestia commence « En pause » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Même actif, il ne règle que les thermostats que vous avez cochés dans Réglages, « Ce que Hestia peut régler » : aucun au départ. Le pilote du poêle est sur « Conseil » au départ : il dit ce qu’il ferait. En option, il peut régler la flamme, et seulement elle. Hestia compte aussi les granulés brûlés et dit quand nettoyer le brasier, sans rien envoyer au poêle. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
+> **Elle ne commande que ce que vous lui confiez.** Un planning Hestia commence « En pause » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Même actif, il ne règle que les thermostats que vous avez cochés dans Réglages, « Ce que Hestia peut régler » : aucun au départ. Le pilote du poêle est sur « Conseil » au départ : il dit ce qu’il ferait. En option, il peut régler la flamme, et seulement elle. Son simulateur rejoue à blanc la conduite entière du poêle (démarrer, arrêter, tenir les sécurités), sans rien envoyer, à côté de ce que font vos automatisations. Hestia compte aussi les granulés brûlés et dit quand nettoyer le brasier, sans rien envoyer au poêle. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
 
 ## Ce qu’elle montre
 
@@ -22,11 +22,14 @@ Et une **carte** pour vos tableaux de bord, sous quatre formes :
 type: custom:hestia-heating-card
 card: maison      # maison, poele, piece ou planning
 # piece: bureau   # pour card: piece, l’id de la pièce Home Assistant
+# compacte: true  # le poêle ou une pièce en version compacte (l’horloge en petit, à côté de sa phrase)
 # court: true     # une pièce sur une ligne
 # tap_action: page  # clic sur une pièce : thermostat (par défaut), page ou none
 ```
 
 La carte d’une pièce et celle du poêle sont une **horloge de 24 heures** : l’anneau est le planning du jour, heure par heure ; la courbe la température des 20 dernières heures (ses degrés sont écrits juste après l’aiguille), avec la consigne en marches ; un trait par heure hors de l’anneau dit combien ça a chauffé (la demande du thermostat, la flamme du poêle), et les 4 heures à venir montrent en gris la veille ; l’aiguille donne l’heure. Au centre, le dessin du chauffage (radiateur électrique ou à eau, clim ou pompe à chaleur, poêle), la température et ce qui vient ensuite. Une heure survolée ou touchée grossit et donne ses chiffres au centre : température, flamme ou % de chauffe, kilos ou kWh, et leur prix. Dessous, un tiroir : Argent · Conso · Confort pour une pièce, Le feu et les réglages puis Granulés · Argent · Entretien pour le poêle. L’argent demande le prix du kWh (Réglages, « L’électricité ») et, pour le poêle, le prix des sacs.
+
+Sous le nom du poêle, une phrase dit ce qu’il fait, dans la couleur de son état (« Consigne atteinte, le poêle entretient », « 21,5 °C vers 18 h 30 », « Brasier à nettoyer »…) ; la page Poêle commence par elle. Le poêle et une pièce ont aussi une version compacte, environ deux fois moins haute.
 
 La carte d’une pièce a les modes de son thermostat (Hors gel, Éco, Confort, Boost) : c’est vous qui choisissez, la carte les envoie depuis votre navigateur, comme la carte thermostat de Home Assistant. La carte du poêle a trois boutons, Éteindre (ou Allumer), Gestion auto et J’ai nettoyé, envoyés de la même façon ; ils sont grisés sur un poêle recopié d’une autre maison.
 
@@ -60,7 +63,7 @@ Hestia Chauffage rejoint [Hestia Weather](https://github.com/hestiaFB/hestia-wea
 
 - **D’autres conseils** : quand le poêle chauffe moins cher que l’électrique.
 - **Les boutons Allumer et Éteindre** de la page Poêle.
-- **Le poêle conduit en entier** (démarrer, arrêter, tenir les sécurités, à la place de vos automatisations) : il sera proposé une fois essayé dans une vraie maison.
+- **Le poêle conduit en entier** (démarrer, arrêter, tenir les sécurités, à la place de vos automatisations) : il sera proposé une fois essayé dans une vraie maison. Son simulateur, dans Réglages, permet déjà de voir ce qu’il ferait chez vous.
 - **D’autres poêles** : un profil par intégration, après Micronova Agua IOT.
 
 ## Licence

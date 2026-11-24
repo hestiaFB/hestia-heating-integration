@@ -32,8 +32,8 @@ def seen(stove_now, thermostat_now, **mem):
 HOUSE_C = 17.5                                  # the house, cold enough to start without asking
 
 
-def decide(s, t, mem, now=NOW, house_c=HOUSE_C):
-    return pilot.decide(s, t, mem, now, house_c)
+def decide(s, t, mem, now=NOW, house_c=HOUSE_C, over_c=None):
+    return pilot.decide(s, t, mem, now, house_c, over_c=over_c)
 
 
 class Flame(unittest.TestCase):
@@ -73,10 +73,17 @@ class Flame(unittest.TestCase):
         self.assertEqual((decision["action"], decision["flamme"]), ("flamme", 5))
 
     def test_flame_one_before_the_room_passes_its_set_point_and_while_it_is_there(self):
-        s, t = stove("chauffe", 3), thermostat("boost", demand=90, room=21.4, slope=0.8)
+        # 1.0: too hot at 2 °C over the set point (Frank: 0.5 °C was too little), unless Réglages say otherwise.
+        s, t = stove("chauffe", 3), thermostat("boost", demand=90, room=22.9, slope=0.8)
         decision, _, _ = decide(s, t, seen(s, t))
         self.assertEqual(decision["flamme"], 1)
-        self.assertIn("21,6 °C dans 15 min", decision["texte"])
+        self.assertIn("23,1 °C dans 15 min, plus de 2 °C au-dessus", decision["texte"])
+        mild = thermostat("boost", demand=90, room=21.4, slope=0.8)
+        decision, _, _ = decide(s, mild, seen(s, mild))
+        self.assertEqual(decision["flamme"], 5)
+        decision, _, _ = decide(s, mild, seen(s, mild), over_c=0.5)
+        self.assertEqual(decision["flamme"], 1)
+        self.assertIn("21,6 °C dans 15 min, plus de 0,5 °C au-dessus", decision["texte"])
         # A falling slope does not count: the demand's step again.
         decision, _, _ = decide(s, thermostat("boost", demand=60, room=21.4, slope=-2), seen(s, t))
         self.assertEqual((decision["action"], decision["flamme"]), ("garder", 3))
@@ -94,10 +101,10 @@ class Flame(unittest.TestCase):
         decision, _, _ = decide(s, puff, seen(s, puff))
         self.assertEqual((decision["action"], decision["flamme"]), ("garder", 5))
         # The smoothed temperature itself on its way past the set point: flame 1, and the text says it.
-        hot = thermostat("boost", demand=95, room=21.9, slope=2.0, target=21.5, temperature_lissee=21.6)
+        hot = thermostat("boost", demand=95, room=23.4, slope=2.0, target=21.5, temperature_lissee=23.1)
         decision, _, _ = decide(s, hot, seen(s, hot))
         self.assertEqual(decision["flamme"], 1)
-        self.assertIn("22,1 °C dans 15 min", decision["texte"])
+        self.assertIn("23,6 °C dans 15 min", decision["texte"])
         # Over 28 °C, the safety reads the live temperature.
         burning = thermostat("boost", demand=95, room=28.5, slope=0.0, target=21.5, temperature_lissee=27.5)
         decision, _, _ = decide(s, burning, seen(s, burning))
@@ -418,6 +425,31 @@ class TheHouseView(unittest.TestCase):
             view = house.build({**snap, "pilote": mode})
             self.assertEqual(view["_pilote"]["ordres"], [])
             self.assertNotIn("conduite", view["poele"]["pilote"])
+
+    def test_the_simulator_rehearses_the_whole_pilot_in_conseil_and_flamme(self):
+        """1.0: « Entier » à blanc, nothing sent, its journal in the conditional in place of the pilot's own."""
+        cl = m.climates()
+        cl[0]["attributes"]["preset_mode"] = "frost"
+        snap = m.snapshot(climates=cl, pilote="ombre", simulateur=True,
+                          pilote_memoire={"etat": "chauffe", "reglee": 3, "preset": "boost", "mode": "heat"})
+        snap["stove"]["roles"]["thermostat"] = {"entity_id": "climate.poele", "state": "heat",
+                                                "attributes": {"temperature": 25}}
+        for mode in ("ombre", "flamme", "ombre"):
+            view = house.build({**snap, "pilote": mode, "copies": ["climate.vt_poele"] if mode == "ombre" else []})
+            p = view["poele"]["pilote"]
+            self.assertEqual(view["_pilote"]["ordres"], [])
+            self.assertNotIn("conduite", p)
+            self.assertEqual((p["simulation"]["blanc"], p["simulation"]["sequence"]), (True, "arret"))
+            said = [e["texte"] for e in view["_pilote"]["evenements"]]
+            self.assertIn("Hestia éteindrait le poêle.", said)
+            self.assertNotIn("Hestia arrêterait le poêle.", said)
+            self.assertEqual(view["_pilote"]["reveil"], 300.0)        # the house's own stop, 5 minutes at most
+            self.assertIn("conduite_blanc", view["_pilote"]["memoire"])
+        # Switched off: the pilot's own lines again, and its memory let go.
+        view = house.build(snap | {"simulateur": False})
+        self.assertNotIn("simulation", view["poele"]["pilote"])
+        self.assertIn("Hestia arrêterait le poêle.", [e["texte"] for e in view["_pilote"]["evenements"]])
+        self.assertNotIn("conduite_blanc", view["_pilote"]["memoire"])
 
     def test_switched_off_it_says_nothing(self):
         view = house.build(m.snapshot(pilote="eteint"))

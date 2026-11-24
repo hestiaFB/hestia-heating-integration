@@ -43,10 +43,11 @@ DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_pr
             "planning_autorises": [], "pilote_flamme_basse": None,
             "brasier_kg": None, "granules_prix_sac": None, "granules_poids_sac": None,
             "pilote_notifier": None, "poele_prise_switch": None, "couper_prise": True,
-            "prix_kwh": None, "pilote_auto": None}
+            "prix_kwh": None, "pilote_auto": None, "trop_chaud_ecart": None, "pilote_ventilation": "auto",
+            "pilote_simulateur": False}
 # What the pellets settings may be (Réglages): the fire pot's threshold, a bag's price and weight.
 PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granules_poids_sac": (5, 30),
-                 "prix_kwh": (0.01, 2)}
+                 "prix_kwh": (0.01, 2), "trop_chaud_ecart": pilot.OVER_LIMITS}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en pause, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
@@ -63,7 +64,8 @@ PILOT_GAPS = 5
 PELLETS_SAVE_S = 300
 PELLETS_KEYS = ("sacs", "correction", "nettoye_le", "jour", "saison")
 PELLET_WORDS = {"brasier_kg": "seuil du brasier (kg)", "granules_prix_sac": "prix d’un sac (€)",
-                "granules_poids_sac": "poids d’un sac (kg)", "prix_kwh": "prix du kWh d’électricité (€)"}
+                "granules_poids_sac": "poids d’un sac (kg)", "prix_kwh": "prix du kWh d’électricité (€)",
+                "trop_chaud_ecart": "écart « pièce trop chaude » (°C)"}
 # The card's « Gestion auto » (0.8): off, the pilot only looks (« ombre ») and remembers the mode it had; on again, it
 # takes that mode back, else the gentlest one that acts (« flamme »).
 AUTO_MODES = ("flamme", "entier")
@@ -151,8 +153,9 @@ class HeatingCoordinator:
         # restart is neither a switch-off nor a step up, as for the house's own automations.
         self.pilot_memory = {k: v for k, v in (state.get("pilote") or {}).items() if k not in ("mode", "preset")}
         # The whole pilot's sequences are not carried over a restart: only its day's count and its lock are.
-        if "conduite" in self.pilot_memory:
-            self.pilot_memory["conduite"] = driver.kept(self.pilot_memory["conduite"])
+        for key in ("conduite", "conduite_blanc"):
+            if key in self.pilot_memory:
+                self.pilot_memory[key] = driver.kept(self.pilot_memory[key])
         self.pilot_journal = [j for j in state.get("journal_pilote") or [] if isinstance(j, dict) and j.get("jour") and j.get("qui")]
         # The rate seen before the stop is not carried over it: the time Home Assistant was stopped counts nothing.
         pellets = state.get("granules")
@@ -255,12 +258,15 @@ class HeatingCoordinator:
             answers = dict(self.answers)
             snap.update(home_planning=self.model, applied=self.applied, journal=self.journal,
                         pilote=self.settings.get("pilote"), pilote_memoire=self.pilot_memory,
+                        trop_chaud=self.settings.get("trop_chaud_ecart"),
+                        simulateur=self.settings.get("pilote_simulateur") is True,
                         autorises=self.settings.get("planning_autorises") or [],
                         granules_memoire=self.pellets_memory, granules_reglages=self._pellet_settings(),
                         pret=self.hass.state is CoreState.running,
                         conduite={"reponses": answers, "prise_switch": self.found.plug_switch,
                                   "couper_prise": self.settings.get("couper_prise") is not False,
-                                  "ha_depuis": self.ha_since})
+                                  "ha_depuis": self.ha_since,
+                                  "ventilation": self.settings.get("pilote_ventilation")})
             view = house.build(snap)
             due, waiting = view["planning"].pop("_dus"), view["planning"].pop("_sans_repere")
             # Orders only once Home Assistant runs: a thermostat that loads after this brick is not yet there.
@@ -426,6 +432,15 @@ class HeatingCoordinator:
                 return []
             domain, service = spec["service"].split(".", 1)
             return [(domain, service, {"entity_id": target, **(spec.get("donnees") or {})})]
+        if gesture == "ventilation":
+            # « Flamme + 1 » (1.0): the profile's own ventilation setting, with the level the driver chose.
+            spec = next((s for s in orders.get("reglages") or () if s.get("role") == "ventilation"), None)
+            target = entities.get("ventilation")
+            if not spec or not spec.get("attribut") or not self._sendable(target):
+                return []
+            domain, service = spec["service"].split(".", 1)
+            return [(domain, service, {"entity_id": target, **(spec.get("donnees") or {}),
+                                       spec["attribut"]: order["valeur"]})]
         if gesture == "recharger":
             entry_id = (self.found.stove or {}).get("entry_id")
             if not orders.get("recharger") or not entry_id:
@@ -630,6 +645,10 @@ class HeatingCoordinator:
             raise ValueError("interrupteur de la prise illisible")
         if "couper_prise" in changes and not isinstance(changes["couper_prise"], bool):
             raise ValueError("« couper la prise sans réponse » : oui ou non")
+        if "pilote_simulateur" in changes and not isinstance(changes["pilote_simulateur"], bool):
+            raise ValueError("simulateur du mode Entier : oui ou non")
+        if "pilote_ventilation" in changes and changes["pilote_ventilation"] not in driver.FAN_MODES:
+            raise ValueError("ventilation : « auto » ou « flamme »")
         for key, (low_v, high_v) in PELLET_LIMITS.items():
             value = changes.get(key)
             if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
