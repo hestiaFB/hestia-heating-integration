@@ -1,5 +1,16 @@
 # Changements
 
+## 0.8.0b2 — Une horloge plus facile à lire
+
+### Corrections
+- **Carte du poêle** : poêle éteint, la courbe du salon semblait tourner autour de 14 °C. Ce 14 °C était la consigne hors gel du thermostat du poêle, et c’était le seul chiffre de l’horloge. La consigne du poêle n’est plus montrée que lorsqu’il brûle.
+- Sur les deux cartes, une consigne bien plus basse que toute la courbe (3 °C ou plus, un hors gel par exemple) n’écrase plus la courbe vers le centre.
+
+### Améliorations
+- **L’échelle de la courbe est écrite** : des cercles en pointillés aux degrés ronds, avec leur valeur (18°, 20°, 22°…), écrite dans l’espace libre juste après l’aiguille. La consigne a son cercle en tirets et sa valeur en couleur, et la légende dit « consigne ».
+- **Des repères plus marqués** : une petite encoche à chaque heure sur l’anneau, une plus grande à 0 h, 6 h, 12 h et 18 h, des heures écrites plus gros, et un point au bout de la courbe pour la température de maintenant.
+- En thème clair, la courbe et la consigne sont d’un orange plus soutenu, pour se lire aussi bien qu’en thème sombre.
+
 ## 0.8.0b1 — Les cartes en horloge
 
 **La carte d’une pièce et la carte du poêle deviennent une horloge de 24 heures**, avec le dessin de votre chauffage au centre et un tiroir dessous. Les cartes Maison, Planning et la pièce sur une ligne ne changent pas.

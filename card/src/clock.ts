@@ -54,11 +54,25 @@ function runs(points:Pt[]){
  return out;
 }
 
+/** The set points worth a circle: those the trace comes near. A set point more than FAR degrees under the whole trace
+    (a frost guard while the room stays warm) would only squash the trace against the middle and be read as its level. */
+const FAR=3;
+export function keptRefs(temp:Pt[],refs:number[],length:number):number[]{
+ const seen=sample(temp,Math.max(0,length-TRACE_MIN),length).map(p=>p[1]).filter((x):x is number=>x!=null);
+ const low=seen.length?Math.min(...seen)-FAR:-Infinity;
+ return [...new Set(refs.filter(r=>r>=low).map(r=>Math.round(r*2)/2))].sort((a,b)=>b-a).slice(0,3);
+}
+const deg=(t:number)=>`${t.toLocaleString('fr-FR',{maximumFractionDigits:1})}°`;
+/** A label's box in the drawing's units: about 6 per character at 10.5 px, and 11 high. */
+const box=(text:string)=>6*text.length+4;
+const LABEL_H=11;
+
 export function dial(d:Dial,center:TemplateResult):TemplateResult{
  const end=d.length,from=Math.max(0,end-TRACE_MIN);
  const abs=(m:number)=>d.start+m;
  const temps=sample(d.temp,from,end);
- const vals=[...temps.map(p=>p[1]).filter((x):x is number=>x!=null),...d.refs];
+ const refs=keptRefs(d.temp,d.refs,d.length);
+ const vals=[...temps.map(p=>p[1]).filter((x):x is number=>x!=null),...refs];
  let lo=vals.length?Math.floor(Math.min(...vals)-.5):16,hi=vals.length?Math.ceil(Math.max(...vals)+.5):22;
  if(hi-lo<3){const mid=(hi+lo)/2;lo=Math.floor(mid-1.5);hi=lo+3;}
  const R=(t:number)=>TRACE_IN+Math.max(0,Math.min(1,(t-lo)/(hi-lo)))*TRACE_W;
@@ -72,16 +86,40 @@ export function dial(d:Dial,center:TemplateResult):TemplateResult{
   ticks+=`M${f(x1)} ${f(y1)}L${f(x2)} ${f(y2)}`;
  }
  const [hx1,hy1]=at(HAND_IN,d.now),[hx2,hy2]=at(RING,d.now);
- const refs=[...new Set(d.refs.map(r=>Math.round(r*2)/2))].sort((a,b)=>b-a).slice(0,3);
- const deg=(t:number)=>`${t.toLocaleString('fr-FR',{maximumFractionDigits:1})}°`;
+ // The trace's scale: dotted circles at whole degrees at least 12 apart, the set points dashed (a degree next to a set
+ // point gives way to it). Their values are written in the gap the trace leaves just after the hand, where nothing else
+ // is drawn, from the inside out: along the radius at the gap's middle, or, when the gap lies sideways and the labels
+ // would cover each other (they are wider than high), as a staircase across it, one way or the other.
+ const gap=d.start+(end+from+1440)/2,span=hi-lo;
+ const step=[1,2,5,10].find(x=>x*TRACE_W/span>=12)??10;
+ const grads:number[]=[];
+ if(trace.length)for(let t=Math.ceil(lo/step)*step;t<=hi;t+=step)if(!refs.some(r=>Math.abs(r-t)<=step/2))grads.push(t);
+ const items=[...refs.map(t=>({t,set:true})),...grads.map(t=>({t,set:false}))].sort((a,b)=>a.t-b.t);
+ const clash=(a:{x:number;y:number;w:number},b:{x:number;y:number;w:number})=>Math.abs(a.x-b.x)<(a.w+b.w)/2+2&&Math.abs(a.y-b.y)<LABEL_H;
+ const lay=(list:typeof items,turn:number)=>list.map((it,i)=>{const [x,y]=at(R(it.t),gap+(i-(list.length-1)/2)*turn);
+  return {...it,x,y,w:box(deg(it.t))};});
+ const fits=(ls:ReturnType<typeof lay>)=>ls.every((l,i)=>ls.slice(i+1).every(o=>!clash(l,o)));
+ let labels:ReturnType<typeof lay>=[];
+ // Fewer labels when they cannot fit: every other whole degree, then the set points alone.
+ for(const list of [items,items.filter((it,i)=>it.set||i%2===0),items.filter(it=>it.set)]){
+  const turn=[0,12,-12,24,-24,36,-36].find(x=>(list.length-1)/2*Math.abs(x)<=80&&fits(lay(list,x)));
+  if(turn!=null){labels=lay(list,turn);break;}
+ }
+ // The trace's end: where the temperature is now.
+ const last=trace.length?trace[trace.length-1][trace[trace.length-1].length-1]:null;
+ const [ex,ey]=last?at(R(last[1]),abs(last[0])):[0,0];
  return html`<div class="dial"><svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" role="img" aria-label=${d.label}>
   <circle class="rim" cx=${CX} cy=${CY} r=${RING}></circle>
   ${d.segments.filter(s=>s.a-s.de>4).map(s=>svg`<path class=${'seg t-'+s.ton} d=${arc(RING,s.de+2,s.a-2)}></path>`)}
-  ${refs.map(t=>svg`<circle class="ref" cx=${CX} cy=${CY} r=${f(R(t))}></circle><text class="reft" x=${CX+4} y=${f(CY-R(t)-3)}>${deg(t)}</text>`)}
+  <path class="hr" d=${HOURS.minor}></path><path class="hr main" d=${HOURS.main}></path>
+  ${grads.map(t=>svg`<circle class="grid" cx=${CX} cy=${CY} r=${f(R(t))}></circle>`)}
+  ${refs.map(t=>svg`<circle class="ref" cx=${CX} cy=${CY} r=${f(R(t))}></circle>`)}
   ${ticks?svg`<path class=${'ticks '+d.tickCls} d=${ticks}></path>`:nothing}
   ${area?svg`<path class="area" d=${area}></path>`:nothing}
   ${trace.length?svg`<path class="trace" d=${trace.map(line).join('')}></path>`:nothing}
+  ${labels.map(l=>svg`<text class=${l.set?'gt set':'gt'} x=${f(l.x)} y=${f(l.y)}>${deg(l.t)}</text>`)}
   <line class="hand" x1=${f(hx1)} y1=${f(hy1)} x2=${f(hx2)} y2=${f(hy2)}></line>
+  ${last?svg`<circle class="now" cx=${f(ex)} cy=${f(ey)} r="4"></circle>`:nothing}
   <circle class="knob" cx=${f(hx2)} cy=${f(hy2)} r="7"></circle>
   ${d.marks.map(k=>{const [x,y]=at(RING,k.at);return svg`<circle class=${'mark '+k.cls} cx=${f(x)} cy=${f(y)} r="5"></circle>`;})}
   <circle class="disc" cx=${CX} cy=${CY} r=${DISC}></circle>
@@ -89,6 +127,11 @@ export function dial(d:Dial,center:TemplateResult):TemplateResult{
   <text class="hour" x=${CX} y="337">12 h</text><text class="hour" x="59" y=${CY}>18 h</text>
  </svg><div class="mid">${center}</div></div>`;
 }
+/** The hours across the ring: a short notch every hour, a full one every six. */
+const HOURS=(()=>{let minor='',main='';
+ for(let h=0;h<24;h++){const big=h%6===0,[x1,y1]=at(RING-(big?8:4),h*60),[x2,y2]=at(RING+(big?8:4),h*60);
+  const p=`M${f(x1)} ${f(y1)}L${f(x2)} ${f(y2)}`;if(big)main+=p;else minor+=p;}
+ return {minor,main};})();
 
 /* The heating's pictures, each in the same 64 × 52 box. The waves rise and the flame flickers while it heats (never
    with « reduce motion »). */

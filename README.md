@@ -4,7 +4,7 @@
 
 Elle ne remplace pas votre thermostat : elle s’appuie sur les intégrations que vous avez déjà.
 
-> **Bêta 0.8.0b1 : les cartes en horloge.** Elle lit et explique, et elle a ses propres plannings. Un planning commence « En essai » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Même actif, il ne règle que les thermostats que vous avez cochés dans Réglages, « Ce que Hestia peut régler » : aucun au départ. Le pilote du poêle est « à l’ombre » au départ : il dit ce qu’il ferait. En option, il peut régler la flamme, et seulement elle ; ou conduire le poêle entier (démarrer, arrêter, tenir les sécurités), à la place de vos automatisations. Hestia compte aussi les granulés brûlés et dit quand nettoyer le brasier, sans rien envoyer au poêle. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
+> **Bêta 0.8.0b2 : les cartes en horloge.** Elle lit et explique, et elle a ses propres plannings. Un planning commence « En essai » : il montre ce qu’il ferait, sans rien envoyer, tant que vous ne l’avez pas mis sur « Actif ». Même actif, il ne règle que les thermostats que vous avez cochés dans Réglages, « Ce que Hestia peut régler » : aucun au départ. Le pilote du poêle est « à l’ombre » au départ : il dit ce qu’il ferait. En option, il peut régler la flamme, et seulement elle ; ou conduire le poêle entier (démarrer, arrêter, tenir les sécurités), à la place de vos automatisations. Hestia compte aussi les granulés brûlés et dit quand nettoyer le brasier, sans rien envoyer au poêle. Voir [le cahier des charges](docs/CAHIER-DES-CHARGES.md).
 
 ## Ce que montre la version 0.7
 
@@ -26,7 +26,7 @@ card: maison      # maison, poele, piece ou planning
 # tap_action: page  # clic sur une pièce : thermostat (par défaut), page ou none
 ```
 
-Depuis la 0.8, la carte d’une pièce et celle du poêle sont une **horloge de 24 heures** : l’anneau est le planning du jour, la courbe la température des 20 dernières heures, les petits traits la chauffe (la demande du thermostat, la flamme du poêle), l’aiguille l’heure. Au centre, le dessin du chauffage (radiateur électrique ou à eau, clim ou pompe à chaleur, poêle), la température et ce qui vient ensuite. Dessous, un tiroir : Argent · Conso · Confort pour une pièce, Le feu et les réglages puis Granulés · Argent · Entretien pour le poêle. L’argent demande le prix du kWh (Réglages, « L’électricité ») et, pour le poêle, le prix des sacs.
+Depuis la 0.8, la carte d’une pièce et celle du poêle sont une **horloge de 24 heures** : l’anneau est le planning du jour, la courbe la température des 20 dernières heures (ses degrés et la consigne sont écrits juste après l’aiguille), les petits traits la chauffe (la demande du thermostat, la flamme du poêle), l’aiguille l’heure. Au centre, le dessin du chauffage (radiateur électrique ou à eau, clim ou pompe à chaleur, poêle), la température et ce qui vient ensuite. Dessous, un tiroir : Argent · Conso · Confort pour une pièce, Le feu et les réglages puis Granulés · Argent · Entretien pour le poêle. L’argent demande le prix du kWh (Réglages, « L’électricité ») et, pour le poêle, le prix des sacs.
 
 La carte d’une pièce a les modes de son thermostat (Hors gel, Éco, Confort, Boost) : c’est vous qui choisissez, la carte les envoie depuis votre navigateur, comme la carte thermostat de Home Assistant. La carte du poêle a trois boutons, Éteindre (ou Allumer), Gestion auto et J’ai nettoyé, envoyés de la même façon ; ils sont grisés sur un poêle recopié d’une autre maison.
 

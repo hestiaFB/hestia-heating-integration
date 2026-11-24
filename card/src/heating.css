@@ -75,11 +75,16 @@ ha-card.tap { cursor:pointer; }
   --hc-r-poele: color-mix(in oklab, var(--hc-stove) 78%, var(--nw-bg));
   --hc-r-boost: color-mix(in oklab, var(--nw-act) 85%, var(--nw-bg));
   --hc-r-off: color-mix(in srgb, var(--nw-fg) 18%, var(--nw-bg));
+  /* The trace and the set points, deeper on a light background so that they read as well as on a dark one. */
+  --hc-trace: var(--nw-heat);
+  --hc-set: color-mix(in oklab, var(--nw-heat) 80%, var(--nw-fg));
 }
 :host([theme="light"]) {
   --hc-sunk: color-mix(in srgb, #000 2.5%, var(--nw-bg));
   --hc-sunk2: color-mix(in srgb, #000 4.5%, var(--nw-bg));
   --hc-well: color-mix(in srgb, #000 8%, var(--nw-bg));
+  --hc-trace: color-mix(in oklch, var(--nw-heat) 45%, oklch(.6 .15 42));
+  --hc-set: color-mix(in oklch, var(--nw-heat) 30%, oklch(.55 .14 42));
 }
 ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .top { padding:22px; display:flex; flex-direction:column; gap:16px; }
@@ -119,18 +124,26 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .dial .seg { fill:none; stroke-width:16; stroke:var(--hc-r-off); }
 .dial .seg.t-confort { stroke:var(--hc-r-confort); } .dial .seg.t-eco { stroke:var(--hc-r-eco); } .dial .seg.t-poele { stroke:var(--hc-r-poele); }
 .dial .seg.t-boost { stroke:var(--hc-r-boost); }
-.dial .ref { fill:none; stroke:color-mix(in srgb, var(--nw-fg) 14%, transparent); stroke-width:1; stroke-dasharray:2 4; }
-.dial .reft { font-size:10px; fill:var(--nw-fg2); }
+/* The marks: the hours across the ring, the trace's whole degrees (dotted) and its set points (dashed, in the trace's
+   colour), with their values written in the gap after the hand; a dot where the trace is now. */
+.dial .hr { fill:none; stroke:color-mix(in srgb, var(--nw-fg) 30%, transparent); stroke-width:1.2; stroke-linecap:round; }
+.dial .hr.main { stroke:color-mix(in srgb, var(--nw-fg) 62%, transparent); stroke-width:2; }
+.dial .grid { fill:none; stroke:color-mix(in srgb, var(--nw-fg) 24%, transparent); stroke-width:1; stroke-dasharray:1.5 3.5; stroke-linecap:round; }
+.dial .ref { fill:none; stroke:color-mix(in oklab, var(--hc-set) 75%, transparent); stroke-width:1.4; stroke-dasharray:6 4; }
+.dial .gt { font-size:10.5px; font-weight:650; fill:var(--nw-fg2); text-anchor:middle; dominant-baseline:central;
+  paint-order:stroke; stroke:var(--nw-bg); stroke-width:3px; stroke-linejoin:round; }
+.dial .gt.set { fill:var(--hc-set); font-weight:750; }
+.dial .now { fill:var(--hc-trace); stroke:var(--nw-bg); stroke-width:2; }
 .dial .ticks { fill:none; stroke-width:3; stroke-linecap:round; }
 .dial .ticks.demand { stroke:var(--hc-demand); } .dial .ticks.flame { stroke:var(--hc-stove); }
 .dial .area { fill:color-mix(in oklab, var(--nw-heat) 14%, transparent); stroke:none; }
-.dial .trace { fill:none; stroke:var(--nw-heat); stroke-width:3; stroke-linejoin:round; stroke-linecap:round; }
+.dial .trace { fill:none; stroke:var(--hc-trace); stroke-width:3; stroke-linejoin:round; stroke-linecap:round; }
 .dial .hand { stroke:var(--nw-fg); stroke-width:2; stroke-linecap:round; }
 .dial .knob { fill:var(--nw-fg); stroke:var(--nw-bg); stroke-width:3; }
 .dial .mark { fill:var(--nw-bg); stroke-width:2.5; stroke:var(--hc-demand); }
 .dial .mark.lit { stroke:var(--hc-stove); } .dial .mark.stop { stroke:var(--nw-cold); }
 .dial .disc { fill:var(--hc-sunk); stroke:color-mix(in srgb, var(--nw-fg) 6%, transparent); stroke-width:1; }
-.dial .hour { font-size:11px; font-weight:600; fill:var(--nw-fg2); text-anchor:middle; dominant-baseline:middle; }
+.dial .hour { font-size:12.5px; font-weight:700; fill:color-mix(in srgb, var(--nw-fg) 78%, transparent); text-anchor:middle; dominant-baseline:middle; }
 .dial .mid { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:27cqi; display:flex; flex-direction:column;
   align-items:center; pointer-events:none; text-align:center; }
 .mid .art { display:block; width:12.3cqi; height:auto; overflow:visible; }
@@ -165,7 +178,8 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .legend .sw { width:14px; height:6px; border-radius:3px; background:var(--hc-r-off); }
 .legend .sw.t-confort { background:var(--hc-r-confort); } .legend .sw.t-eco { background:var(--hc-r-eco); } .legend .sw.t-poele { background:var(--hc-r-poele); }
 .legend .sw.t-boost { background:var(--hc-r-boost); }
-.legend .sw.line { height:3px; border-radius:2px; background:var(--nw-heat); }
+.legend .sw.line { height:3px; border-radius:2px; background:var(--hc-trace); }
+.legend .sw.set { height:0; border-radius:0; background:none; border-top:2px dashed color-mix(in oklab, var(--hc-set) 75%, transparent); }
 .legend .sw.tick { width:3px; height:10px; border-radius:2px; background:var(--hc-demand); } .legend .sw.tick.flame { background:var(--hc-stove); }
 .legend .sw.ring { width:8px; height:8px; border-radius:50%; border:2px solid var(--hc-demand); box-sizing:border-box; background:none; }
 .legend .sw.ring.lit { border-color:var(--hc-stove); } .legend .sw.ring.stop { border-color:var(--nw-cold); }
