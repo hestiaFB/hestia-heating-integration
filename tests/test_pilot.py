@@ -271,9 +271,9 @@ class Safety(unittest.TestCase):
 class LowFlameSwitch(unittest.TestCase):
     def test_the_switch_asks_for_the_lowest_flame(self):
         s, t = stove("chauffe", 3), thermostat("boost", demand=70)
-        decision, _, _ = pilot.decide(s, t, seen(s, t), NOW, HOUSE_C, "Flamme minimum")
+        decision, _, _ = pilot.decide(s, t, seen(s, t), NOW, HOUSE_C, "Flamme au plus bas")
         self.assertEqual((decision["action"], decision["flamme"]), ("flamme", 1))
-        self.assertIn("« Flamme minimum » demande la flamme au plus bas.", decision["texte"])
+        self.assertIn("« Flamme au plus bas » demande la flamme au plus bas.", decision["texte"])
 
 
 FLAME = "number.poele_power"
