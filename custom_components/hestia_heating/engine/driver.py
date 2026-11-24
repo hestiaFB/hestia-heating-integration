@@ -296,7 +296,10 @@ def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
         if state not in BURNING:
             mem["ventilation"] = None
         return
-    smoke, flame = stove.get("fumees"), stove.get("flamme")
+    # The flame set, not the one the stove shows: it dips a moment while the stove modulates, and each dip would cost
+    # an order (1.0.0b6: on 24 November a real flame of 1 for a moment, set at 2, cost two orders).
+    smoke = stove.get("fumees")
+    flame = stove.get("flamme_reglee") if stove.get("flamme_reglee") is not None else stove.get("flamme")
     warm = bool(seq.get("chaud")) or (state == "chauffe" and smoke is not None and smoke >= tuning.get("ventil_fumees_c"))
     seq["chaud"] = warm
     mem["ventilation"] = seq

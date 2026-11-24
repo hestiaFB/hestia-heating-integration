@@ -215,7 +215,7 @@ Après un enregistrement, la flamme remise en Automatique remet la température 
 
 ### La ventilation par Hestia, hors Entier
 
-`pilote_ventilation` : `auto` (le poêle la règle, `AUTO` envoyé avant un démarrage par Hestia), `flamme` (Hestia, « flamme + 1 »), `manuel` (la vitesse choisie, jamais touchée). Depuis la 1.0.0b3, `flamme` vaut aussi quand les automatisations allument et éteignent le poêle : `driver.fan_only()` applique la même règle que dans Entier (au plus bas tant que les fumées sont sous 110 °C, puis la flamme + 1, 5 au plus), avec sa propre mémoire (`ventilation_seule`). **C’est un ordre de Hestia** : au plus un toutes les 10 min, jamais dans la réserve de 6 écritures du jour, jamais tant que Home Assistant démarre, jamais à un poêle recopié (le labo). Le simulateur d’Entier laisse alors la ventilation de côté.
+`pilote_ventilation` : `auto` (le poêle la règle, `AUTO` envoyé avant un démarrage par Hestia), `flamme` (Hestia, « flamme + 1 »), `manuel` (la vitesse choisie, jamais touchée). Depuis la 1.0.0b3, `flamme` vaut aussi quand les automatisations allument et éteignent le poêle : `driver.fan_only()` applique la même règle que dans Entier (au plus bas tant que les fumées sont sous 110 °C, puis la flamme + 1, 5 au plus ; depuis la 1.0.0b6, la flamme réglée, pas celle que le poêle affiche), avec sa propre mémoire (`ventilation_seule`). **C’est un ordre de Hestia** : au plus un toutes les 10 min, jamais dans la réserve de 6 écritures du jour, jamais tant que Home Assistant démarre, jamais à un poêle recopié (le labo). Le simulateur d’Entier laisse alors la ventilation de côté.
 
 ### Les chiffres du poêle (`engine/tuning.py`)
 

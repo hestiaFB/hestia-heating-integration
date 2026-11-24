@@ -6,6 +6,9 @@
 - **Chaque trait de flamme autour de l’horloge montre son palier en entier** : une flamme 3 a toujours la longueur d’une flamme 3, même si le poêle n’a brûlé que vingt minutes dans l’heure. Les flammes 1 et 2 se voient bien. Les minutes de l’heure restent au centre, au survol.
 - **La consigne du poêle se lit en marches nettes** sur toutes les heures où son thermostat la demandait (le Boost), et plus seulement par bouts pendant que le poêle brûlait. Le trait est plus épais et passe par-dessus la courbe. Le Hors gel n’est toujours pas dessiné.
 
+### Corrections
+- **La ventilation « par Hestia » suit la flamme réglée**, plus la flamme que le poêle affiche : celle-ci baisse un instant quand le poêle module, et chaque baisse coûtait un ordre de ventilation de trop.
+
 ## 1.0.0b5 — Le poêle allumé à la main reste allumé
 
 ### Corrections
