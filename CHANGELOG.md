@@ -1,5 +1,20 @@
 # Changements
 
+## 0.8.0b3 — La roue au survol
+
+**L’horloge des cartes Pièce et Poêle se lit heure par heure**, comme la roue d’Hestia Énergie.
+
+### Nouveautés
+- **Passez la souris sur une heure, ou touchez-la** : elle grossit, les autres s’effacent, et ses chiffres viennent au centre. La température moyenne de l’heure, la flamme du poêle (et combien de minutes il a brûlé) ou le % de chauffe du radiateur, les kilos de granulés ou les kWh de l’heure, et ce qu’ils ont coûté. Un deuxième appui sur l’heure, ou un appui au centre, la relâche. Au clavier aussi : Tab, les flèches, Entrée, Échap.
+- **Une heure, un trait**, hors de l’anneau : plus il est long et orangé, plus ça a chauffé (la flamme pour le poêle, le % de chauffe pour un radiateur).
+- **Les 4 heures à venir**, juste après l’aiguille : le planning prévu, et en gris ce qui s’est passé hier à la même heure.
+
+### Améliorations
+- L’anneau du planning est découpé en 24 heures : elles se comptent d’un coup d’œil.
+- La consigne suit le planning en marches (éco, confort, poêle en chauffe) au lieu d’un cercle fixe. Celle du poêle n’est dessinée que lorsqu’il brûle.
+- La courbe a un dégradé qui part du centre ; ses degrés restent écrits juste après l’aiguille.
+- Sur la carte d’une pièce, un appui hors des heures ouvre toujours le thermostat (ou la page de la pièce, selon le réglage « Clic sur la carte »).
+
 ## 0.8.0b2 — Une horloge plus facile à lire
 
 ### Corrections

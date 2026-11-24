@@ -85,6 +85,36 @@ class DailyTotals(unittest.TestCase):
         self.assertEqual(stats.call_args.args[5], {"energy": "kWh"}, "asked in kWh whatever the counter's unit")
         self.assertEqual(days, {(today - timedelta(days=1)).date().isoformat(): 7.4, today.date().isoformat(): 6.5})
 
+    def test_each_hour_gets_what_the_counter_moved(self):
+        """0.8.0b3: the clock's hours, from the hourly statistics; the hour after the last one gets what the counter
+        moved since."""
+        import asyncio
+        from unittest.mock import patch
+        from custom_components.hestia_heating import reader
+        now = dt_util.now().replace(hour=18, minute=34, second=0, microsecond=0)
+        h16, h17 = now.replace(hour=16, minute=0), now.replace(hour=17, minute=0)
+        rows = [{"start": h16.timestamp(), "change": 0.66, "state": 10.0},
+                {"start": h17.timestamp(), "change": 0.0, "state": 10.0}]
+
+        class Instance:
+            async def async_add_executor_job(self, job):
+                return job()
+
+        class States:
+            def get(self, entity_id):
+                return State(entity_id, "10.42", {"unit_of_measurement": "kg"})
+
+        hass = type("Hass", (), {"states": States()})()
+        with patch("homeassistant.components.recorder.get_instance", return_value=Instance()), \
+                patch("homeassistant.components.recorder.statistics.statistics_during_period",
+                      return_value={"sensor.kg": rows}) as stats:
+            hours = asyncio.run(reader.hourly_totals(hass, "sensor.kg", "kg", h16, now))
+            early = asyncio.run(reader.hourly_totals(hass, "sensor.kg", "kg", h16, now.replace(hour=17, minute=58)))
+        self.assertEqual(stats.call_args.args[4], "hour")
+        self.assertEqual(stats.call_args.args[5], {"mass": "kg"})
+        self.assertEqual(hours, [(h16, 0.66), (h17, 0.0), (now.replace(hour=18, minute=0), 0.42)])
+        self.assertEqual(early, [(h16, 0.66), (h17, 0.0)], "no hour that has not begun yet")
+
 
 if __name__ == "__main__":
     unittest.main()

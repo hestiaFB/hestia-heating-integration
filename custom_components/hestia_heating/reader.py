@@ -11,7 +11,7 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
@@ -510,28 +510,29 @@ STAT_UNITS = {"kWh": {"energy": "kWh"}, "kg": {"mass": "kg"}}
 FACTORS = {"Wh": 0.001, "kWh": 1.0, "MWh": 1000.0, "g": 0.001, "kg": 1.0}
 
 
-async def daily_totals(hass: HomeAssistant, stat: str, unit: str, start: datetime, now: datetime) -> dict[str, float]:
-    """{« 2026-11-24 »: total of the day} of a counter (`total_increasing`: kWh, kg) since `start`, from the long-term
-    statistics (one row a day, in the recorder's executor). Today's total adds what the counter moved since its last
-    hourly statistic, read from its state now. Empty when the counter has no statistics."""
+async def _counter(hass: HomeAssistant, stat: str, unit: str, start: datetime, now: datetime,
+                   period: str) -> tuple[list[tuple[datetime, float]], float | None]:
+    """A counter's long-term statistics (`total_increasing`: kWh, kg) since `start`, one row a `period` (« hour »,
+    « day »), read in the recorder's executor: [(local start of the row, what it moved)], and what the counter moved
+    since its last statistic, read from its state now (None when unknown). No rows when it has no statistics."""
     from homeassistant.components.recorder import get_instance
     from homeassistant.components.recorder.statistics import statistics_during_period
 
     def read():
-        return statistics_during_period(hass, start, now, {stat}, "day", STAT_UNITS.get(unit), {"change", "state"})
+        return statistics_during_period(hass, start, now, {stat}, period, STAT_UNITS.get(unit), {"change", "state"})
 
     try:
         rows = (await get_instance(hass).async_add_executor_job(read)).get(stat) or []
     except Exception as err:  # noqa: BLE001 - no recorder, or a database hiccup: no history, never an error
         _LOGGER.debug("Statistics unavailable for %s: %s", stat, err)
-        return {}
-    out: dict[str, float] = {}
+        return [], None
+    out: list[tuple[datetime, float]] = []
     last_state = None
     for row in rows:
         begin = row.get("start")
-        day = (dt_util.as_local(dt_util.utc_from_timestamp(begin)) if isinstance(begin, (int, float))
-               else dt_util.as_local(begin)).date().isoformat()
-        out[day] = round(max(0.0, float(row.get("change") or 0.0)), 3)
+        when = (dt_util.as_local(dt_util.utc_from_timestamp(begin)) if isinstance(begin, (int, float))
+                else dt_util.as_local(begin))
+        out.append((when, round(max(0.0, float(row.get("change") or 0.0)), 3)))
         if row.get("state") is not None:
             last_state = float(row["state"])
     current = hass.states.get(stat)
@@ -540,7 +541,30 @@ async def daily_totals(hass: HomeAssistant, stat: str, unit: str, start: datetim
         value = float(current.state) * factor if current is not None and factor is not None else None
     except (TypeError, ValueError):
         value = None
-    if value is not None and last_state is not None and value >= last_state:
+    moved = round(value - last_state, 3) if value is not None and last_state is not None and value >= last_state \
+        else None
+    return out, moved
+
+
+async def daily_totals(hass: HomeAssistant, stat: str, unit: str, start: datetime, now: datetime) -> dict[str, float]:
+    """{« 2026-11-24 »: total of the day} of a counter since `start`, from its daily statistics. Today's total adds
+    what the counter moved since its last hourly statistic. Empty when the counter has no statistics."""
+    rows, moved = await _counter(hass, stat, unit, start, now, "day")
+    out = {when.date().isoformat(): change for when, change in rows}
+    if rows and moved is not None:
         today = now.date().isoformat()
-        out[today] = round(out.get(today, 0.0) + value - last_state, 3)
+        out[today] = round(out.get(today, 0.0) + moved, 3)
     return out
+
+
+async def hourly_totals(hass: HomeAssistant, stat: str, unit: str, start: datetime,
+                        now: datetime) -> list[tuple[datetime, float]]:
+    """[(local start of the hour, what the counter moved in it)] since `start`, from its hourly statistics (the
+    clock's hours). What it moved since its last statistic goes to the hour after it, when that hour has begun (the
+    statistics of an hour are written a few minutes after it ends). Empty when the counter has no statistics."""
+    rows, moved = await _counter(hass, stat, unit, start, now, "hour")
+    if rows and moved is not None:
+        following = rows[-1][0] + timedelta(hours=1)
+        if following <= now:
+            rows.append((following, moved))
+    return rows

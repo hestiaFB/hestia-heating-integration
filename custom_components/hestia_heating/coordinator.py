@@ -692,6 +692,9 @@ class HeatingCoordinator:
             if stove.get("thermostat"):
                 wanted += [("temperature", stove["thermostat"], "current_temperature"),
                            ("demande", stove["thermostat"], "power_percent")]
+                if hours:
+                    # The clock draws the stove's set point while it burns (0.8.0b3).
+                    wanted.append(("consigne", stove["thermostat"], "temperature"))
         elif target.startswith("piece/"):
             room = next((r for r in self.data.get("pieces") or [] if r["id"] == target[6:]), None)
             if room and room.get("principal"):
@@ -707,8 +710,27 @@ class HeatingCoordinator:
         if hours:
             # The minutes count from `debut`; the clock places them from the minute of the day it falls on.
             view.update(debut_min=start.hour * 60 + start.minute, fenetre_min=hours * 60)
+            # Each hour's kWh or kilos, from the counter's hourly statistics (0.8.0b3: the clock's hours, on hover).
+            stat, unit = self._counter_of(target)
+            if stat:
+                origin = start.replace(second=0, microsecond=0)
+                rows = await reader.hourly_totals(self.hass, stat, unit, origin.replace(minute=0), now)
+                view["energie"] = {"unite": unit, "heures": [[int((begin - origin).total_seconds() // 60), value]
+                                                             for begin, value in rows]}
         self._days[key] = (time.monotonic(), view)
         return view
+
+    def _counter_of(self, target: str) -> tuple[str | None, str | None]:
+        """The counter behind a target's kWh or kilos, and its unit: the stove's pellets (Hestia's own count) or a
+        room's energy (its thermostat's counter)."""
+        if target == "poele":
+            return self._own_entity("sensor", "poele_granules_brules"), "kg"
+        if target.startswith("piece/"):
+            room = next((r for r in self.data.get("pieces") or [] if r["id"] == target[6:]), None)
+            main = (room or {}).get("principal")
+            stat = next((c.get("energie") for c in self.found.climates if c["entity_id"] == main), None) if main else None
+            return stat, "kWh"
+        return None, None
 
     async def async_history(self, target: str) -> dict:
         """The last days' totals for the cards' drawers (0.8), from the long-term statistics: a room's kWh (its
@@ -717,14 +739,7 @@ class HeatingCoordinator:
         cached = self._days.get("histoire/" + target)
         if cached and time.monotonic() - cached[0] < HISTORY_CACHE_S:
             return cached[1]
-        stat, unit = None, None
-        if target == "poele":
-            stat, unit = self._own_entity("sensor", "poele_granules_brules"), "kg"
-        elif target.startswith("piece/"):
-            room = next((r for r in self.data.get("pieces") or [] if r["id"] == target[6:]), None)
-            main = (room or {}).get("principal")
-            stat = next((c.get("energie") for c in self.found.climates if c["entity_id"] == main), None) if main else None
-            unit = "kWh"
+        stat, unit = self._counter_of(target)
         now = dt_util.now()
         today = now.replace(hour=0, minute=0, second=0, microsecond=0)
         first = min(today - timedelta(days=HISTORY_DAYS - 1), today.replace(day=1))

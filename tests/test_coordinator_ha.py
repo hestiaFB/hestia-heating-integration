@@ -378,13 +378,35 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         own pellet count and of a room's energy counter."""
         from custom_components.hestia_heating import reader
         entry, c = await self._setup()
-        with patch.object(reader, "day_history", return_value={}):
+        hourly, wanted = [], []
+
+        async def hours(hass, stat, unit, first, now):
+            hourly.append((stat, unit, first))
+            begin = now.replace(minute=0, second=0, microsecond=0)
+            return [(begin - timedelta(hours=1), 0.66), (begin, 0.3)]
+
+        async def history(hass, start, end, asked, text=()):
+            wanted.append([name for name, _, _ in asked])
+            return {}
+        with patch.object(reader, "day_history", side_effect=history), patch.object(reader, "hourly_totals", side_effect=hours):
             day = await c.async_day("poele", 24)
             since_midnight = await c.async_day("poele")
         start = dt_util.parse_datetime(day["debut"])
         self.assertAlmostEqual((dt_util.now() - start).total_seconds(), 24 * 3600, delta=60)
         self.assertEqual((day["debut_min"], day["fenetre_min"]), (start.hour * 60 + start.minute, 1440))
         self.assertNotIn("fenetre_min", since_midnight, "the tab's day is still since midnight")
+        # 0.8.0b3: the clock's hours, with the stove's set point (drawn while it burns) and each hour's kilos.
+        self.assertIn("consigne", wanted[0])
+        self.assertNotIn("consigne", wanted[1], "the tab's day of the stove is unchanged")
+        self.assertEqual([(stat, unit) for stat, unit, _ in hourly], [("sensor.hestia_heating_poele_granules_brules", "kg")],
+                         "the hours are read for the clock only, not for the tab's day")
+        self.assertEqual((hourly[0][2].minute, hourly[0][2].second), (0, 0), "from a whole hour")
+        self.assertNotIn("energie", since_midnight)
+        now_min = (day["debut_min"] + day["fenetre_min"]) % 1440
+        self.assertEqual(day["energie"]["unite"], "kg")
+        self.assertEqual([round(v, 2) for _, v in day["energie"]["heures"]], [0.66, 0.3])
+        self.assertEqual(day["energie"]["heures"][-1][0], 1440 - now_min % 60,
+                         "an hour's minute counts from the clock's start, like the curves")
         asked = []
 
         async def totals(hass, stat, unit, first, now):
