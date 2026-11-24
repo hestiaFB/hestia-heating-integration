@@ -72,7 +72,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.0.0b4';
+const VERSION='1.0.0b5';
 // The whole pilot's answers, as on the phone.
 const ANSWER:Record<string,string>={oui:'Oui, allumer',non:'Non',couper:'Couper la prise',ignorer:'Ignorer',nettoye:'J’ai nettoyé'};
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
@@ -841,7 +841,7 @@ export class HestiaHeatingSetup extends LitElement {
   const cannot=f.pilotable===false?'Le profil de ce poêle ne dit pas encore comment l’allumer et l’éteindre.':locked?'Ce poêle est recopié d’une autre maison : Hestia ne lui enverra rien.':undefined;
   return this.pick<'maison'|'hestia'>('Qui allume et éteint le poêle',undefined,[
    ['maison','Par vos automatisations, ou à la main','Hestia n’allume pas le poêle et ne l’éteint pas. Elle regarde ce que font vos automatisations, et note ce qu’elle aurait fait.'],
-   ['hestia','Par Hestia','Hestia allume le poêle quand le planning passe son thermostat en Boost, et l’éteint quand la maison est assez chaude ou au retour en Hors gel. Elle vérifie chaque allumage et chaque arrêt, coupe le poêle en cas d’alarme ou de surchauffe, et vous prévient sur votre téléphone.',
+   ['hestia','Par Hestia','Hestia allume le poêle quand le planning passe son thermostat en Boost, et l’éteint quand la maison est assez chaude ou au passage en Hors gel. Allumé à la main, le poêle est gardé : Hestia met son thermostat en Boost. Elle vérifie chaque allumage et chaque arrêt, coupe le poêle en cas d’alarme ou de surchauffe, et vous prévient sur votre téléphone.',
     cannot??'Coupez d’abord vos automatisations qui allument ou éteignent le poêle : sinon, elles se contrediraient.',!!cannot],
   ],byHestia?'hestia':'maison',x=>choose(auto,x==='hestia'));
  }
@@ -960,7 +960,7 @@ export class HestiaHeatingSetup extends LitElement {
      value:toggle('Couper la prise sans réponse',this.val<boolean>('couper_prise')!==false,on=>this.set('couper_prise',on))}),
     listRow({label:'L’interrupteur de sa prise',control:true,sub:cut?'Choisi par vous.':f.coupure?'Trouvé seul, d’après la prise mesurée.':'Aucun trouvé : en dernier recours, Hestia vous dira de couper le poêle vous-même.',
      value:this.select('Interrupteur de la prise du poêle',cut,(f.coupures??[]).map(x=>[x.id,x.nom]),f.coupure?'Trouvé seul':'Aucun',x=>this.set('poele_prise_switch',x))}),
-    always('Thermostat du poêle en Hors gel ou éteint 30 secondes : le poêle s’arrête. Hestia n’éteint jamais un thermostat, sauf celui du poêle pour un verrou de sécurité.'),
+    always('Thermostat du poêle qui passe en Hors gel, ou éteint 30 secondes : le poêle s’arrête. Un poêle allumé à la main, son thermostat en Hors gel, n’est pas arrêté : Hestia met son thermostat en Boost. Hestia n’éteint jamais un thermostat, sauf celui du poêle pour un verrou de sécurité.'),
    ])}
    ${listSection('Les sécurités',[
     fig('surchauffe_c','Couper au-dessus de','°C','La pièce du poêle au-dessus de cette température pendant qu’il brûle : Hestia l’éteint.',0.5),

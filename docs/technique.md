@@ -1,6 +1,6 @@
 # Hestia Chauffage — fonctionnement technique
 
-Version 1.0.0b3. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
+Version 1.0.0b5. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
 
 ## Les fichiers
 
@@ -145,7 +145,7 @@ Ses règles reprennent celles des automatisations qui pilotent déjà un vrai po
 | --- | --- |
 | Démarrer | Au passage du thermostat en boost, ou en chauffe s’il est déjà en boost (un passage, pas un état : le poêle ne se rallume jamais de lui-même), le poêle éteint. Refusé si le thermostat est éteint, la pièce du poêle au-dessus de 28 °C, le poêle en alarme ou muet, ou la maison déjà à la consigne. En saison douce, il demande d’abord (15 min pour répondre, sinon hors gel) : la maison à 18 °C ou plus ; une fois passée sous 18 °C, il démarre sans demander jusqu’à 19 °C. Autant de démarrages par jour que de passages en boost. |
 | Flamme | Dans tous les états où le poêle brûle (allumage, chauffe, nettoyage), sauf alarme. Palier de la demande : 85 % → 5, 65 % → 4, 45 % → 3, sinon 2. La flamme réglée du poêle tient tant qu’elle reste entre le palier de la demande − 7 points et celui de la demande + 7 points (le 3 tient de 38 % à 71 %). Flamme 1 si la pièce, prolongée 15 min sur sa pente quand elle monte, dépasse sa consigne de 0,5 °C ; elle reste à 1 tant que la pièce est à sa consigne. La pièce se lit ici sur la température lissée du thermostat (`ema_temp` de Versatile Thermostat, sinon sa température) : une bouffée d’air chaud sur la sonde ne fait pas passer la flamme à 1. La sécurité des 28 °C lit la température en direct. Baisse tout de suite ; hausse seulement 30 min après le dernier changement de la flamme du poêle (par qui que ce soit), sauf deux paliers d’écart. Avec 4 ordres ou moins restants sur la limite du jour (celle du profil, 20 pour Micronova, comme le quota que suit la maison), la flamme ne change plus. |
-| Arrêter | Pendant que le poêle brûle : le thermostat passe hors gel, ou reste éteint 30 s (éteint depuis un état connu avec un préréglage : pas remis sur « éteint » par un redémarrage), ou la maison est assez chaude depuis 2 min (à 1 °C ou moins de la consigne ; en boost, à la consigne). L’arrêt se vérifie par l’état du poêle, ses fumées sous 60 °C (état connu) ou sa prise sous 70 W. |
+| Arrêter | Pendant que le poêle brûle : le thermostat passe hors gel (un passage, pendant la chauffe : `gel_vrai` dans la mémoire du pilote, gardé jusqu’au poêle éteint, depuis la 1.0.0b5), ou reste éteint 30 s (éteint depuis un état connu avec un préréglage : pas remis sur « éteint » par un redémarrage), ou la maison est assez chaude depuis 2 min (à 1 °C ou moins de la consigne ; en boost, à la consigne). L’arrêt se vérifie par l’état du poêle, ses fumées sous 60 °C (état connu) ou sa prise sous 70 W. |
 | Couper | Une alarme du poêle qui dure 2 min (son état ou son texte d’alarme), tant que le poêle brûle ou que son thermostat n’est pas éteint ; la pièce du poêle au-dessus de 28 °C pendant qu’il brûle. Couper, c’est éteindre son thermostat, puis le poêle. |
 | Prévenir | Le poêle muet 15 min (son état indisponible) : il le dit, avec ce que tire sa prise (au-dessus de 60 W, il chauffe encore). Il ne coupe pas. |
 
@@ -172,8 +172,8 @@ Réglage `pilote` = `entier`. La 1.0.0b1 l’avait retiré de Réglages ; depuis
 
 | Geste | Service |
 | --- | --- |
-| `thermostat` | `climate.<service>` sur le thermostat du poêle (le Versatile Thermostat) : `turn_off` (un verrou), `turn_on`, `set_preset_mode` (hors gel, boost), `set_hvac_mode` (chauffe, à la reprise) |
-| `allumer`, `eteindre` | ceux des `ordres` du profil (Micronova : `climate.set_hvac_mode` `heat` ou `off` sur son thermostat interne) |
+| `thermostat` | `climate.<service>` sur le thermostat du poêle (le Versatile Thermostat) : `turn_off` (un verrou), `turn_on`, `set_preset_mode` (hors gel, boost ; boost aussi pour un poêle allumé à la main, son thermostat en hors gel, depuis la 1.0.0b5), `set_hvac_mode` (chauffe, à la reprise) |
+| `allumer`, `eteindre` | ceux des `ordres` du profil (Micronova : `climate.set_hvac_mode` `heat` ou `off` sur son thermostat interne). Sur la carte du poêle, avec « Par Hestia » et son thermostat hors du hors gel, « Éteindre » passe ce thermostat en hors gel (`climate.set_preset_mode`, 1.0.0b5) : Hestia fait l’arrêt et le vérifie |
 | `reglage` | un réglage des `ordres` du profil avant un démarrage, seulement s’il a changé (`poele.reglages[].a_changer`) |
 | `recharger` | `homeassistant.reload_config_entry` sur l’entrée de l’intégration du poêle |
 | `prise` | `switch.turn_off` sur l’interrupteur de la prise (`poele_prise_switch`, sinon celui de l’appareil de la prise mesurée, sinon celui qui porte son nom) |

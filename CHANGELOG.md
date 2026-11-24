@@ -1,5 +1,14 @@
 # Changements
 
+## 1.0.0b5 — Le poêle allumé à la main reste allumé
+
+### Corrections
+- **Un poêle allumé à la main n’est plus éteint par Hestia** quand « Par Hestia » allume et éteint le poêle. Son thermostat était resté en Hors gel : Hestia arrêtait le poêle aussitôt. Maintenant, Hestia met le thermostat du poêle en Boost et conduit le poêle comme d’habitude : la flamme, puis l’arrêt quand la maison est assez chaude ou quand le thermostat repasse en Hors gel. Cela vaut pour un allumage sur le poêle, depuis son application ou par « Allumer » sur la carte.
+- **Hors gel arrête le poêle au moment où le thermostat y passe**, comme votre automatisation « Arrêt », et non plus tant qu’il y reste.
+
+### Améliorations
+- **« Éteindre » sur la carte du poêle, avec « Par Hestia »**, passe le thermostat du poêle en Hors gel : Hestia arrête le poêle et vérifie l’arrêt, et le thermostat dit la même chose que le poêle.
+
 ## 1.0.0b4 — La carte du poêle dit le mode de son thermostat, et les jours avant le nettoyage
 
 ### Améliorations

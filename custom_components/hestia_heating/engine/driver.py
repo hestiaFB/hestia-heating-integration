@@ -16,6 +16,8 @@ cloud's delays, one at a time:
   the thermostat is switched off (the lock), and Hestia says why. The house warm enough: said only, the preset stays.
 - The mild season: a question, Oui or Non, 15 minutes to answer (on the phone or the Poêle page). No answer: the
   thermostat goes to hors gel, unless the stove is already on its way (then nothing is cut).
+- A stove lit by hand while its thermostat is in hors gel (1.0.0b5): the thermostat goes to boost, and the stove is
+  driven from there. Hors gel stops only the burn it finds, on the step to hors gel, as the house's « Arrêt » does.
 - Stop (hors gel, the thermostat off, or the house warm enough for 2 minutes, then hors gel): once the stove's state
   is known (2 minutes at most), up to 3 orders 15 s apart, until it is stopping, off or cleaning; checked again 25
   minutes later (its state, its smoke under 60 °C, its plug under 70 W); else the order again, and 30 s later the
@@ -186,6 +188,17 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
             mem.update(verrou=None, verrou_off=None)
             run.clear("verrou")
             run.log("Le thermostat du poêle est rallumé : Hestia lève son verrou.", sent=False)
+    # A stove lit without Hestia while its thermostat is in hors gel (1.0.0b5): Hestia puts the thermostat in boost,
+    # then drives the stove from there (its flame, the house warm enough, a step to hors gel). Once for each lighting;
+    # never while Hestia stops the stove or its thermostat is off (a lock).
+    halting = bool(mem.get("arret") and not mem["arret"].get("fin"))
+    if (state in BURNING and preset == "frost" and mode != "off" and action not in ("arreter", "couper")
+            and not halting and not mem.get("adopte")):
+        mem["adopte"] = fresh
+        run.thermostat("set_preset_mode", preset_mode="boost")
+        run.log("Le poêle a été allumé sans Hestia : Hestia passe le thermostat du poêle en boost pour le conduire.")
+    elif state not in BURNING and state != "inconnu":
+        mem["adopte"] = None
     # 1. Safety and stop, on the decision's change (the house's automations stop on a change, not on a state).
     before = mem.get("voulu")
     mem["voulu"] = action

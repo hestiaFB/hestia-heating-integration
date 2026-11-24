@@ -305,6 +305,58 @@ class Stop(unittest.TestCase):
         self.assertEqual(p.run["arret"]["fin"], "annule")
 
 
+class ByHand(unittest.TestCase):
+    """1.0.0b5: the stove lit by hand (on the stove, its app, the card's « Allumer ») while its thermostat is in hors
+    gel. On 24 November 2026 Hestia stopped such a stove at once; now it puts the thermostat in boost and drives."""
+
+    def test_the_thermostat_goes_to_boost_and_hestia_drives_from_there(self):
+        p = Pilot()
+        frost = thermostat("frost", demand=0, target=14.0)
+        p.look(stove(), frost, house_c=20.2)
+        orders = p.look(stove("allumage", 3, **HOT), frost, timedelta(hours=2), house_c=20.2)
+        self.assertEqual(gestures(orders), ["thermostat:set_preset_mode"])
+        self.assertEqual(orders[0]["donnees"], {"preset_mode": "boost"})
+        self.assertEqual([e["texte"] for e in p.events if e["qui"] == "hestia"],
+                         ["Le poêle a été allumé sans Hestia : Hestia passe le thermostat du poêle en boost pour le "
+                          "conduire."])
+        # Once for this lighting, and its thermostat in boost is not a start (no order to light).
+        self.assertEqual(p.look(stove("allumage", 3, **HOT), frost, timedelta(seconds=10), house_c=20.2), [])
+        boost = thermostat("boost", demand=50, target=21.0)
+        orders = p.look(stove("chauffe", 3, **HOT), boost, timedelta(seconds=30), house_c=20.2)
+        self.assertNotIn("allumer", gestures(orders))
+        self.assertNotIn("eteindre", gestures(orders))
+        # Then hors gel, by the planning or by hand: the stop, with its checks.
+        orders = p.look(stove("chauffe", 3, **HOT), frost, timedelta(minutes=30), house_c=20.2)
+        self.assertEqual(gestures(orders), ["eteindre"])
+        # Off and checked: the next lighting by hand is put in boost again.
+        p.look(stove("extinction", **HOT), frost, timedelta(seconds=15), house_c=20.2)
+        p.look(stove("eteint", fumees=40.0, prise_w=3.0), frost, timedelta(minutes=25), house_c=20.2)
+        self.assertEqual(p.run["arret"]["fin"], "ok")
+        orders = p.look(stove("allumage", 3, **HOT), frost, timedelta(hours=1), house_c=20.2)
+        self.assertEqual(gestures(orders), ["thermostat:set_preset_mode"])
+
+    def test_not_while_hestia_stops_it_nor_with_its_thermostat_off(self):
+        # Hestia's own stop on hors gel: never undone by a boost.
+        p = Pilot()
+        p.look(stove("chauffe", 3, **HOT), thermostat("boost"))
+        orders = p.look(stove("chauffe", 3, **HOT), thermostat("frost"), timedelta(minutes=1))
+        orders += p.look(stove("chauffe", 3, **HOT), thermostat("frost"), timedelta(seconds=15))
+        self.assertNotIn("thermostat:set_preset_mode", gestures(orders))
+        # The thermostat off (a lock, or by hand): no boost either.
+        p = Pilot()
+        p.look(stove(), thermostat("frost", mode="off"))
+        orders = p.look(stove("allumage", 3), thermostat("frost", mode="off"), timedelta(hours=1))
+        self.assertNotIn("thermostat:set_preset_mode", gestures(orders))
+
+    def test_the_simulator_says_it_and_sends_nothing(self):
+        p = Pilot(blanc=True)
+        frost = thermostat("frost", demand=0, target=14.0)
+        p.look(stove(), frost, house_c=20.2)
+        self.assertEqual(p.look(stove("allumage", 3, **HOT), frost, timedelta(hours=2), house_c=20.2), [])
+        self.assertIn(("hestia", "Le poêle a été allumé sans Hestia : Hestia passerait le thermostat du poêle en boost "
+                                 "pour le conduire."), [(e["qui"], e["texte"]) for e in p.events])
+
+
 class Safety(unittest.TestCase):
     def test_an_alarm_that_lasts_switches_the_thermostat_off_then_stops(self):
         p = Pilot()
