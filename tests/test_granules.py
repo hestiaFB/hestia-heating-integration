@@ -141,6 +141,19 @@ class TheFirePot(unittest.TestCase):
         self.assertFalse(twenty["a_nettoyer"] or twenty["bientot"], "a threshold of 20 kg")
         self.assertEqual(twenty["texte"], "15,3 kg brûlés depuis le dernier nettoyage, sur 20.")
 
+    def test_the_days_left_at_the_pace_since_the_cleaning(self):
+        """1.0.0b4: the card says the days before the cleaning, at the pace since the last one."""
+        mem = granules.cleaned(run(None, burning(5), 10), None, NOW)
+        mem = run(mem, burning(5), 60 * 4, start=NOW + timedelta(minutes=11), step=5)           # 6.4 kg in 4 h
+        self.assertIsNone(granules.view(mem, None, None, None, None, NOW + timedelta(hours=5))["brasier"]["jours"],
+                          "less than a day of count: no pace yet")
+        v = granules.view(mem, None, None, None, None, NOW + timedelta(days=2))["brasier"]
+        self.assertAlmostEqual(v["jours"], 2.7, places=1)                                     # 8.6 kg at 3.2 kg a day
+        self.assertEqual(v["texte"], "6,4 kg brûlés depuis le dernier nettoyage, sur 15, environ 3 jours au rythme "
+                                     "depuis le dernier nettoyage.")
+        self.assertIsNone(granules.view(mem, None, None, None, None)["brasier"]["jours"], "no time given")
+        self.assertIsNone(granules.view(run(None, burning(3), 10), None, None, None, None, NOW)["brasier"]["jours"])
+
     def test_counted_from_the_bags_when_suivi_stock_pellet_is_there(self):
         bags = {"sacs": 6, "sac_kg": 15}
         mem = run(None, burning(5), 1, bags=bags)

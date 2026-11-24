@@ -44,19 +44,18 @@ def outside(hourly: list[dict] | None, now: datetime) -> dict | None:
             "demain_max": round(max(afternoon), 1) if afternoon else None}
 
 
-WARM = (planning.CONFORT, planning.ECO, planning.BOOST)
 
 
 def _lane_label(tone: str | None, stove_lane: bool) -> str | None:
+    # Since 1.0.0b4, the stove's thermostat says its mode like any other (Boost, Confort, Éco, Hors gel): the stove's
+    # own state is on its card. `stove_lane` is kept for the callers.
     if tone is None:
         return None
-    if stove_lane:
-        return "en chauffe" if tone in WARM else planning.LABELS[tone]
     return planning.LABELS[tone]
 
 
 def _lane_tone(tone: str, stove_lane: bool) -> str:
-    return planning.POELE if stove_lane and tone in WARM else tone
+    return tone
 
 
 def build(snap: dict) -> dict:
@@ -101,7 +100,7 @@ def build(snap: dict) -> dict:
                                          (pellets or {}).get("debut_saison"))
         price = chosen_g.get("prix_sac") or (pellets or {}).get("prix_sac")
         stove["conso"] = granules.view(pellet_memory, bags, chosen_g.get("brasier_kg"), price,
-                                       chosen_g.get("poids_sac") or (pellets or {}).get("sac_kg") or granules.BAG_KG)
+                                       chosen_g.get("poids_sac") or (pellets or {}).get("sac_kg") or granules.BAG_KG, now)
         stove["conso"]["prix_source"] = ("reglages" if chosen_g.get("prix_sac") else
                                          "suivi" if (pellets or {}).get("prix_sac") else None)
     burning = bool(stove and stove["en_feu"])

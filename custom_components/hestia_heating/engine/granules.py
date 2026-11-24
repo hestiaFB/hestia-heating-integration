@@ -162,8 +162,28 @@ def since_cleaning(mem: dict, bags: dict | None) -> float | None:
     return round(total if total < base - 0.5 else max(total - base, 0.0), 2)
 
 
+def days_left(mem: dict, burnt: float | None, threshold: float, now: datetime | None) -> float | None:
+    """Days until the fire pot is due, at the pace since it was last cleaned (1.0.0b4): None before a day of count or
+    a kilo burnt, 0 once it is due."""
+    since = _iso(mem.get("nettoye_le"))
+    if burnt is None or now is None or since is None:
+        return None
+    if burnt >= threshold:
+        return 0.0
+    if since.tzinfo is None and now.tzinfo is not None:
+        since = since.replace(tzinfo=now.tzinfo)
+    elapsed = (now - since).total_seconds() / 86400
+    if elapsed < 1 or burnt < 1:
+        return None
+    return round((threshold - burnt) / (burnt / elapsed), 1)
+
+
+def _in_days(days: float) -> str:
+    return "moins d’un jour" if days < 1 else "environ 1 jour" if days < 1.5 else f"environ {number(days, 0)} jours"
+
+
 def view(mem: dict, bags: dict | None, threshold_kg: float | None, bag_price: float | None,
-         bag_kg: float | None) -> dict:
+         bag_kg: float | None, now: datetime | None = None) -> dict:
     """What the Poêle page, the entities and Hestia Énergie get."""
     threshold = threshold_kg or FIRE_POT_KG
     burnt = since_cleaning(mem, bags)
@@ -190,18 +210,20 @@ def view(mem: dict, bags: dict | None, threshold_kg: float | None, bag_price: fl
             "a_nettoyer": burnt is not None and burnt >= threshold,
             "bientot": burnt is not None and threshold - tuning.get("brasier_bientot_kg") <= burnt < threshold,
             "par_les_sacs": bool((bags or {}).get("sac_kg") and mem.get("sacs_nettoyage") is not None),
+            "jours": days_left(mem, burnt, threshold, now),
         },
     }
     b = out["brasier"]
+    pace = "" if not b["jours"] else f", {_in_days(b['jours'])} au rythme depuis le dernier nettoyage"
     if burnt is None:
         b["texte"] = "Pas encore de compte : dites à Hestia quand vous nettoyez le brasier (« J’ai nettoyé »)."
     elif b["a_nettoyer"]:
         b["texte"] = (f"Brasier à nettoyer : {number(burnt, 1)} kg brûlés depuis le dernier nettoyage. La chauffe en cours "
                       "finit ; le prochain démarrage devrait attendre le nettoyage.")
     elif b["bientot"]:
-        b["texte"] = f"Encore {number(threshold - burnt, 1)} kg avant le nettoyage du brasier."
+        b["texte"] = f"Encore {number(threshold - burnt, 1)} kg avant le nettoyage du brasier{pace}."
     else:
-        b["texte"] = f"{number(burnt, 1)} kg brûlés depuis le dernier nettoyage, sur {number(threshold, 0)}."
+        b["texte"] = f"{number(burnt, 1)} kg brûlés depuis le dernier nettoyage, sur {number(threshold, 0)}{pace}."
     return out
 
 

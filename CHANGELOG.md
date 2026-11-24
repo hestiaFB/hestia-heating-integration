@@ -1,5 +1,14 @@
 # Changements
 
+## 1.0.0b4 — La carte du poêle dit le mode de son thermostat, et les jours avant le nettoyage
+
+### Améliorations
+- **L’horloge de la carte du poêle montre le mode de son thermostat** (Hors gel, Éco, Confort, Boost), comme les autres chauffages, au lieu de « poêle en chauffe ». L’état du poêle reste au centre et dans sa phrase.
+- **Les jours avant le nettoyage du brasier**, au rythme depuis le dernier nettoyage, sur la carte du poêle (« brasier dans 3 jours ») et sur la page du poêle. Le compte démarre au premier « J’ai nettoyé » appuyé dans Hestia : la carte le rappelle tant qu’il n’a pas été fait.
+
+### Corrections
+- **Un réglage refusé se voit** : la raison, écrite en haut de la page, vient sous les yeux quand vous appuyez sur Enregistrer. Avant, le bouton semblait ne rien faire.
+
 ## 1.0.0b3 — Un panneau technique et simple, et le poêle réglé comme sur son application
 
 **L’onglet Chauffage devient technique et simple** : une vue d’ensemble qui dit si tout marche et ce que Hestia a changé aujourd’hui, des Réglages en onglets, et tous les chiffres du poêle dans un écran Avancé. **Le poêle se règle comme sur son application** : la flamme et la ventilation en Automatique ou en Manuel, l’ÉCO Stop expliqué, et l’allumage par Hestia de nouveau au choix. Vos réglages restent comme vous les avez laissés.

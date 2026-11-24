@@ -72,7 +72,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.0.0b3';
+const VERSION='1.0.0b4';
 // The whole pilot's answers, as on the phone.
 const ANSWER:Record<string,string>={oui:'Oui, allumer',non:'Non',couper:'Couper la prise',ignorer:'Ignorer',nettoye:'J’ai nettoyé'};
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
@@ -366,6 +366,8 @@ export class HestiaHeatingSetup extends LitElement {
   }
   catch(e){this.refused=(e as {message?:string}).message??'Réglages non enregistrés.';}
   finally{this.saving=false;}
+  // The reason is at the top of the page, the button at the bottom: bring the reason into view.
+  if(this.refused){await this.updateComplete;this.renderRoot.querySelector('.refused')?.scrollIntoView({behavior:'smooth',block:'center'});}
  }
  /** What a choice just saved asks of the stove at once, as the user's own press (1.0.0b3): the flame back to
      Automatique puts the stove's own set point back to the one Hestia works with; the fan back to « par le poêle »
@@ -410,7 +412,7 @@ export class HestiaHeatingSetup extends LitElement {
   const pages:Record<string,()=>TemplateResult>={'':()=>this.home(v),poele:()=>this.stovePage(v),pieces:()=>this.home(v),
    planning:()=>sub?this.editorPage(v,decodeURIComponent(sub)):this.planningPage(v),reglages:()=>this.settingsPage(v,sub,sub2),
    guide:()=>this.guidePage(v,Number(sub)||1),extensions:()=>sub?this.extensionPage(v,sub):this.extensionsPage(v),'a-propos':()=>this.aboutPage(v)};
-  return html`<main>${this.refused?noteBox('Pas enregistré',this.refused):nothing}${this.failed?noteBox('Pas envoyé',this.failed):nothing}${(pages[p]??pages[''])()}</main>
+  return html`<main>${this.refused?html`<div class="refused" role="alert">${noteBox('Pas enregistré',this.refused)}</div>`:nothing}${this.failed?noteBox('Pas envoyé',this.failed):nothing}${(pages[p]??pages[''])()}</main>
    ${(p==='planning'&&sub)||p==='guide'?nothing:saveBar({count:this.count(),busy:this.saving,done:this.saved?'Enregistré':undefined,cancel:()=>{this.draft={};},save:()=>void this.save()})}`;
  }
 

@@ -27,7 +27,7 @@ type Room={id:string;nom:string;temperature:number|null;consigne:number|null;eta
  pente:number|null;fenetre:boolean;fenetre_depuis?:string|null;humidite?:number|null;badge:Badge;raison:string|null;planning:string|null;
  prochain:Next|null;type:string|null;principal:string|null;preset:string|null;modes?:string[];recopie?:boolean;appoint?:number|null};
 type Order={service:string;entity_id:string;donnees?:Record<string,unknown>};
-type FirePot={kg:number|null;seuil_kg:number;a_nettoyer:boolean;bientot?:boolean;texte:string};
+type FirePot={kg:number|null;seuil_kg:number;a_nettoyer:boolean;bientot?:boolean;texte:string;jours?:number|null};
 type Use={debit_kg_h:number;kg_jour:number;kg_saison:number;prix_kg:number|null;cout_jour:number|null;cout_heure:number|null;brasier?:FirePot};
 type Stove={nom:string;modele?:string|null;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;
  fumees:number|null;prise:string|null;prise_w:number|null;demande_pct:number|null;consigne?:number|null;ecritures:number|null;ecritures_max:number|null;
@@ -320,7 +320,8 @@ class HestiaHeatingCard extends LitElement {
   const flame=series.flamme??[];
   // The last start within the trace, and the stop the planning has next while the stove burns.
   const lit=this._lastStart(flame,span.length),next=this._soon(room?.prochain);
-  const stop=s.en_feu&&next&&next.ton&&next.ton!=='poele'?next:null;
+  // Since 1.0.0b4 the stove's lane says its thermostat's modes: a stop is the next Hors gel or Arrêt.
+  const stop=s.en_feu&&next&&(next.ton==='hors_gel'||next.ton==='arret')?next:null;
   const marks:Mark[]=[...(lit!=null?[{at:span.start+lit,cls:'lit'}]:[]),...(stop?[{at:isoMinute(stop.a),cls:'stop'}]:[])];
   const t=room?.temperature??null,where=room?room.nom:'la pièce';
   const state=s.etat==='alarme'?'alarme':s.en_feu&&level?`flamme ${level} sur ${max}`:STOVE_WORD[s.etat]??s.etat;
@@ -462,7 +463,8 @@ class HestiaHeatingCard extends LitElement {
   const until=g?.jours!=null?this._dayIn(g.jours):null;
   const potPct=pot?.kg!=null&&pot.seuil_kg?Math.round(pot.kg/pot.seuil_kg*100):null;
   const say=[until?`jusqu’au ${until}`:null,c?.cout_jour!=null?`${eur(c.cout_jour)} aujourd’hui`:c?`${num(c.kg_jour,1)} kg aujourd’hui`:null,
-   potPct!=null?`brasier ${potPct} %`:null].filter(Boolean).join(' · ');
+   pot?.a_nettoyer?'brasier à nettoyer':pot?.jours!=null?`brasier dans ${pot.jours<1?'moins d’un jour':pot.jours<1.5?'1 jour':`${num(pot.jours,0)} jours`}`:
+   potPct!=null?`brasier ${potPct} %`:pot?'brasier pas encore compté':null].filter(Boolean).join(' · ');
   const TABS:[string,string][]=[['granules','Granulés'],['argent','Argent'],['entretien','Entretien']];
   return this._drawer('granules','Granulés · Argent · Entretien',say,false,()=>{
    const tab=this._tab('poele',TABS);

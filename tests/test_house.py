@@ -170,7 +170,7 @@ class Planning(unittest.TestCase):
         p = house.build(m.snapshot())["planning"]
         lanes = {l["id"]: l for l in p["lignes"]}
         stove = lanes[next(i for i in lanes if lanes[i]["nom"] == "Poêle")]
-        self.assertEqual([s["ton"] for s in stove["segments"]], ["hors_gel", "poele", "hors_gel", "poele", "hors_gel"])
+        self.assertEqual([s["ton"] for s in stove["segments"]], ["hors_gel", "boost", "hors_gel", "boost", "hors_gel"])
         for lane in p["lignes"]:
             self.assertEqual(lane["segments"][0]["de"], 0)
             self.assertEqual(lane["segments"][-1]["a"], 1440)
