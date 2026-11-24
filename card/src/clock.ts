@@ -3,8 +3,8 @@ import {svg,html,nothing,type TemplateResult} from 'lit';
 /* The cards' clock, for every kind of heating: a 24-hour wheel, midnight at the top (0.8; 0.8.0b3 after the mock-up
    « la roue au survol » validated by Frank on 24 Nov. 2026, after Hestia Énergie's wheel).
    - The ring, cut in 24 hours: the day's planning.
-   - Out of the ring, one stroke an hour: how much it heated (a stove's flame, a thermostat's demand), the longer and
-     the more orange the more. The four hours after the hand are still to come: yesterday's stroke, in grey.
+   - Out of the ring, one stroke an hour: how much it heated (a stove's flame step, a thermostat's demand), the longer
+     and the more orange the more. The four hours after the hand are still to come: yesterday's stroke, in grey.
    - Inside: the room's temperature over the last 20 hours (the farther from the centre, the warmer), its set point in
      steps, the scale written in the gap after the hand.
    - In the middle: the heating's picture and the temperature, in HTML over the drawing so that they stay sharp. Over an
@@ -94,6 +94,8 @@ export function hours(w:Span,segments:Seg[],s:Series):Hour[]{
 /** The set points worth drawing: those the trace comes near. A set point more than FAR degrees under the whole trace
     (a frost guard while the room stays warm) would only squash the trace against the middle and be read as its level. */
 const FAR=3;
+/** A flame's lowest step still reads as a stroke: flame 1 is this share of the longest, flame 5 the whole of it. */
+const STEP_MIN=.36;
 const deg=(t:number)=>`${t.toLocaleString('fr-FR',{maximumFractionDigits:1})}°`;
 /** A label's box in the drawing's units: about 6 per character at 10.5 px, and 11 high. */
 const box=(text:string)=>6*text.length+4;
@@ -181,12 +183,16 @@ export function wheel(w:Wheel,rest:TemplateResult):TemplateResult{
     .map(g=>svg`<path class=${'t-'+tone(g.ton)} d=${arc(RING,Math.max(a,g.de),Math.min(b,g.a))}></path>`)}</g>`;})}
   ${grads.map(t=>svg`<circle class="grid" cx=${CX} cy=${CY} r=${f(R(t))}></circle>`)}
   ${area?svg`<path class="area" fill="url(#hcArea)" d=${area}></path>`:nothing}
-  ${setPath?svg`<path class="set" d=${setPath}></path>`:nothing}
   ${trace.length?svg`<path class="trace" pathLength="1" d=${trace.map(line).join('')}></path>`:nothing}
+  ${setPath?svg`<path class="set" d=${setPath}></path>`:nothing}
   ${w.hours.map(h=>{
-   const none=h.heat==null||h.heat<.02,cls=h.ahead?'yday':none?'none':w.kind;
-   const p=w.kind==='flame'?Math.max(0,((h.level??1)-1)/(max-1)):Math.min(1,(h.heat??0)*1.4);
-   return svg`<g class=${'spk '+cls+near(h.k)} style=${`--len:${none?0:f((h.heat??0)*SP_L)}px;--p:${Math.round(p*100)}%`}
+   // A stove's stroke is its flame's step, whole however long it burnt in the hour (1.0.0b6: a flame 3 for twenty
+   // minutes no longer looks like a flame 1); the minutes are in the middle, over the hour. A thermostat's, its demand.
+   const flame=w.kind==='flame',none=flame?!(h.burn!=null&&h.burn>0&&h.level!=null):h.heat==null||h.heat<.02;
+   const cls=h.ahead?'yday':none?'none':w.kind;
+   const p=flame?Math.max(0,((h.level??1)-1)/(max-1)):Math.min(1,(h.heat??0)*1.4);
+   const len=none?0:flame?(STEP_MIN+(1-STEP_MIN)*Math.max(0,Math.min(1,p)))*SP_L:(h.heat??0)*SP_L;
+   return svg`<g class=${'spk '+cls+near(h.k)} style=${`--len:${f(len)}px;--p:${Math.round(p*100)}%`}
     transform=${`translate(${CX} ${CY}) rotate(${f((h.k*60+30)/4-90)})`}><line x1=${SP_IN} y1="0" x2=${SP_IN+SP_L+20} y2="0"
     style=${`animation-delay:${h.k*22}ms`}></line></g>`;})}
   ${labels.map(l=>svg`<text class=${l.set?'gt set':'gt'} x=${f(l.x)} y=${f(l.y)}>${deg(l.t)}</text>`)}

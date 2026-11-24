@@ -327,10 +327,13 @@ class HestiaHeatingCard extends LitElement {
   const state=s.etat==='alarme'?'alarme':s.en_feu&&level?`flamme ${level} sur ${max}`:STOVE_WORD[s.etat]??s.etat;
   const sub=s.etat==='alarme'?'en alarme':s.en_feu?s.consigne!=null?`consigne ${num(s.consigne)}°`:`flamme ${level}`:
    s.etat==='eteint'?'poêle éteint':STOVE_WORD[s.etat]??'';
-  // The stove's set point only while it burns: once it is off, its thermostat keeps a frost guard (14 °C) that says
-  // nothing of the room.
+  // The stove's set point in whole steps (1.0.0b6): over every hour its thermostat held a set point the stove burnt to
+  // for a quarter of an hour at least today (Boost's 21,5 °C), not only in the bits it burnt; never its frost guard
+  // (14 °C), which says nothing of the room.
   const flames=sample(flame,0,span.length),cons=sample(series.consigne??[],0,span.length);
-  const sets=flames.map(([m,x],i):Pt=>[m,(x??0)>0?cons[i][1]:null]);
+  const burnt=new Map<number,number>();
+  cons.forEach(([,c],i)=>{if(c!=null&&(flames[i][1]??0)>0)burnt.set(c,(burnt.get(c)??0)+1);});
+  const sets=cons.map(([m,c],i):Pt=>[m,c!=null&&((flames[i][1]??0)>0||(burnt.get(c)??0)>=3)?c:null]);
   const kg=d?.energie?.unite==='kg'?d.energie.heures:[],price=s.conso?.prix_kg??null;
   const series_={temp:series.temperature??[],heat:flame.map(([m,x]):Pt=>[m,x==null?null:x/max]),level:flame,sets,energy:kg};
   const hrs=hours(span,segments,series_);

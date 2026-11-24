@@ -175,7 +175,7 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .wheel .trace { fill:none; stroke:var(--hc-trace); stroke-width:3; stroke-linejoin:round; stroke-linecap:round; stroke-dasharray:1;
   animation:hc-draw 1.4s var(--hc-ease) both; }
 @keyframes hc-draw { from { stroke-dashoffset:1; } to { stroke-dashoffset:0; } }
-.wheel .set { fill:none; stroke:var(--hc-set); stroke-width:1.6; stroke-dasharray:5 4; opacity:.85; }
+.wheel .set { fill:none; stroke:var(--hc-set); stroke-width:2.4; stroke-dasharray:7 4; stroke-linecap:round; }
 .wheel .gt { font-size:10.5px; font-weight:700; fill:var(--nw-fg2); text-anchor:middle; dominant-baseline:central;
   paint-order:stroke; stroke:var(--nw-bg); stroke-width:3px; stroke-linejoin:round; }
 .wheel .gt.set { fill:var(--hc-set); }
