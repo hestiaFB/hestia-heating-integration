@@ -1,5 +1,23 @@
 # Changements
 
+## 1.0.0b2 — Le poêle dit ce qu’il fait, et le mode Entier s’essaie à blanc
+
+**Le poêle dit en une phrase ce qu’il fait**, sur sa carte et sur la page Poêle. **Le mode Entier a son simulateur** : il rejoue les démarrages et les arrêts sans rien envoyer, à côté de ce que font vos automatisations.
+
+### Nouveautés
+- **La phrase du poêle**, sous son nom, dans la couleur de son état : « Consigne atteinte, le poêle entretient », « 21,5 °C vers 18 h 30 », « Brasier à nettoyer : 16,2 kg brûlés », « En chauffe, fenêtre ouverte », « Éteint, en hors gel jusqu’au prochain boost du planning »… Un message pour chaque état, du plus urgent (alarme, surchauffe, poêle qui ne répond plus) au plus calme. Les poêles en veille (« Stand-by ») sont reconnus : « En veille, il repartira seul ».
+- **Le simulateur du mode Entier** (Réglages, « Simulateur du mode Entier », en Conseil et en Flamme) : Hestia fait comme si elle conduisait le poêle, sans rien lui envoyer, pas même une notification. Le journal du jour le dit au conditionnel (« Hestia allumerait le poêle », « Hestia éteindrait le poêle »), et note un désaccord quand la maison n’allume pas ou n’éteint pas le poêle dans les minutes qui suivent. La page Poêle montre ce que le mode Entier ferait en ce moment.
+- **La ventilation au choix** pour le mode Entier (et son simulateur) : AUTO, réglée une fois avant chaque démarrage, comme avant ; ou **Flamme + 1** : au plus bas tant que les fumées sont sous 110 °C, puis la flamme + 1, 5 au plus. Chaque changement coûte un ordre du jour : au plus un toutes les 10 minutes, et seulement s’il en reste plus de 6.
+- **Les cartes Poêle et Pièce en version compacte** : l’horloge en petit, à côté de sa phrase, sans légende. Environ deux fois moins hautes.
+
+### Améliorations
+- **La pièce trop chaude** : la flamme ne passe à 1 que si la pièce du poêle dépasserait sa consigne de 2 °C dans 15 minutes (avant : 0,5 °C). L’écart se règle dans Réglages, « Pièce trop chaude ». La flamme 1 encrasse plus : elle reste rare.
+- **Les réglages de la carte** ressemblent à ceux de Weather, Confort et Énergie : les formes en tuiles, puis la pièce, la version, le titre, et l’appui sur la carte dans « Fonctionnalités ».
+- Le cahier des charges n’a plus de points « à trancher » : ils deviennent « Les choix faits ».
+
+### Corrections
+- Réglages enregistre bien « Pièce trop chaude ».
+
 ## 1.0.0b1 — La version de production
 
 **Hestia Chauffage ne parle plus d’essai.** Seuls les mots changent : vos réglages, vos plannings et le pilote du poêle restent comme vous les avez laissés.
