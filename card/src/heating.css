@@ -78,6 +78,14 @@ ha-card.tap { cursor:pointer; }
   /* The trace and the set points, deeper on a light background so that they read as well as on a dark one. */
   --hc-trace: var(--nw-heat);
   --hc-set: color-mix(in oklab, var(--nw-heat) 80%, var(--nw-fg));
+  /* The wheel (0.8.0b3): its disc, the hours' strokes from a little to a lot (a flame, a demand), yesterday's in grey,
+     the light on the hour shown. */
+  --hc-disc: color-mix(in srgb, #000 22%, var(--nw-bg));
+  --hc-flame-lo: oklch(.84 .09 96); --hc-flame-hi: oklch(.74 .15 48);
+  --hc-dem-lo: oklch(.78 .05 55); --hc-dem-hi: oklch(.74 .14 40);
+  --hc-yday: color-mix(in srgb, var(--nw-fg) 16%, transparent);
+  --hc-glow: color-mix(in srgb, var(--nw-fg) 5%, transparent);
+  --hc-ease: cubic-bezier(.2, .8, .2, 1);
 }
 :host([theme="light"]) {
   --hc-sunk: color-mix(in srgb, #000 2.5%, var(--nw-bg));
@@ -85,6 +93,9 @@ ha-card.tap { cursor:pointer; }
   --hc-well: color-mix(in srgb, #000 8%, var(--nw-bg));
   --hc-trace: color-mix(in oklch, var(--nw-heat) 45%, oklch(.6 .15 42));
   --hc-set: color-mix(in oklch, var(--nw-heat) 30%, oklch(.55 .14 42));
+  --hc-disc: color-mix(in srgb, #000 3%, var(--nw-bg));
+  --hc-flame-lo: oklch(.91 .09 96); --hc-flame-hi: oklch(.7 .16 45);
+  --hc-dem-lo: oklch(.9 .045 55); --hc-dem-hi: oklch(.68 .15 38);
 }
 ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .top { padding:22px; display:flex; flex-direction:column; gap:16px; }
@@ -114,42 +125,78 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
   .top { padding:16px; } .dbox { padding-left:16px; padding-right:16px; }
 }
 
-/* The clock: drawn in a 472 × 340 box; the middle's words are sized on the clock's width, so that they keep their
-   room inside the disc on a phone. */
-.tapzone { border-radius:16px; }
-.tapzone:focus-visible { outline:2px solid var(--nw-accent); outline-offset:2px; }
-.dial { position:relative; container-type:inline-size; }
-.dial > svg { width:100%; height:auto; display:block; overflow:visible; font-family:inherit; }
-.dial .rim { fill:none; stroke:color-mix(in srgb, var(--nw-fg) 7%, transparent); stroke-width:16; }
-.dial .seg { fill:none; stroke-width:16; stroke:var(--hc-r-off); }
-.dial .seg.t-confort { stroke:var(--hc-r-confort); } .dial .seg.t-eco { stroke:var(--hc-r-eco); } .dial .seg.t-poele { stroke:var(--hc-r-poele); }
-.dial .seg.t-boost { stroke:var(--hc-r-boost); }
-/* The marks: the hours across the ring, the trace's whole degrees (dotted) and its set points (dashed, in the trace's
-   colour), with their values written in the gap after the hand; a dot where the trace is now. */
-.dial .hr { fill:none; stroke:color-mix(in srgb, var(--nw-fg) 30%, transparent); stroke-width:1.2; stroke-linecap:round; }
-.dial .hr.main { stroke:color-mix(in srgb, var(--nw-fg) 62%, transparent); stroke-width:2; }
-.dial .grid { fill:none; stroke:color-mix(in srgb, var(--nw-fg) 24%, transparent); stroke-width:1; stroke-dasharray:1.5 3.5; stroke-linecap:round; }
-.dial .ref { fill:none; stroke:color-mix(in oklab, var(--hc-set) 75%, transparent); stroke-width:1.4; stroke-dasharray:6 4; }
-.dial .gt { font-size:10.5px; font-weight:650; fill:var(--nw-fg2); text-anchor:middle; dominant-baseline:central;
+/* The clock (0.8.0b3, « la roue au survol »): drawn in a 440 × 386 box; the middle's words are sized on the wheel's
+   width, so that they keep their room inside the disc on a phone. Over an hour, it grows, the others fade, and its
+   figures take the middle's place. */
+.wheel { position:relative; container-type:inline-size; }
+.wheel > svg { width:100%; height:auto; display:block; overflow:visible; font-family:inherit; touch-action:manipulation; }
+.wheel .disc { fill:var(--hc-disc); stroke:var(--nw-line); stroke-width:1; r:64px; transition:r .28s var(--hc-ease); outline:none; }
+.wheel.picking .disc { r:69px; }
+.wheel .disc[role="button"]:focus-visible { stroke:var(--nw-accent); stroke-width:2; }
+.wheel .lit { fill:var(--hc-glow); opacity:0; transition:opacity .2s; }
+.wheel.picking .lit { opacity:1; }
+/* The ring: each hour its own cell, at the planning's colour. */
+.cell path { fill:none; stroke-width:10; stroke:var(--hc-r-off); transition:stroke-width .28s var(--hc-ease), opacity .28s; }
+.cell .t-none { stroke:color-mix(in srgb, var(--nw-fg) 7%, transparent); }
+.cell .t-confort { stroke:var(--hc-r-confort); } .cell .t-eco { stroke:var(--hc-r-eco); } .cell .t-poele { stroke:var(--hc-r-poele); }
+.cell .t-boost { stroke:var(--hc-r-boost); }
+.cell.on path { stroke-width:18; } .cell.near path { stroke-width:13; }
+.picking .cell.far path { opacity:.42; }
+/* The hours' strokes: as long and as orange as it heated; yesterday's in grey for the hours to come. */
+.spk line { fill:none; stroke-width:7; stroke-linecap:round; stroke:color-mix(in oklch, var(--hi) var(--p), var(--lo));
+  stroke-dasharray:calc(var(--len) + var(--grow, 0px)) 999px;
+  transition:stroke-dasharray .28s var(--hc-ease), stroke-width .28s var(--hc-ease), opacity .28s; animation:hc-grow 1s var(--hc-ease) backwards; }
+.spk.flame { --lo:var(--hc-flame-lo); --hi:var(--hc-flame-hi); } .spk.demand { --lo:var(--hc-dem-lo); --hi:var(--hc-dem-hi); }
+.spk.none line { stroke:color-mix(in srgb, var(--nw-fg) 14%, transparent); stroke-width:4; }
+.spk.yday line { stroke:var(--hc-yday); }
+.spk.on { --grow:13px; } .spk.on line { stroke-width:12; } .spk.near { --grow:4px; } .spk.near line { stroke-width:9; }
+.picking .spk.far line { opacity:.22; }
+@keyframes hc-grow { from { stroke-dasharray:0px 999px; } }
+/* The trace over its dotted whole degrees, its set point in steps, the values written in the gap after the hand. */
+.wheel .grid { fill:none; stroke:color-mix(in srgb, var(--nw-fg) 22%, transparent); stroke-width:1; stroke-dasharray:1.5 3.5; stroke-linecap:round; }
+.wheel .gs0 { stop-color:var(--hc-trace); stop-opacity:0; } .wheel .gs1 { stop-color:var(--hc-trace); stop-opacity:.34; }
+.wheel .area { stroke:none; }
+.wheel .trace { fill:none; stroke:var(--hc-trace); stroke-width:3; stroke-linejoin:round; stroke-linecap:round; stroke-dasharray:1;
+  animation:hc-draw 1.4s var(--hc-ease) both; }
+@keyframes hc-draw { from { stroke-dashoffset:1; } to { stroke-dashoffset:0; } }
+.wheel .set { fill:none; stroke:var(--hc-set); stroke-width:1.6; stroke-dasharray:5 4; opacity:.85; }
+.wheel .gt { font-size:10.5px; font-weight:700; fill:var(--nw-fg2); text-anchor:middle; dominant-baseline:central;
   paint-order:stroke; stroke:var(--nw-bg); stroke-width:3px; stroke-linejoin:round; }
-.dial .gt.set { fill:var(--hc-set); font-weight:750; }
-.dial .now { fill:var(--hc-trace); stroke:var(--nw-bg); stroke-width:2; }
-.dial .ticks { fill:none; stroke-width:3; stroke-linecap:round; }
-.dial .ticks.demand { stroke:var(--hc-demand); } .dial .ticks.flame { stroke:var(--hc-stove); }
-.dial .area { fill:color-mix(in oklab, var(--nw-heat) 14%, transparent); stroke:none; }
-.dial .trace { fill:none; stroke:var(--hc-trace); stroke-width:3; stroke-linejoin:round; stroke-linecap:round; }
-.dial .hand { stroke:var(--nw-fg); stroke-width:2; stroke-linecap:round; }
-.dial .knob { fill:var(--nw-fg); stroke:var(--nw-bg); stroke-width:3; }
-.dial .mark { fill:var(--nw-bg); stroke-width:2.5; stroke:var(--hc-demand); }
-.dial .mark.lit { stroke:var(--hc-stove); } .dial .mark.stop { stroke:var(--nw-cold); }
-.dial .disc { fill:var(--hc-sunk); stroke:color-mix(in srgb, var(--nw-fg) 6%, transparent); stroke-width:1; }
-.dial .hour { font-size:12.5px; font-weight:700; fill:color-mix(in srgb, var(--nw-fg) 78%, transparent); text-anchor:middle; dominant-baseline:middle; }
-.dial .mid { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:27cqi; display:flex; flex-direction:column;
-  align-items:center; pointer-events:none; text-align:center; }
-.mid .art { display:block; width:12.3cqi; height:auto; overflow:visible; }
-.mid .ct { font-size:5.5cqi; font-weight:300; letter-spacing:-.02em; line-height:1; margin-top:.85cqi; }
-.mid .cs { font-size:max(9px, 2.12cqi); font-weight:700; color:var(--nw-fg2); margin-top:.85cqi; white-space:nowrap; max-width:27cqi;
+.wheel .gt.set { fill:var(--hc-set); }
+.wheel .hl { font-size:12.5px; font-weight:700; fill:color-mix(in srgb, var(--nw-fg) 75%, transparent); text-anchor:middle; dominant-baseline:central; }
+.wheel .hand { stroke:var(--nw-fg); stroke-width:2; stroke-linecap:round; }
+.wheel .knob { fill:var(--nw-fg); stroke:var(--nw-bg); stroke-width:3; }
+.wheel .ping { fill:var(--nw-fg); transform-box:fill-box; transform-origin:center; animation:hc-ping 2.4s ease-out infinite; }
+@keyframes hc-ping { 0% { transform:scale(1); opacity:.45; } 70%, 100% { transform:scale(3.2); opacity:0; } }
+.wheel .now { fill:var(--hc-trace); stroke:var(--nw-bg); stroke-width:2; }
+.wheel .mark { fill:var(--nw-bg); stroke-width:2.5; stroke:var(--hc-trace); }
+.wheel .mark.lit { stroke:var(--hc-stove); } .wheel .mark.stop { stroke:var(--nw-cold); }
+.wheel .tdot { fill:var(--hc-trace); stroke:var(--nw-bg); stroke-width:3; opacity:0; transition:opacity .2s; }
+.wheel .tdot.on { opacity:1; }
+.wheel .hit { fill:transparent; cursor:pointer; outline:none; -webkit-tap-highlight-color:transparent; }
+.wheel .hit:focus-visible { fill:color-mix(in srgb, var(--hc-trace) 12%, transparent); }
+/* The middle: the picture and the temperature, or the hour shown. */
+.wheel .mid { position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); width:28cqi; display:grid; pointer-events:none; text-align:center; }
+.mid > div { grid-area:1 / 1; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0;
+  transition:opacity .22s, transform .28s var(--hc-ease); }
+.mid .pick { opacity:0; transform:scale(.92); }
+.wheel.picking .mid .rest { opacity:0; transform:scale(1.06); }
+.wheel.picking .mid .pick { opacity:1; transform:none; }
+.mid .art { display:block; width:12.5cqi; height:auto; overflow:visible; }
+.mid .ct { font-size:5.6cqi; font-weight:300; letter-spacing:-.02em; line-height:1; margin-top:.9cqi; font-variant-numeric:tabular-nums; }
+.mid .cs { font-size:max(9px, 2.15cqi); font-weight:700; color:var(--nw-fg2); margin-top:.8cqi; white-space:nowrap; max-width:28cqi;
   overflow:hidden; text-overflow:ellipsis; }
+.mid .ph { font-size:max(9px, 2.1cqi); font-weight:700; color:var(--nw-fg2); letter-spacing:.02em; white-space:nowrap; }
+.mid .pv { font-size:6cqi; font-weight:300; letter-spacing:-.03em; line-height:1.05; margin:.5cqi 0 .7cqi; font-variant-numeric:tabular-nums; }
+.mid .pv.word { font-size:3.9cqi; font-weight:600; letter-spacing:-.01em; margin:1cqi 0 1.1cqi; }
+.mid .pl { font-size:max(9px, 2.25cqi); font-weight:650; white-space:nowrap; line-height:1.35; font-variant-numeric:tabular-nums; }
+.mid .pl.dim { color:var(--nw-fg2); }
+.mid .ph, .mid .pl { max-width:30cqi; overflow:hidden; text-overflow:ellipsis; }
+.hint { margin:-4px 0 0; text-align:center; font-size:var(--nw-fs-small); font-weight:650; color:var(--nw-fg2); }
+@media (prefers-reduced-motion:reduce) {
+  .spk line, .wheel .trace, .wheel .ping { animation:none; } .wheel .ping { display:none; }
+  .cell path, .spk line, .mid > div, .wheel .disc, .wheel .lit, .wheel .tdot { transition:none; }
+}
 /* The pictures. A stove is dark in both themes. */
 .art .metal { fill:color-mix(in srgb, var(--nw-fg) 82%, var(--nw-bg)); }
 .art .foot, .art .valve { fill:color-mix(in srgb, var(--nw-fg) 62%, var(--nw-bg)); }
@@ -180,8 +227,10 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .legend .sw.t-boost { background:var(--hc-r-boost); }
 .legend .sw.line { height:3px; border-radius:2px; background:var(--hc-trace); }
 .legend .sw.set { height:0; border-radius:0; background:none; border-top:2px dashed color-mix(in oklab, var(--hc-set) 75%, transparent); }
-.legend .sw.tick { width:3px; height:10px; border-radius:2px; background:var(--hc-demand); } .legend .sw.tick.flame { background:var(--hc-stove); }
-.legend .sw.ring { width:8px; height:8px; border-radius:50%; border:2px solid var(--hc-demand); box-sizing:border-box; background:none; }
+.legend .sw.ramp { width:18px; background:linear-gradient(90deg, var(--hc-dem-lo), var(--hc-dem-hi)); }
+.legend .sw.ramp.flame { background:linear-gradient(90deg, var(--hc-flame-lo), var(--hc-flame-hi)); }
+.legend .sw.yday { background:var(--hc-yday); }
+.legend .sw.ring { width:9px; height:9px; border-radius:50%; border:2px solid var(--hc-trace); box-sizing:border-box; background:none; }
 .legend .sw.ring.lit { border-color:var(--hc-stove); } .legend .sw.ring.stop { border-color:var(--nw-cold); }
 .say, .why { margin:0; font-size:var(--nw-fs-text); line-height:1.45; }
 .why { font-weight:600; }
