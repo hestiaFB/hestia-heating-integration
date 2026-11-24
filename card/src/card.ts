@@ -3,7 +3,7 @@ import charte from './ui/hestia-charte.css';
 import heating from './heating.css';
 import './editor';
 import {follow,type Connection} from './stream';
-import {dial,center,heaterArt,stoveArt,sample,TRACE_MIN,type Pt,type Mark} from './clock';
+import {dial,center,heaterArt,stoveArt,sample,keptRefs,TRACE_MIN,type Pt,type Mark} from './clock';
 
 /* Hestia Chauffage's card, after the cards' mock-up validated by Frank on 20 Nov. 2026, and the clock of 24 Nov. 2026:
    1 · la maison: the house in one sentence, every room, the night's cold (card: maison, by default)
@@ -286,8 +286,11 @@ class HestiaHeatingCard extends LitElement {
   const state=s.etat==='alarme'?'alarme':s.en_feu&&level?`flamme ${level} sur ${max}`:STOVE_WORD[s.etat]??s.etat;
   const sub=s.etat==='alarme'?'en alarme':s.en_feu?s.consigne!=null?`consigne ${num(s.consigne)}°`:`flamme ${level}`:
    s.etat==='eteint'?'poêle éteint':STOVE_WORD[s.etat]??'';
+  // The stove's set point only while it burns: once it is off, its thermostat keeps a frost guard (14 °C) that says
+  // nothing of the room.
+  const refs=keptRefs(series.temperature??[],s.en_feu&&s.consigne!=null?[s.consigne]:[],length);
   const clock=dial({segments:lane?.segments??[],start,length,now:v.planning.maintenant_min,temp:series.temperature??[],
-   refs:s.consigne!=null?[s.consigne]:[],ticks:flames,tickCls:'flame',tickMin:.01,tickLen:13,marks,
+   refs,ticks:flames,tickCls:'flame',tickMin:.01,tickLen:13,marks,
    label:`Horloge du jour : ${where} à ${deg(t)}, poêle ${state}${stop?`, arrêt prévu à ${isoHm(stop.a)}`:''}.`},
    center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
   return html`<div class="top">
@@ -297,6 +300,7 @@ class HestiaHeatingCard extends LitElement {
    ${clock}
    <div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
     ${(series.temperature??[]).length?html`<span><i class="sw line"></i>${where.toLowerCase()}</span>`:nothing}
+    ${refs.length?html`<span><i class="sw set"></i>consigne</span>`:nothing}
     ${flames.some(p=>(p[1]??0)>0)?html`<span><i class="sw tick flame"></i>flamme</span>`:nothing}
     ${lit!=null?html`<span><i class="sw ring lit"></i>allumage</span>`:nothing}${stop?html`<span><i class="sw ring stop"></i>arrêt prévu</span>`:nothing}</div>
    <p class="why">${this._why(s,room,auto,level)}</p>
@@ -438,7 +442,7 @@ class HestiaHeatingCard extends LitElement {
   // The thermostat's demand as ticks, only when it heated: a stove's room shows its flame on the stove's card.
   const demand=!r.poele&&(series.demande??[]).some(p=>(p[1]??0)>0);
   const sets=(series.consigne??[]).map(p=>p[1]).filter((x):x is number=>x!=null);
-  const refs=sets.length?[Math.min(...sets),Math.max(...sets)]:r.consigne!=null?[r.consigne]:[];
+  const refs=keptRefs(series.temperature??[],sets.length?[Math.min(...sets),Math.max(...sets)]:r.consigne!=null?[r.consigne]:[],length);
   const next=this._soon(r.prochain),stove=r.type==='poele'?v.poele:null;
   const art=stove?stoveArt(stove.en_feu?stove.flamme??0:0,stove.flamme_max||5,stove.en_feu):heaterArt(r.type,r.etat);
   const sub=next?this._next(next,v):r.consigne!=null?`consigne ${num(r.consigne)}°`:'';
@@ -453,6 +457,7 @@ class HestiaHeatingCard extends LitElement {
     @keydown=${tap?(e:KeyboardEvent)=>this._key(e,r):nothing}>${clock}</div>
    <div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
     ${(series.temperature??[]).length?html`<span><i class="sw line"></i>température</span>`:nothing}
+    ${refs.length?html`<span><i class="sw set"></i>consigne</span>`:nothing}
     ${demand?html`<span><i class="sw tick demand"></i>% de chauffe</span>`:nothing}${next?html`<span><i class="sw ring next"></i>prochain changement</span>`:nothing}</div>
    ${r.raison?html`<p class="say">${r.raison}</p>`:nothing}
    ${this._modes(r)}
