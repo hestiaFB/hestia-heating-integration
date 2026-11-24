@@ -241,6 +241,8 @@ L’escalier est **une seule fonction**, appelée par le pilote et par l’affic
 
 Un thermostat **déjà** éteint ne déclenche rien : les sécurités et le bouton Éteindre lancent alors l’arrêt eux-mêmes.
 
+Un thermostat **déjà** en hors gel non plus (1.0.0b5) : hors gel arrête la chauffe qu’il trouve en y passant, pas un poêle allumé ensuite. **Un poêle allumé à la main** (sur le poêle, son application ou « Allumer » sur la carte), son thermostat en hors gel, est gardé : Hestia passe le thermostat en boost, une fois par allumage, et conduit le poêle de là (la flamme, la maison assez chaude, un passage en hors gel). Jamais pendant un arrêt de Hestia, ni le thermostat éteint (un verrou). *Pourquoi : le 24 novembre, le poêle allumé à la main après un redémarrage a été arrêté au bout de 14 secondes, son thermostat resté en hors gel ; l’automatisation « Arrêt » de la maison ne réagissait qu’au passage.*
+
 **Séquence** :
 
 1. Attendre que l’état du poêle soit connu (2 minutes au plus).

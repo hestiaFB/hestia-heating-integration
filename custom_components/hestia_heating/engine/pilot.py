@@ -163,12 +163,25 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     elif mode != "off":
         mem["arret_vrai"] = None
     off_since = _held(mem, "arret_a", mode == "off" and bool(mem.get("arret_vrai")), None, now)
-    wants_off = preset == "frost" or bool(off_since and now - off_since >= OFF_HELD)
+    # Hors gel stops the burn it finds (1.0.0b5), as the house's own « Arrêt » does: on the step to hors gel while the
+    # stove burns, kept while the preset stays and the stove is not yet off. A stove lit later by hand, its thermostat
+    # still in hors gel (or back in hors gel after a restart), is not stopped for it: Hestia puts it in boost.
+    # A thermostat without a preset for a moment (unavailable, a restart) keeps the wish.
+    if state in ("eteint", "alarme") or preset not in (None, "frost"):
+        mem["gel_vrai"] = None
+    elif preset == "frost" and before_preset not in (None, "frost"):
+        mem["gel_vrai"] = True
+    lit_in_frost = preset == "frost" and not mem.get("gel_vrai")
+    wants_off = (preset == "frost" and not lit_in_frost) or bool(off_since and now - off_since >= OFF_HELD)
     overheat_c = tuning.get("surchauffe_c")
     overheat = room is not None and room > overheat_c
     # The fire pot, counted by Hestia (engine/granules.py): full, the next start waits for « J'ai nettoyé ».
     fire_pot = (stove.get("conso") or {}).get("brasier") or {}
-    warm = warm_enough(house_c, target_c, preset)
+    # Hors gel's set point asks for no heat: the warm-enough rule is for boost and the other presets. Its count starts
+    # again when the preset changes (a stove adopted in boost is not stopped on the hors gel's old count).
+    warm = warm_enough(house_c, target_c, preset) and not lit_in_frost
+    if before_preset is not None and preset != before_preset:
+        mem["assez_chaud"] = None
     warm_since = _held(mem, "assez_chaud", warm, None, now)
     mild_c = tuning.get("saison_douce_c")
     mild = not (house_c is not None and house_c < (mild_c + 1 if not mem.get("saison_douce", True) else mild_c))

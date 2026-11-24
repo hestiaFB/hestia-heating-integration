@@ -180,6 +180,14 @@ def build(snap: dict) -> dict:
         # The card's buttons (0.8): greyed out on a copy; the « flamme au plus bas » switch and the plug's switch,
         # each pressed by the user (Home Assistant's own dialog for the plug).
         stove["copie"] = copy
+        boost_on = stove_thermostat and stove_thermostat.get("preset") not in ("frost", None)
+        if mode == "entier" and (stove.get("boutons") or {}).get("eteindre") and boost_on:
+            # « Par Hestia » (1.0.0b5): « Éteindre » puts the stove's thermostat in hors gel, and Hestia stops the
+            # stove from there, with its checks; the thermostat and the stove stay of one mind. « Allumer » stays the
+            # stove's own order: Hestia then puts the thermostat in boost (driver.drive).
+            stove["boutons"] = {**stove["boutons"], "eteindre": {
+                "service": "climate.set_preset_mode", "entity_id": stove_thermostat.get("entite") or stove_thermostat["id"],
+                "donnees": {"preset_mode": "frost"}}}
         low_switch, plug_switch = snap.get("flamme_basse"), snap.get("prise_switch")
         stove["flamme_basse"] = {"entity_id": low_switch["entity_id"], "nom": low_switch["nom"],
                                  "on": low_switch["on"]} if low_switch else None

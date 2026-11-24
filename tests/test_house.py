@@ -97,6 +97,15 @@ class House(unittest.TestCase):
         copied = m.snapshot()
         copied["stove"]["copie"] = True
         self.assertTrue(house.build(copied)["poele"]["copie"])
+        # 1.0.0b5, « Par Hestia »: « Éteindre » puts the stove's thermostat (in boost) in hors gel, and Hestia stops the
+        # stove with its checks; « Allumer » stays the stove's own order (Hestia then puts the thermostat in boost).
+        snap["pilote"] = "entier"
+        whole = house.build(snap)["poele"]
+        self.assertEqual(whole["boutons"]["eteindre"], {"service": "climate.set_preset_mode",
+                                                        "entity_id": "climate.vt_poele",
+                                                        "donnees": {"preset_mode": "frost"}})
+        self.assertEqual(whole["boutons"]["allumer"]["donnees"], {"hvac_mode": "heat"})
+        self.assertEqual(s["boutons"]["eteindre"]["service"], "climate.set_hvac_mode")
 
     def test_the_smoothed_temperature_of_a_versatile_thermostat(self):
         from engine import sources

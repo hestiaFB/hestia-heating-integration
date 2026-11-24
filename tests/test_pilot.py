@@ -245,6 +245,44 @@ class StartAndStop(unittest.TestCase):
         decision, _, _ = decide(s, t, mem, NOW + timedelta(minutes=2), house_c=18.9)
         self.assertEqual(decision["action"], "garder")
 
+    def test_a_stove_lit_by_hand_in_hors_gel_is_not_stopped(self):
+        # 1.0.0b5: the thermostat left in hors gel since the afternoon (the stove off), the stove lit by hand: hors gel
+        # stops only the burn it finds, on its step, as the house's own « Arrêt » does; Hestia puts the thermostat in
+        # boost (driver.drive). Nor the warm-enough rule: hors gel's 14 °C ask for no heat.
+        t = thermostat("frost", demand=0, target=14.0)
+        off = stove("eteint", 3)
+        _, mem, _ = decide(off, thermostat("boost", target=21.0), seen(off, thermostat("boost", target=21.0)),
+                           house_c=20.2)
+        _, mem, _ = decide(off, t, mem, NOW + timedelta(minutes=1), house_c=20.2)
+        self.assertIsNone(mem.get("gel_vrai"))
+        lit = stove("allumage", 3)
+        decision, mem, events = decide(lit, t, mem, NOW + timedelta(hours=3), house_c=20.2)
+        self.assertNotEqual(decision["action"], "arreter")
+        self.assertEqual([e["texte"] for e in events if e["qui"] == "maison"], ["La maison a démarré le poêle."])
+        decision, mem, _ = decide(stove("chauffe", 3), t, mem, NOW + timedelta(hours=3, minutes=5), house_c=20.2)
+        self.assertNotEqual(decision["action"], "arreter")
+        # Then in boost (put there by Hestia): the warm-enough count starts again, from the boost's set point.
+        b = thermostat("boost", demand=40, target=21.0)
+        decision, mem, _ = decide(stove("chauffe", 3), b, mem, NOW + timedelta(hours=3, minutes=6), house_c=20.2)
+        self.assertNotEqual(decision["action"], "arreter")
+        # A step back to hors gel while it burns: that one stops it.
+        decision, mem, _ = decide(stove("chauffe", 3), t, mem, NOW + timedelta(hours=3, minutes=7), house_c=20.2)
+        self.assertEqual(decision["action"], "arreter")
+        self.assertIn("Le thermostat est passé hors gel.", decision["texte"])
+
+    def test_the_stop_of_hors_gel_holds_until_the_stove_is_off(self):
+        s, t = stove("chauffe", 3), thermostat("frost")
+        _, mem, _ = decide(s, t, seen(s, thermostat("boost")))
+        # A restart in the middle (the coordinator drops the mode and the preset), the thermostat unavailable a moment:
+        # the stop is still wanted.
+        mem = {k: v for k, v in mem.items() if k not in ("mode", "preset")}
+        _, mem, _ = decide(s, thermostat(None, mode="unavailable"), mem, NOW + timedelta(minutes=1))
+        decision, mem, _ = decide(s, t, mem, NOW + timedelta(minutes=2))
+        self.assertEqual(decision["action"], "arreter")
+        decision, mem, _ = decide(stove("extinction", 3), t, mem, NOW + timedelta(minutes=3))
+        decision, mem, _ = decide(stove("eteint", 3), t, mem, NOW + timedelta(minutes=30))
+        self.assertIsNone(mem.get("gel_vrai"))
+
 
 class Safety(unittest.TestCase):
     def test_an_alarm_that_lasts_two_minutes_is_cut(self):

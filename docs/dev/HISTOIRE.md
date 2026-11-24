@@ -70,6 +70,7 @@ Le 24 novembre 2026 :
 - « Entier » revient dans Réglages, sous les mots « Qui allume et éteint le poêle : Par Hestia », avec la flamme qui peut rester à la main.
 - Tous les chiffres du pilote deviennent réglables (Avancé), avec leurs valeurs par défaut d’avant.
 - Codé en 1.0.0b3.
+- Le soir, premier essai de « Par Hestia » à la maison : le poêle allumé à la main, son thermostat resté en hors gel après un redémarrage, est arrêté par Hestia au bout de 14 secondes. L’automatisation « Arrêt » de la maison ne réagissait qu’au passage en hors gel. Choix de Frank : un poêle allumé à la main passe son thermostat en boost, et Hestia le conduit de là. Hors gel n’arrête plus que la chauffe qu’il trouve en y passant ; « Éteindre » sur la carte passe le thermostat en hors gel. Codé en 1.0.0b5.
 
 Le 22 novembre 2026 :
 
