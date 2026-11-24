@@ -5,7 +5,7 @@ Hestia »).
 A planning has a name, a week, the level « the rest of the time » and the thermostats it sets. Its week is one row of
 time ranges for every day (« tous »), two rows for Monday to Friday and the week-end (« semaine »), or seven rows
 (« chaque »). A range is [start, end, level], « 06:30 » to « 08:30 » or « 24:00 ». Where two ranges overlap, the one
-that starts later wins. A thermostat follows one planning at most. « En essai » (actif false), the planning shows what
+that starts later wins. A thermostat follows one planning at most. « En pause » (actif false), the planning shows what
 it would do and sends nothing; « Actif », Hestia sets its thermostats at each change.
 
 What it never decides: to switch a thermostat on or off, to change a thermostat's own settings, to send anything to a

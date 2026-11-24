@@ -48,11 +48,11 @@ DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_pr
 PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granules_poids_sac": (5, 30),
                  "prix_kwh": (0.01, 2)}
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
-FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en essai, rien envoyé", "bloque": "bloqué par Scheduler",
+FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en pause, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
         "sans_prereglage": "préréglage absent du thermostat", "verrou": "pas autorisé dans Réglages, rien envoyé"}
 JOURNAL_MAX = 60
-# The stove's pilot « à l'ombre »: its journal says what Hestia would have done and what the house did. Kept a week,
+# The stove's pilot in « Conseil » (key ombre): its journal says what Hestia would have done and what the house did. Kept a week,
 # through a restart, so that several days can be weighed (« d'accord 46 fois sur 48 »).
 PILOT_SHOWN = 20
 PILOT_DAYS = 7
@@ -548,7 +548,7 @@ class HeatingCoordinator:
 
     def _planning_orders(self, due: list[dict], waiting: list[str], now: datetime) -> None:
         """Each thermostat whose planning changed level since the last change dealt with: sent when its planning is
-        « Actif », else written in the journal as what Hestia would have done (« En essai »)."""
+        « Actif », else written in the journal as what Hestia would have done (« En pause »)."""
         baseline = now.replace(tzinfo=None, second=0, microsecond=0).isoformat()
         for thermostat in waiting:
             self.applied[thermostat] = {"a": baseline}

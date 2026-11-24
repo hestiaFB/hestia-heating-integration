@@ -4,7 +4,7 @@ import {hubStyles,modernStyles,pageStyles,listSection,listRow,saveBar,toggle,hel
 
 /* The « Chauffage » tab of the Hestia-FB panel, after the v0.1 mock-up validated by Frank on 20 Nov. 2026
    (Accueil · Poêle), with a room's page, the plannings (the « planning simple » mock-up of 20 Nov.: the list, then one
-   planning's week, its thermostats, « En essai » or « Actif »), Réglages, Extensions and À propos. The tab itself
+   planning's week, its thermostats, « En pause » or « Actif »), Réglages, Extensions and À propos. The tab itself
    commands nothing: it edits the plannings as a draft, saved with the rest of the settings; the integration sends the
    presets, and only for the thermostats of a planning « Actif ».
    Everything shown comes from the integration (hestia_heating/view, day, settings). */
@@ -66,7 +66,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
   notifieurs?:string[];coupures?:{id:string;nom:string;poele:boolean}[];coupure?:string|null;pilotable?:boolean;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null}}};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='0.8.0b3';
+const VERSION='1.0.0b1';
 // The whole pilot's answers, as on the phone.
 const ANSWER:Record<string,string>={oui:'Oui, allumer',non:'Non',couper:'Couper la prise',ignorer:'Ignorer',nettoye:'J’ai nettoyé'};
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
@@ -363,7 +363,7 @@ export class HestiaHeatingSetup extends LitElement {
  /** What Hestia sends, said once at the foot of the pages. */
  private modeNote(v:View){
   const p=v.planning,active=(p.hestia??[]).filter(h=>h.actif&&h.thermostats.length);
-  if(p.labo)return noteBox('À l’ombre','Ici, les thermostats sont recopiés d’une autre maison (Remote Home Assistant) : aucun planning ne leur envoie rien, un ordre pourrait atteindre les vrais.');
+  if(p.labo)return noteBox('Recopié','Ici, les thermostats sont recopiés d’une autre maison (Remote Home Assistant) : aucun planning ne leur envoie rien, un ordre pourrait atteindre les vrais.');
   if(!active.length)return noteBox('Lecture seule','Hestia Chauffage lit la maison sans rien commander. Seul un planning « Actif » règle des thermostats, et seulement leur préréglage.');
   return noteBox(active.length>1?'Plannings actifs':'Un planning actif',`${active.map(h=>`« ${h.nom} »`).join(', ')} : quand une plage commence ou finit, Hestia règle le préréglage de ${active.length>1?'leurs':'ses'} thermostats. Elle n’allume ni n’éteint jamais un thermostat, et ne commande jamais le poêle lui-même.`);
  }
@@ -397,7 +397,7 @@ export class HestiaHeatingSetup extends LitElement {
  /* ── Poêle ── */
  private stovePage(v:View){
   const s=v.poele;
-  if(!s)return html`${this.head('Poêle',{lead:'Aucun poêle trouvé. Hestia Chauffage reconnaît Micronova Agua IOT ; les autres poêles viendront un par un, avec des testeurs.'})}`;
+  if(!s)return html`${this.head('Poêle',{lead:'Aucun poêle trouvé. Hestia Chauffage reconnaît Micronova Agua IOT ; les autres poêles viendront un par un.'})}`;
   const g=v.granules,day=this.days['poele'],max=s.flamme_max;
   const lead=s.en_feu?`Il chauffe ${since(s.depuis)}. La maison régule, le poêle suit la flamme donnée.`:s.etat==='alarme'?'Le poêle est en alarme.':`${STOVE_WORD[s.etat][0].toUpperCase()+STOVE_WORD[s.etat].slice(1)} ${since(s.depuis)}.`;
   const flames=Array.from({length:max},(_,i)=>i+1);
@@ -434,7 +434,7 @@ export class HestiaHeatingSetup extends LitElement {
     ...(s.demande_pct!=null?[listRow({label:'Demande du thermostat',sub:'La part du temps où il voudrait chauffer : c’est elle qui donne la flamme.',value:`${s.demande_pct} %`})]:[]),
     ...(room?.planning?[listRow({label:'Le planning',sub:room.prochain?`Puis ${room.prochain.texte} ${when(room.prochain.a)}.`:undefined,value:room.planning,go:()=>this.go('planning')})]:[]),
    ],{more:html`<span class="nk-def">lu, pas décidé</span>`})}
-   ${s.pilote?.mode==='ombre'?noteBox('À l’ombre','Le pilote du poêle ne commande rien : il calcule ce qu’il ferait et le compare à ce que font vos automatisations. Dans Réglages, il peut régler la flamme, et seulement elle.')
+   ${s.pilote?.mode==='ombre'?noteBox('Conseil','Le pilote du poêle ne commande rien : il calcule ce qu’il ferait et le compare à ce que font vos automatisations. Dans Réglages, vous pouvez lui confier la flamme.')
      :s.pilote?.mode==='flamme'?noteBox('La flamme','Hestia règle la flamme du poêle, et seulement elle : le démarrage, l’arrêt et les sécurités restent à vos automatisations. Si la flamme change sans elle, elle la laisse jusqu’au lendemain.')
      :s.pilote?.mode==='entier'?noteBox('Le pilote entier','Hestia démarre et arrête le poêle, règle sa flamme et tient ses sécurités, comme vos automatisations le faisaient. Elles doivent rester coupées : deux pilotes en même temps se contrediraient.'):this.modeNote(v)}`;
  }
@@ -484,10 +484,10 @@ export class HestiaHeatingSetup extends LitElement {
   const q=whole?.question;
   const answer=async(r:string)=>{this.answering=true;try{await this.hass!.callWS({type:'hestia_heating/repondre',reponse:r});await this.load();}
    catch(e){this.error=(e as {message?:string}).message??'La réponse n’a pas été notée.';}finally{this.answering=false;}};
-  const title=whole?'Le pilote conduit le poêle':steer?'Le pilote règle la flamme':'Le pilote, à l’ombre';
+  const title=whole?'Le pilote conduit le poêle':steer?'Le pilote règle la flamme':'Le pilote conseille';
   return html`${steer?.lache?noteBox('Flamme laissée',steer.lache):nothing}
-   ${steer?.copie||whole?.copie?noteBox('Labo',whole?'Ce poêle est recopié d’une autre maison : Hestia ne lui envoie jamais rien, ni ordre ni notification. Le pilote reste à l’ombre.'
-     :'Ce poêle est recopié d’une autre maison : Hestia ne lui envoie jamais rien. La flamme reste à l’ombre.'):nothing}
+   ${steer?.copie||whole?.copie?noteBox('Recopié',whole?'Ce poêle est recopié d’une autre maison : Hestia ne lui envoie jamais rien, ni ordre ni notification. Le pilote ne fait que conseiller.'
+     :'Ce poêle est recopié d’une autre maison : Hestia ne lui envoie jamais rien. Pour la flamme, le pilote ne fait que conseiller.'):nothing}
    ${q?listSection('Hestia vous demande',[listRow({label:html`<b>${q.texte}</b>`,control:true,
      sub:q.sujet==='saison'?`Sans réponse${q.reste_min!=null?` dans ${q.reste_min} min`:''}, le thermostat repasse hors gel, sauf si le poêle est déjà en route.`:'La même question est sur votre téléphone.',
      value:html`<span class="pot-ask">${q.reponses.map((r,i)=>html`<button type="button" class=${i===0?'primary':''} ?disabled=${this.answering} @click=${()=>answer(r)}>${ANSWER[r]??r}</button>`)}</span>`})]):nothing}
@@ -510,7 +510,7 @@ export class HestiaHeatingSetup extends LitElement {
     moreRow('Ses règles',String(rules.length),rules.map(([n,t])=>listRow({label:n,sub:t}))),
    ],{more:html`<span class="nk-def">${whole?(whole.copie||whole.pilotable===false?'rien n’est envoyé':'démarrage, flamme, arrêt'):steer&&!steer.copie?'la flamme seulement':'rien n’est envoyé'}</span>`,
      help:whole?'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter, et Hestia le fait, comme vos automatisations. Chaque geste est écrit dans le journal du jour.'
-     :steer?'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter. Hestia n’envoie que la flamme ; le démarrage et l’arrêt, elle ne fait que les dire, à côté de ce que fait la maison.':'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter. À l’ombre, il ne fait que le dire, à côté de ce que fait la maison.'})}
+     :steer?'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter. Hestia n’envoie que la flamme ; le démarrage et l’arrêt, elle ne fait que les dire, à côté de ce que fait la maison.':'Le pilote suit le thermostat du poêle : il décide quand démarrer, quelle flamme et quand arrêter. En mode Conseil, il ne fait que le dire, à côté de ce que fait la maison.'})}
    ${p.journal?.length?listSection('Le pilote aujourd’hui',[...p.journal].reverse().map(j=>listRow({label:html`<b>${j.heure}</b> · ${j.texte}`,value:agree(j.accord,'comme Hestia','autrement')}))):nothing}`;
  }
 
@@ -559,7 +559,7 @@ export class HestiaHeatingSetup extends LitElement {
   const used=new Set(ids.flatMap(id=>{const x=m.plannings[id];return [x.reste,...x.plages.flat().map(r=>r[2])];}));
   return html`<div class="plan-top"><div>${this.head('Planning',{lead:'Un planning, c’est une semaine en couleurs. Il règle les thermostats que vous lui donnez.'})}</div>
     <button type="button" class="primary add" @click=${()=>this.create()}>+ Créer un planning</button></div>
-   <div class="states"><span><span class="st essai">En essai</span>Hestia montre ce qu’elle ferait, sans rien envoyer.</span><span><span class="st actif">Actif</span>Hestia règle ces thermostats.</span></div>
+   <div class="states"><span><span class="st essai">En pause</span>Hestia montre ce qu’elle ferait, sans rien envoyer.</span><span><span class="st actif">Actif</span>Hestia règle ces thermostats.</span></div>
    ${ids.length?ids.map(id=>this.planCard(v,id,m.plannings[id],status.get(id)))
     :html`<div class="card"><p class="say" style="margin:0">Aucun planning pour l’instant. Créez-en un : une semaine en couleurs, puis les thermostats qu’il règle.</p></div>`}
    ${ids.length?html`<div class="levels">${LEVELS.filter(l=>used.has(l)).map(l=>html`<span class=${'lv-'+l}><i></i>${LEVEL_LABEL[l]}</span>`)}
@@ -570,7 +570,7 @@ export class HestiaHeatingSetup extends LitElement {
     <p class="hint after">Un thermostat suit un seul planning. « Reprendre dans Hestia » recopie ce planning ici ; vous coupez ensuite celui de Scheduler.</p>`:nothing}
    ${(p.journal??[]).length?listSection('',[moreRow('Ce qu’a fait Hestia aujourd’hui',String(p.journal.length),[...p.journal].reverse().map(j=>listRow({label:html`<b>${j.heure}</b> · ${j.planning} : ${j.niveau}`,
      sub:j.thermostats.join(', '),value:html`<span class=${'chip '+(FATE_TONE[j.statut]??'off')}>${j.texte}</span>`})))]):nothing}
-   ${p.labo?noteBox('Labo','Ici, les thermostats sont recopiés d’une autre maison (Remote Home Assistant) : Hestia ne leur envoie rien, même avec un planning actif. Un ordre pourrait atteindre les vrais.'):nothing}`;
+   ${p.labo?noteBox('Recopié','Ici, les thermostats sont recopiés d’une autre maison (Remote Home Assistant) : Hestia ne leur envoie rien, même avec un planning actif. Un ordre pourrait atteindre les vrais.'):nothing}`;
  }
  private planCard(v:View,id:string,p:Plan,h:HPlan|undefined){
   const changed=JSON.stringify(p)!==JSON.stringify(this.savedPlans()[id]);
@@ -579,7 +579,7 @@ export class HestiaHeatingSetup extends LitElement {
    :html`<p class="plan-now">Maintenant : <b>${h?.maintenant??'—'}</b>.${h?.prochain?` ${h.prochain.texte}.`:''}</p>
     ${h?.bloques.length?html`<p class="plan-now bad">${h.bloques.map(b=>`${b.nom} suit encore « ${b.scheduler} » dans Scheduler : Hestia ne le règle pas.`).join(' ')}</p>`:nothing}
     ${p.actif&&h?.verrouilles?.length?html`<p class="plan-now bad">${h.verrouilles.map(b=>b.nom).join(', ')} : pas coché${h.verrouilles.length>1?'s':''} dans Réglages, « Ce que Hestia peut régler ». Hestia ne ${h.verrouilles.length>1?'leur':'lui'} envoie rien.</p>`:nothing}`;
-  return html`<article class="plan"><div class="plan-h"><h2>${p.nom}</h2><span class=${'st '+(p.actif?'actif':'essai')}>${p.actif?'Actif':'En essai'}</span><span class="grow"></span>
+  return html`<article class="plan"><div class="plan-h"><h2>${p.nom}</h2><span class=${'st '+(p.actif?'actif':'essai')}>${p.actif?'Actif':'En pause'}</span><span class="grow"></span>
     <button type="button" @click=${()=>this.go('planning/'+id)}>Modifier</button></div>
    ${this.miniWeek(p,v)}
    ${p.thermostats.length?html`<div class="chips"><small>Thermostats</small>${p.thermostats.map(t=>html`<span class="tchip">${this.thermName(v,t)}</span>`)}</div>`:nothing}
@@ -660,7 +660,7 @@ export class HestiaHeatingSetup extends LitElement {
      <span><b>${t}</b><small class="warn">Pas lu en ce moment : coupé dans Réglages, ou absent de Home Assistant.</small></span></label>`)}
     <p class="hint">Un thermostat suit un seul planning. En le cochant ici, il quitte l’autre.</p></section>
    <section class="box" aria-labelledby="h-mode"><h2 id="h-mode">Ce que fait Hestia</h2><div class="modes">
-    ${([[false,'essai','En essai','Hestia montre ce qu’elle ferait, sans rien envoyer.'],[true,'actif','Actif','Hestia règle ces thermostats à chaque plage.']] as [boolean,string,string,string][])
+    ${([[false,'essai','En pause','Hestia montre ce qu’elle ferait, sans rien envoyer.'],[true,'actif','Actif','Hestia règle ces thermostats à chaque plage.']] as [boolean,string,string,string][])
      .map(([a,c,l,t])=>html`<button type="button" class=${c} aria-pressed=${String(p.actif===a)} @click=${()=>edit(x=>{x.actif=a;})}><b>${l}</b><span>${t}</span></button>`)}</div>
     ${p.actif?html`<p class="hint">${v.planning.labo?'Ici, les thermostats sont recopiés d’une autre maison : même actif, Hestia ne leur enverra rien.'
      :'Hestia change le préréglage de ces thermostats quand une plage commence ou finit. Elle ne les allume ni ne les éteint jamais. Un réglage fait à la main tient jusqu’au changement suivant.'}</p>`:nothing}</section>
@@ -692,9 +692,12 @@ export class HestiaHeatingSetup extends LitElement {
       :this.val<string>('pilote')==='entier'?(f.poele_copie?'Ce poêle est recopié d’une autre maison : Hestia ne lui enverra rien.'
         :f.pilotable===false?'Le profil de ce poêle ne dit pas encore comment l’allumer et l’éteindre : Hestia ne lui enverra rien.'
         :'Hestia démarre et arrête le poêle, règle sa flamme et tient ses sécurités. Coupez d’abord toutes vos automatisations du poêle (démarrage, modulation, arrêt, vérification, sécurités) : deux pilotes en même temps se contrediraient.')
-      :'À l’ombre : il montre ce qu’il ferait, à côté de ce que font vos automatisations. Il ne commande rien.',
+      :'Conseil : il montre ce qu’il ferait, à côté de ce que font vos automatisations. Il ne commande rien.',
      level:this.val<string>('pilote')==='entier'&&!f.poele_copie&&f.pilotable!==false?'todo':undefined,
-     value:segmented<string>('Le pilote de Hestia',[['ombre','À l’ombre'],['flamme','Flamme'],['entier','Entier'],['eteint','Éteint']],this.val<string>('pilote')??'ombre',x=>this.set('pilote',x))}),
+     value:segmented<string>('Le pilote de Hestia',[['ombre','Conseil'],['flamme','Flamme'],
+      // « Entier » (1.0): offered again once tried in a real house; kept for a stove already set on it.
+      ...(this.stored('pilote')==='entier'||this.val<string>('pilote')==='entier'?[['entier','Entier']] as [string,string][]:[]),['eteint','Éteint']],
+      this.val<string>('pilote')??'ombre',x=>this.set('pilote',x))}),
     ...(this.val<string>('pilote')==='entier'?this.wholeRows(f):[]),
     ...(this.val<string>('pilote')!=='eteint'?[listRow({label:'La température de la maison',control:true,
      sub:house?'Choisie par vous : prenez le capteur que lisent vos automatisations du poêle.':'La moyenne des pièces que Hestia voit.',
@@ -720,7 +723,7 @@ export class HestiaHeatingSetup extends LitElement {
      value:toggle('Lire '+t.nom,off[t.id]!==false,on=>setSource(t.id,on))})),{help:'Un thermostat coupé ici n’est plus lu ni compté, sans rien changer dans Home Assistant.'})}
    ${listSection('Ce que Hestia peut régler',f.thermostats.map(t=>listRow({label:t.nom,control:true,sub:t.piece||undefined,
      value:toggle('Hestia peut régler '+t.nom,allowed.includes(t.id),on=>this.set('planning_autorises',on?[...allowed,t.id]:allowed.filter(x=>x!==t.id)))})),
-     {help:'Un planning Actif n’envoie qu’aux thermostats cochés ici, et à aucun autre. Aucun au départ : pour un essai, cochez seulement vos thermostats d’essai.'})}
+     {help:'Un planning Actif n’envoie qu’aux thermostats cochés ici, et à aucun autre. Aucun au départ.'})}
    ${listSection('',[listRow({label:'Les pièces',sub:'Elles viennent de Home Assistant : la pièce du thermostat, sinon celle de son appareil.',go:()=>this.openHa('/config/areas/dashboard')})])}`;
  }
 

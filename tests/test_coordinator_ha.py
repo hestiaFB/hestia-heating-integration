@@ -231,7 +231,7 @@ class PlanningHestia(SendsThePlanning, HomeAssistantWithAHouse):
         entry, c = await self._planning("climate.vt_sejour", actif=False)
         self.assertEqual(self.sent, [])
         self.assertEqual(c.journal[-1]["statut"], "ombre")
-        self.assertEqual(c.data["planning"]["journal"][-1]["texte"], "en essai, rien envoyé")
+        self.assertEqual(c.data["planning"]["journal"][-1]["texte"], "en pause, rien envoyé")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_active_it_sends_nothing_to_a_thermostat_not_allowed(self):

@@ -76,7 +76,7 @@ Unités : °C, W, %. Une valeur absente est `None`, jamais inventée.
 | `hestia_heating/day` + `cible` (`poele` ou `piece/<id>`) | les courbes du jour depuis minuit, un point toutes les 5 min au plus, gardées 2 min : pour une pièce `temperature`, `consigne` et `demande` de son thermostat principal. Chaque point est placé à l’heure où il a été écrit (`last_updated`) : la température et la consigne d’un thermostat sont des attributs, et `last_changed` ne bouge qu’avec son état (`heat`) |
 | `hestia_heating/day` + `cible` + `heures` (1 à 24) | depuis la 0.8, pour l’horloge des cartes : les dernières heures au lieu du jour depuis minuit, avec `debut_min` (la minute du jour où commence la fenêtre) et `fenetre_min` ; les minutes des points comptent depuis `debut`. Pour le poêle : `flamme` (à 0 quand il ne brûle pas), `temperature` et `demande` de son thermostat, et depuis la 0.8.0b3 sa `consigne` (la carte ne la dessine que lorsqu’il brûle). Depuis la 0.8.0b3 aussi, `energie` : `unite` (`kg` pour le poêle, `kWh` pour une pièce) et `heures`, `[minute du début de l’heure depuis debut, valeur]`, lues dans les statistiques horaires du même compteur que `historique` ; l’heure qui suit la dernière statistique reçoit ce que le compteur a bougé depuis |
 | `hestia_heating/historique` + `cible` | depuis la 0.8, pour les tiroirs des cartes : les totaux des 14 derniers jours (`jours`, le plus ancien d’abord, aujourd’hui jusqu’à maintenant) et du mois (`mois`), lus dans les statistiques de Home Assistant et gardés 10 min. Une pièce : les kWh du compteur d’énergie de son thermostat (`unite: kWh`) ; le poêle : les kilos de `sensor.…_poele_granules_brules` (`unite: kg`). `stat` vaut `null` sans compteur |
-| `hestia_heating/gestion_auto` + `actif` | depuis la 0.8, « Gestion auto » de la carte du poêle : `false` remet le pilote « à l’ombre » et garde son mode (`pilote_auto`) ; `true` le remet dans ce mode (« Flamme » sinon, « Entier » seulement pour un poêle que son profil sait allumer et éteindre). Refusé (`copie`) pour un poêle recopié d’une autre maison. Répond le mode en vigueur |
+| `hestia_heating/gestion_auto` + `actif` | depuis la 0.8, « Gestion auto » de la carte du poêle : `false` remet le pilote sur « Conseil » et garde son mode (`pilote_auto`) ; `true` le remet dans ce mode (« Flamme » sinon, « Entier » seulement pour un poêle que son profil sait allumer et éteindre). Refusé (`copie`) pour un poêle recopié d’une autre maison. Répond le mode en vigueur |
 | `hestia_heating/settings` | les réglages et ce qu’ils peuvent valoir |
 | `hestia_heating/set_settings` + `reglages` | enregistre les réglages modifiés (`sources`, `extensions`, `poele_thermostat`, `poele_prise`, `weather_place`, `planning`, `pilote`, `pilote_thermometre`, `planning_autorises`, `pilote_flamme_basse`, et depuis la 0.6 `brasier_kg` de 5 à 60, `granules_prix_sac` de 0,5 à 50 €, `granules_poids_sac` de 5 à 30 kg, vides pour « comme trouvé », et depuis la 0.7 `pilote_notifier` (un service `notify.…`, vide pour aucun), `poele_prise_switch` (un `switch.…`, vide pour « trouvé seul ») et `couper_prise` (oui ou non), et depuis la 0.8 `prix_kwh` de 0,01 à 2 €, vide pour aucun). Un réglage illisible est refusé (`invalid`), avec la raison en mots, et rien n’est enregistré |
 | `hestia_heating/brasier_nettoye` | « J’ai nettoyé » : le compteur du brasier repart de zéro, écrit tout de suite. Rien n’est envoyé au poêle (0.6). Avec le pilote entier, c’est aussi la réponse `nettoye` (0.7) |
@@ -109,7 +109,7 @@ Depuis la 0.3, la brique a ses propres plannings (`engine/home_planning.py`, Pyt
 - `plages` : sur chaque ligne, des plages `[début, fin, niveau]`, de `00:00` à `24:00`, 12 au plus par ligne. Niveaux : `confort`, `eco`, `hors_gel`, `boost`. Quand deux plages se chevauchent, celle qui commence le plus tard l’emporte.
 - `reste` : le niveau du reste du temps.
 - `thermostats` : les thermostats que le planning règle. **Un thermostat suit un seul planning** : le même dans deux plannings est refusé.
-- `actif` : `false` par défaut (« En essai » : le planning montre ce qu’il ferait, sans rien envoyer). `true` : « Actif ».
+- `actif` : `false` par défaut (« En pause » : le planning montre ce qu’il ferait, sans rien envoyer). `true` : « Actif ».
 - 20 plannings au plus. Un planning illisible est refusé avec la raison en mots. Le planning à journées types de la première préparation de la 0.3 (jamais publiée) n’est pas repris : il n’a jamais été qu’à l’ombre.
 
 Pour le poêle : son thermostat se met dans un planning comme les autres. Boost l’allume, Hors gel l’éteint (ce sont les automatisations du poêle, ou plus tard le pilote, qui le font). L’éditeur dit combien de fois par semaine le poêle s’allumerait (`starts_per_week()`).
@@ -124,18 +124,18 @@ Ce que devient un changement dû, pour chaque thermostat (le journal du jour, 60
 | --- | --- |
 | `bloque` | un planning Scheduler allumé vise encore le thermostat (« suit deux plannings », dans À régler, quand le planning est actif) |
 | `recopie` | le thermostat est une copie d’une autre maison (`remote_homeassistant`) : jamais rien envoyé |
-| `ombre` | le planning est « En essai » |
+| `ombre` | le planning est « En pause » |
 | `verrou` | le thermostat n’est pas coché dans Réglages, « Ce que Hestia peut régler » (`planning_autorises`, aucun par défaut depuis la 0.4) : rien n’est envoyé, et À régler le dit quand le planning est actif |
 | `eteint` | le thermostat est éteint ou absent : il reste éteint |
 | `sans_prereglage` | le préréglage n’existe pas sur ce Versatile Thermostat |
 | `deja` | il est déjà sur ce préréglage (ou cette consigne) |
 | `envoye` | `climate.set_preset_mode` pour un Versatile Thermostat, `climate.set_temperature` pour un autre (confort 20 °C, éco 17, hors gel 7, boost 21 ; une clim : 25, 27, 30, 24), sans attendre la réponse |
 
-**La vue** (`planning` dans `hestia_heating/view`) : `source` (« Hestia », « Scheduler » ou les deux), `labo` (tous les thermostats sont recopiés), `essai` (un dessin vient d’un planning en essai), `lignes` (la journée de chaque pièce et du poêle, avec sa `source` et `bloque` quand deux plannings la visent), `prochains`, puis pour l’onglet seulement : `hestia` (chaque planning : maintenant, prochain changement, thermostats bloqués par Scheduler, `verrouilles` : ceux qui ne sont pas cochés dans « Ce que Hestia peut régler », allumages du poêle par semaine), `thermostats` (chacun : sa pièce, son planning, Scheduler, `autorise`, ses niveaux possibles, ses consignes s’il n’est pas un Versatile Thermostat), `scheduler` (chaque planning Scheduler, et `reprise` : le même en planning Hestia, pour « Reprendre dans Hestia ») et `journal`. Les cartes ne reçoivent pas ces quatre-là.
+**La vue** (`planning` dans `hestia_heating/view`) : `source` (« Hestia », « Scheduler » ou les deux), `labo` (tous les thermostats sont recopiés), `essai` (un dessin vient d’un planning en pause), `lignes` (la journée de chaque pièce et du poêle, avec sa `source` et `bloque` quand deux plannings la visent), `prochains`, puis pour l’onglet seulement : `hestia` (chaque planning : maintenant, prochain changement, thermostats bloqués par Scheduler, `verrouilles` : ceux qui ne sont pas cochés dans « Ce que Hestia peut régler », allumages du poêle par semaine), `thermostats` (chacun : sa pièce, son planning, Scheduler, `autorise`, ses niveaux possibles, ses consignes s’il n’est pas un Versatile Thermostat), `scheduler` (chaque planning Scheduler, et `reprise` : le même en planning Hestia, pour « Reprendre dans Hestia ») et `journal`. Les cartes ne reçoivent pas ces quatre-là.
 
 ## Le pilote du poêle
 
-Depuis la 0.4 (`engine/pilot.py`, Python pur). Le thermostat du poêle décide combien chauffer (sa demande, en %) ; le pilote en tire les gestes du poêle. **À l’ombre, il n’envoie rien** : il calcule à chaque calcul de la maison ce qu’il ferait et le compare à ce que fait la maison, vu de dehors (l’état du poêle et sa flamme réglée). Réglage `pilote` : `ombre` (par défaut), `flamme` (depuis la 0.5, voir plus bas), `entier` (depuis la 0.7, plus bas aussi) ou `eteint`.
+Depuis la 0.4 (`engine/pilot.py`, Python pur). Le thermostat du poêle décide combien chauffer (sa demande, en %) ; le pilote en tire les gestes du poêle. **Sur « Conseil » (valeur `ombre`), il n’envoie rien** : il calcule à chaque calcul de la maison ce qu’il ferait et le compare à ce que fait la maison, vu de dehors (l’état du poêle et sa flamme réglée). Réglage `pilote` : `ombre` (par défaut), `flamme` (depuis la 0.5, voir plus bas), `entier` (depuis la 0.7, plus bas aussi) ou `eteint`.
 
 Ses règles reprennent celles des automatisations qui pilotent déjà un vrai poêle (démarrage, modulation, arrêt, vérification de l’arrêt, sécurités et leur veille), pour que les deux se comparent geste par geste. La « température de la maison » est celle du capteur choisi dans Réglages (`pilote_thermometre`, un `sensor` de température : prendre celui que lisent les automatisations du poêle), sinon la moyenne des pièces que Hestia voit (`maison.temperature`). Un capteur choisi qui ne donne rien compte comme une maison assez chaude : pas de démarrage sur une supposition, comme les automatisations. Réglages propose les capteurs de température, ceux dont le nom dit la maison ou une moyenne d’abord, jamais ceux du poêle.
 
@@ -153,20 +153,20 @@ La vue (`poele.pilote`) : `mode`, `action` (`demarrer`, `demander`, `refuser`, `
 
 ### Le mode « Flamme » (0.5)
 
-Réglage `pilote` = `flamme`. Le pilote décide comme à l’ombre ; **Hestia n’envoie que la flamme** (`pilot.steer()`, appelé par `house.py`, l’ordre envoyé par le coordinateur) :
+Réglage `pilote` = `flamme`. Le pilote décide comme sur « Conseil » ; **Hestia n’envoie que la flamme** (`pilot.steer()`, appelé par `house.py`, l’ordre envoyé par le coordinateur) :
 
 - l’ordre : `number.set_value` sur l’entité du rôle `flamme` du profil, avec la flamme du pilote, sans attendre la réponse. Rien d’autre : le démarrage, l’arrêt, la coupure et le thermostat du poêle restent aux automatisations de la maison (« Hestia fait » les dit, et précise que ce geste leur reste) ;
 - un ordre à la fois : il est vérifié 5 min après (la flamme réglée du poêle doit être celle demandée). La même flamme n’est renvoyée qu’après 10 min, et deux ordres sont espacés d’au moins 3 min ;
 - 12 ordres de Hestia par jour au plus, en plus de la réserve de 4 ordres du profil pour éteindre ;
 - **Hestia lâche la flamme jusqu’au lendemain** (`lache`, en note sur la page Poêle) si la flamme du poêle change sans elle (une autre automatisation la règle encore : il faut éteindre la sienne) ou si le poêle ne suit pas 3 ordres ;
 - jamais à un poêle recopié : un poêle sans appareil, ou dont une entité vient de `remote_homeassistant` (`poele.copie`), ne reçoit rien, même réglé sur « Flamme » (le labo) ;
-- revenir à « À l’ombre » dans Réglages arrête tout de suite les ordres.
+- revenir à « Conseil » dans Réglages arrête tout de suite les ordres.
 
 La vue ajoute `poele.pilote.commande` : `envois`, `max`, `attente` (la flamme demandée, en attente de vérification), `lache`, `copie`, et `texte`. Les ordres, leur vérification et les lâchers vont au journal du pilote. La mémoire de la flamme (`envoi`, `envois_jour`, `echecs`, `lache`) est gardée avec celle du pilote.
 
 ### Le pilote entier (0.7)
 
-Réglage `pilote` = `entier`. Hestia règle la flamme comme en mode « Flamme », et fait aussi ce que font les automatisations du poêle de la maison d’essai : démarrer, arrêter, tenir les sécurités, reprendre la main après un redémarrage (cahier des charges, « Démarrer », « Arrêter », « Les sécurités »). Il faut d’abord couper ces automatisations : deux pilotes en même temps se contrediraient.
+Réglage `pilote` = `entier`. Depuis la 1.0, Réglages ne le propose plus, sauf à un poêle déjà réglé dessus : il reviendra une fois essayé dans une vraie maison. Hestia règle la flamme comme en mode « Flamme », et fait aussi ce que font les automatisations du poêle de la maison de référence : démarrer, arrêter, tenir les sécurités, reprendre la main après un redémarrage (cahier des charges, « Démarrer », « Arrêter », « Les sécurités »). Il faut d’abord couper ces automatisations : deux pilotes en même temps se contrediraient.
 
 `pilot.decide()` dit ce qu’il faut (le passage en boost, l’arrêt, la coupure…) ; `driver.drive()` (Python pur, appelé par `house.py`) en fait des séquences qui survivent aux retards du cloud, une à la fois, et rend les gestes à faire maintenant et dans combien de secondes regarder de nouveau. Le coordinateur fait les gestes dans l’ordre, dans une seule tâche (30 s au plus chacun), et se rappelle à l’heure demandée (`async_call_later`, sous la minute ; au-delà, la minuterie d’une minute suffit).
 
@@ -208,7 +208,7 @@ Ajouter un poêle, c’est ajouter un fichier : aucun code.
 - Les commandes du panneau répondent avec ce qui est déjà calculé. Seules les courbes du jour lisent l’historique, dans l’exécuteur du Recorder, gardées 2 min.
 - Une minuterie d’une minute fait avancer « maintenant » dans le planning et envoie les changements dus. Chaque planning Hestia se calcule sur 4 jours (la veille et les 3 suivants), dans le même calcul.
 
-À mesurer au labo avant la bêta publique : `hestia-labo/mesurer-hub.py` sur l’onglet Chauffage.
+À mesurer au labo avant la 1.0.0 : `hestia-labo/mesurer-hub.py` sur l’onglet Chauffage.
 
 ## Tests
 
