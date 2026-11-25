@@ -169,7 +169,7 @@ class TheFirePot(unittest.TestCase):
         self.assertTrue(v["par_les_sacs"] and v["a_nettoyer"])
 
     def test_the_bags_no_longer_stall_when_the_tank_is_thought_empty(self):
-        """1.0.0b12, Frank's evening of 25 November: the stove burnt all evening, the fire pot stayed at 0 kg. More
+        """1.0.1b1, Frank's evening of 25 November: the stove burnt all evening, the fire pot stayed at 0 kg. More
         than a bag counted since the last one declared, Hestia's guess of the tank was empty at the cleaning and stayed
         empty: the bags' count said 0. Hestia's own kilos count now."""
         bags = {"sacs": 6, "sac_kg": 15}

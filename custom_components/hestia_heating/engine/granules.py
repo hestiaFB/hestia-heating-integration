@@ -151,7 +151,7 @@ def cleaned(mem: dict, bags: dict | None, now: datetime) -> dict:
 
 def since_cleaning(mem: dict, bags: dict | None) -> float | None:
     """Kilos burnt since the fire pot was last cleaned, or None if it never was (in Hestia): Hestia's own kilos since
-    then, or the bags' count when it says more. The bags alone stalled (1.0.0b12): when Hestia's own count passes a
+    then, or the bags' count when it says more. The bags alone stalled (1.0.1b1): when Hestia's own count passes a
     bag since the last one declared, its guess of the tank is empty (0, never less), and with no new bag declared,
     « bags poured − tank now + tank at the cleaning » stays 0 however long the stove burns. The larger of the two
     errs on the side of cleaning early."""

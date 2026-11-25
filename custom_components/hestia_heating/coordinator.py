@@ -37,6 +37,7 @@ DAY_CACHE_S = 120
 # The days' totals (the cards' drawers, 0.8: kWh of a room, kilos of pellets) come from the long-term statistics,
 # which grow once an hour: kept this long, for this many days.
 HISTORY_CACHE_S = 600
+HISTORY_RETRY_S = 60
 HISTORY_DAYS = 14
 DEFAULTS = {"sources": {}, "extensions": {}, "poele_thermostat": None, "poele_prise": None, "weather_place": None,
             "planning": None, "pilote": "ombre", "pilote_thermometre": None,
@@ -815,7 +816,7 @@ class HeatingCoordinator:
         thermostat's energy counter) or the stove's pellets (Hestia's own count). Today's total adds what the counter
         moved since its last hourly statistic. Kept ten minutes per target."""
         cached = self._days.get("histoire/" + target)
-        if cached and time.monotonic() - cached[0] < HISTORY_CACHE_S:
+        if cached and time.monotonic() < cached[0]:
             return cached[1]
         stat, unit = self._counter_of(target)
         now = dt_util.now()
@@ -839,7 +840,10 @@ class HeatingCoordinator:
                 view["energie"] = {"euros": [{"jour": d["jour"], **(euros.get(d["jour"]) or {"total": None})}
                                              for d in view["jours"]],
                                    **(money.seen(prices) or {"prix": {}, "couleur": None})}
-        self._days["histoire/" + target] = (time.monotonic(), view)
+        # 1.0.1b1: Hestia Énergie installed but not ready yet (Home Assistant starting): these days, read without its
+        # prices, are kept one minute only, so that the cards get its euros as soon as it gives them.
+        waiting = stat and "energie" not in view and reader.ENERGY_API in self.hass.data
+        self._days["histoire/" + target] = (time.monotonic() + (HISTORY_RETRY_S if waiting else HISTORY_CACHE_S), view)
         return view
 
     def _own_entity(self, platform: str, key: str) -> str | None:

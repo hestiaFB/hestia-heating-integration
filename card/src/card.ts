@@ -94,6 +94,12 @@ const CONFIRM_MS=5_000;
 // One kilo of pellets gives 4.176 kWh (engine/granules.py): the same heat, bought as electricity.
 const KWH_PER_KG=4.176;
 const HISTORY_MS=600_000;
+/** The flat price of a kWh the cards fall back on when Hestia Énergie's hour-by-hour euros are not there (yet): its
+    price now, else the one of Réglages (1.0.1b1: a card asked before Hestia Énergie was ready showed « Donnez le prix
+    du kWh » although Énergie gave it). */
+const kwhPrice=(v:View)=>v.prix_energie?.kwh??v.prix_kwh??null;
+/** Where that price comes from, as the cards' notes say it. */
+const kwhFrom=(v:View,price:number)=>v.prix_energie?.kwh!=null?`Prix de Hestia Énergie en ce moment${v.prix_energie.periode?` (${PERIOD_WORD[v.prix_energie.periode]??v.prix_energie.periode})`:''} : ${num(price,4)} € le kWh, en attendant ses prix heure par heure`:`Prix des réglages : ${num(price,4)} € le kWh`;
 /** Hestia Énergie's periods, in the order the bars stack them, and their words. */
 const PERIODS=['hc','hp','base'] as const;
 const PERIOD_WORD:Record<string,string>={hc:'heures creuses',hp:'heures pleines',base:'tarif unique'};
@@ -161,7 +167,10 @@ class HestiaHeatingCard extends LitElement {
    this._dayFor=target;this._dayAt=Date.now();
    this._hass.callWS<Day>({type:'hestia_heating/day',cible:target,heures:24}).then(d=>{this._day=d;}).catch(()=>{/* no recorder: no curve */});
   }
-  if(target!==this._histFor||Date.now()-this._histAt>=HISTORY_MS){
+  // Hestia Énergie gives its price now but the days were read without its prices (asked while it started): ask again
+  // a minute later rather than ten.
+  const late=!!v?.prix_energie&&!!this._hist?.stat&&!this._hist.energie&&Date.now()-this._histAt>=60_000;
+  if(target!==this._histFor||late||Date.now()-this._histAt>=HISTORY_MS){
    this._histFor=target;this._histAt=Date.now();
    this._hass.callWS<History>({type:'hestia_heating/historique',cible:target}).then(h=>{this._hist=h;}).catch(()=>{/* no statistics: no days */});
   }
@@ -588,7 +597,7 @@ class HestiaHeatingCard extends LitElement {
  private _stoveMoney(v:View,c:Use|undefined,h:History|undefined){
   const PER:[string,string][]=[['jour','Aujourd’hui'],['semaine','7 jours'],['saison','Saison']],per=this._tab('periode',PER);
   const week=h?.stat?h.jours.slice(-7).reduce((a,d)=>a+(d.valeur??0),0):null;
-  const kg=per==='jour'?c?.kg_jour??null:per==='semaine'?week:c?.kg_saison??null,pk=c?.prix_kg??null,pe=v.prix_kwh??null;
+  const kg=per==='jour'?c?.kg_jour??null:per==='semaine'?week:c?.kg_saison??null,pk=c?.prix_kg??null,pe=kwhPrice(v);
   // 1.0.0b8: with Hestia Énergie, the same heat as electricity at its price of each hour the stove burnt; the season
   // at the mean of the last 14 days. Else the price of Réglages.
   const e=h?.energie,known=e?.euros.every(x=>x.total!=null)?e:undefined;
@@ -616,7 +625,7 @@ class HestiaHeatingCard extends LitElement {
    <div class="saved"><b class=${saved>=0?'good':'bad'}>${eur(Math.abs(saved))} ${saved>=0?'gagnés':'de plus'}</b>
     <span>${per==='jour'?'aujourd’hui, pour la même chaleur':per==='semaine'?'sur les 7 derniers jours':'depuis le début de la saison'}</span></div>
    <p class="note left">${num(kg,kg>=100?0:1)} kg de granulés à ${num(pk,3)} € le kg, face à la même chaleur à l’électricité, ${known?
-    `aux prix de Hestia Énergie, heure par heure${per==='saison'?' (la saison au prix moyen des 14 derniers jours)':''}.`:`à ${num(pe!,4)} € le kWh.`}</p>`;
+    `aux prix de Hestia Énergie, heure par heure${per==='saison'?' (la saison au prix moyen des 14 derniers jours)':''}.`:`à ${num(pe!,4)} € le kWh${v.prix_energie?.kwh!=null?', le prix de Hestia Énergie en ce moment':''}.`}</p>`;
  }
  private _upkeep(s:Stove){
   const pot=s.conso?.brasier,C=2*Math.PI*26,part=pot?.kg!=null&&pot.seuil_kg?Math.min(1,pot.kg/pot.seuil_kg):0;
@@ -648,7 +657,7 @@ class HestiaHeatingCard extends LitElement {
   const next=this._soon(r.prochain),stove=r.type==='poele'?v.poele:null;
   const art=stove?stoveArt(stove.en_feu?stove.flamme??0:0,stove.flamme_max||5,stove.en_feu):heaterArt(r.type,r.etat);
   const sub=next?this._next(next,v):r.consigne!=null?`consigne ${num(r.consigne)}°`:'';
-  const kwh=d?.energie?.unite==='kWh'?d.energie.heures:[],price=v.prix_kwh??null;
+  const kwh=d?.energie?.unite==='kWh'?d.energie.heures:[],price=kwhPrice(v);
   const series_={temp:series.temperature??[],heat:demand?(series.demande??[]).map(([m,x]):Pt=>[m,x==null?null:x/100]):[],sets,energy:kwh};
   const hrs=hours(span,segments,series_);
   const say=(h:Hour):Detail=>{
@@ -694,19 +703,19 @@ class HestiaHeatingCard extends LitElement {
  }
  /** What the room's drawer says when closed, and the compact card in its chips. */
  private _roomSay(v:View,r:Room):string[]{
-  const h=this._hist?.unite==='kWh'?this._hist:undefined,price=v.prix_kwh??null,today=h?.stat?h.jours.at(-1)?.valeur??null:null,heat=this._heatToday(r);
+  const h=this._hist?.unite==='kWh'?this._hist:undefined,price=kwhPrice(v),today=h?.stat?h.jours.at(-1)?.valeur??null:null,heat=this._heatToday(r);
   const euros=h?.energie?h.energie.euros.at(-1)?.total??null:today!=null&&price!=null?today*price:null;
   return [euros!=null?`${eur(euros)} aujourd’hui`:null,today!=null?`${num(today)} kWh`:heat?`${heat.time} de chauffe`:null,
    r.humidite!=null?`humidité ${num(r.humidite,0)} %`:null].filter((x):x is string=>!!x);
  }
  private _roomDrawer(v:View,r:Room,open=false){
-  const h=this._hist?.unite==='kWh'?this._hist:undefined,price=v.prix_kwh??null,heat=this._heatToday(r);
+  const h=this._hist?.unite==='kWh'?this._hist:undefined,price=kwhPrice(v),heat=this._heatToday(r);
   const say=this._roomSay(v,r).join(' · ');
   const TABS:[string,string][]=[['argent','Argent'],['conso','Conso'],['confort','Confort']];
   const body=()=>{
    const tab=this._tab('piece',TABS);
    return html`${this._tabbar('piece',TABS,'Détails de la pièce')}<div role="tabpanel" class="panel">${
-    tab==='argent'?this._roomMoney(h,price):tab==='conso'?this._roomUse(h,heat):this._roomComfort(v,r)}</div>`;
+    tab==='argent'?this._roomMoney(v,h,price):tab==='conso'?this._roomUse(h,heat):this._roomComfort(v,r)}</div>`;
   };
   // The compact card unfolded: its tabs at once, no drawer in the drawer.
   if(open)return html`<div class="dbox inline" @click=${(e:Event)=>e.stopPropagation()}><div class="dbody">${body()}</div></div>`;
@@ -721,7 +730,7 @@ class HestiaHeatingCard extends LitElement {
   const m=Math.round(mins);
   return {time:m>=60?`${Math.floor(m/60)} h ${String(m%60).padStart(2,'0')}`:`${m} min`,duty:Math.round(mins/Math.max(5,d.maintenant_min)*100)};
  }
- private _roomMoney(h:History|undefined,price:number|null){
+ private _roomMoney(v:View,h:History|undefined,price:number|null){
   if(!h)return html`<p class="note">Les derniers jours ne sont pas encore lus.</p>`;
   if(!h.stat)return html`<p class="note left">Le thermostat ne donne pas de compteur d’énergie : Hestia ne peut pas compter les kWh de cette pièce.</p>`;
   const e=h.energie;
@@ -740,7 +749,7 @@ class HestiaHeatingCard extends LitElement {
     ${this._tile(eur(week.reduce((a,d)=>a+(d.valeur??0),0)*price),'7 derniers jours')}
     ${this._tile(h.mois!=null?eur(h.mois*price):'—',MONTHS[dateOf(h.aujourdhui).getMonth()])}</div>
    ${this._bars(week.map(d=>({jour:d.jour,valeur:d.valeur!=null?d.valeur*price:null})),x=>num(x,2),`Coût par jour : ${this._dayList(week,x=>eur(x*price))}`,'Euros par jour')}
-   <p class="note left">Prix des réglages : ${num(price,4)} € le kWh, abonnement à part.</p>`;
+   <p class="note left">${kwhFrom(v,price)}, abonnement à part.</p>`;
  }
  /** Hestia Énergie's prices, as the note under the bars says them. */
  private _energyPrices(e:NonNullable<History['energie']>){
