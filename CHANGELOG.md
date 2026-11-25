@@ -1,5 +1,10 @@
 # Changements
 
+## 1.0.0b12 — Le brasier compte de nouveau après un nettoyage
+
+### Corrections
+- **Le brasier ne reste plus à 0 kg après « J’ai nettoyé ».** Avec Suivi Stock Pellet, Hestia comptait le brasier à partir des sacs déclarés : un sac versé, moins ce qu’elle estime rester dans le réservoir. Quand elle a compté un sac entier brûlé depuis le dernier sac déclaré, elle croit le réservoir vide, et il ne descend pas plus bas : tant qu’aucun nouveau sac n’était déclaré, tout ce qui brûlait comptait pour rien, et le brasier restait à 0 toute la soirée. Hestia prend maintenant ses propres kilos depuis le nettoyage quand ils disent plus que les sacs. Sans rien faire, le brasier reprend son compte depuis le dernier nettoyage noté.
+
 ## 1.0.0b11 — La carte compacte se replie, comme celle de Hestia Confort
 
 ### Améliorations
