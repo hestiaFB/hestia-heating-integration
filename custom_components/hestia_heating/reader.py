@@ -35,6 +35,8 @@ LOW_NAME = re.compile(r"flamme|flame|po[eê]le|stove|eco|silence", re.I)
 WEATHER_API = "hestia_weather_api"
 WEATHER_API_VERSION = 1      # the version of Hestia Weather's interface this brick speaks
 BRICK = "hestia_heating"     # said to Hestia Weather when listening, so that its settings show this brick linked
+ENERGY_API = "hestia_energy_api"
+ENERGY_API_VERSION = 1       # the version of Hestia Énergie's interface this brick reads (its prices only)
 
 
 @dataclass
@@ -424,6 +426,26 @@ def weather_api(hass: HomeAssistant):
     """Hestia Weather's interface when it speaks the version this brick knows, else None (absent or another version)."""
     api = hass.data.get(WEATHER_API)
     return api if api is not None and getattr(api, "version", None) == WEATHER_API_VERSION else None
+
+
+def energy_prices(hass: HomeAssistant, hours: list[datetime]) -> list[dict | None] | None:
+    """Hestia Énergie's price of a kWh at the start of each of these hours (1.0.0b8, the cards' « Argent »):
+    [{price, period, color}] by its interface v1 (`tariff`), or None when it is absent, of another version, or has
+    no contract. Only its prices are read, never its settings. A Tempo colour is the one of today (v1 gives no other)."""
+    api = hass.data.get(ENERGY_API)
+    if api is None or getattr(api, "version", None) != ENERGY_API_VERSION:
+        return None
+    try:
+        if api.tariff() is None:
+            return None
+        out = []
+        for at in hours:
+            t = api.tariff(at)
+            out.append({"price": t.get("price"), "period": t.get("period"), "color": t.get("color")} if t else None)
+        return out
+    except Exception as err:  # noqa: BLE001 - another brick's trouble never stops this one
+        _LOGGER.debug("Hestia Énergie's prices unavailable: %s", err)
+        return None
 
 
 def weather_place(hass: HomeAssistant, chosen: str | None = None) -> dict:

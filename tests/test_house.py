@@ -136,6 +136,16 @@ class House(unittest.TestCase):
         s = house.build(m.snapshot(stove=m.stove(status="Off", flame="1")))["poele"]
         self.assertEqual((s["en_feu"], s["flamme"], s["flamme_reglee"]), (False, None, 1))
 
+    def test_a_room_at_rest_says_its_mode_as_its_card_does(self):
+        # 1.0.0b8: « au repos » in the house's list beside a card that said « confort » read as a contradiction.
+        climates = [c for c in m.climates() if c["entity_id"] == "climate.vt_bureau"]
+        climates[0]["attributes"].update(hvac_action="idle", power_percent=0, preset_mode="comfort")
+        rooms = {r["id"]: r for r in house.build(m.snapshot(climates=climates, stove=None))["pieces"]}
+        self.assertEqual(rooms["bureau"]["badge"], {"texte": "confort", "ton": "heat"})
+        climates[0]["attributes"]["preset_mode"] = "boost"
+        rooms = {r["id"]: r for r in house.build(m.snapshot(climates=climates, stove=None))["pieces"]}
+        self.assertEqual(rooms["bureau"]["badge"], {"texte": "boost", "ton": "act"})
+
     def test_nothing_heats(self):
         quiet = [m.vt("climate.vt_bureau", "Radiateur bureau", "bureau")]
         view = house.build(m.snapshot(stove=m.stove(status="Off"), climates=quiet))

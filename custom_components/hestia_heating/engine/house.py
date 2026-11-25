@@ -406,6 +406,16 @@ def _room(room: dict, stove: dict | None, stove_thermostat: dict | None, lines: 
     }
 
 
+# A room's mode in the house's list, with the colours of the room's card (its mode pill).
+MODE_BADGES = {"frost": {"texte": "hors gel", "ton": OFF}, "eco": {"texte": "éco", "ton": COLD},
+               "comfort": {"texte": "confort", "ton": HEAT}, "boost": {"texte": "boost", "ton": ACT},
+               "away": {"texte": "absent", "ton": OFF}, "sleep": {"texte": "nuit", "ton": COLD},
+               "home": {"texte": "présent", "ton": HEAT}, "activity": {"texte": "activité", "ton": ACT}}
+PLANNING_BADGES = {planning.HORS_GEL: MODE_BADGES["frost"], planning.ECO: MODE_BADGES["eco"],
+                   planning.CONFORT: MODE_BADGES["comfort"], planning.BOOST: MODE_BADGES["boost"],
+                   planning.ARRET: {"texte": "arrêt", "ton": OFF}}
+
+
 def _badge(srcs, state, burning, stove, watts, window, tone, preset) -> dict:
     if any(s["securite"] for s in srcs):
         return {"texte": "sécurité", "ton": ALERT}
@@ -428,11 +438,10 @@ def _badge(srcs, state, burning, stove, watts, window, tone, preset) -> dict:
         return {"texte": "ne répond pas", "ton": OFF}
     if stove:
         return {"texte": "poêle", "ton": STOVE}
-    if tone == planning.HORS_GEL or preset == "frost":
-        return {"texte": "hors gel", "ton": OFF}
-    if tone == planning.ECO or preset == "eco":
-        return {"texte": "éco", "ton": COLD}
-    return {"texte": "au repos", "ton": CALM}
+    # A room that does not heat says its mode, as its card does (1.0.0b8: « au repos » beside a card that says
+    # « confort » read as a contradiction): the thermostat's own preset first, else the planning's.
+    mode = MODE_BADGES.get(preset) if preset and preset != "none" else None
+    return dict(mode or PLANNING_BADGES.get(tone) or {"texte": "au repos", "ton": CALM})
 
 
 def _reason(srcs, stove_src, others, window, since, tone, nxt, stove_lane, main, now) -> str | None:

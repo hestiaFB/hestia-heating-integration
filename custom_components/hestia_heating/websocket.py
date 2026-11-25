@@ -11,7 +11,7 @@ from .engine import sources, tuning
 
 VIEW_VERSION = 1
 # What the cards read: the extensions, the schedules' details and the « à régler » stay out of their view.
-CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning", "prix_kwh")
+CARD_KEYS = ("pret", "version", "maison", "pieces", "poele", "granules", "dehors", "planning", "prix_kwh", "prix_energie")
 SETTING_KEYS = ("sources", "extensions", "poele_thermostat", "poele_prise", "weather_place", "planning", "pilote",
                 "pilote_thermometre", "planning_autorises", "pilote_flamme_basse", "brasier_kg", "granules_prix_sac",
                 "granules_poids_sac", "pilote_notifier", "poele_prise_switch", "couper_prise", "prix_kwh",
