@@ -440,7 +440,7 @@ def energy_prices(hass: HomeAssistant, hours: list[datetime]) -> list[dict | Non
             return None
         out = []
         for at in hours:
-            # 1.0.0b13: an hour Hestia Énergie cannot price is an hour without a price (its day without euros), never
+            # 1.0.1b1: an hour Hestia Énergie cannot price is an hour without a price (its day without euros), never
             # the end of all its prices.
             try:
                 t = api.tariff(at)

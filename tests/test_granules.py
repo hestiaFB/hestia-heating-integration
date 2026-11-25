@@ -168,6 +168,26 @@ class TheFirePot(unittest.TestCase):
         v = granules.view(mem, bags, None, None, None)["brasier"]
         self.assertTrue(v["par_les_sacs"] and v["a_nettoyer"])
 
+    def test_the_bags_no_longer_stall_when_the_tank_is_thought_empty(self):
+        """1.0.1b1, Frank's evening of 25 November: the stove burnt all evening, the fire pot stayed at 0 kg. More
+        than a bag counted since the last one declared, Hestia's guess of the tank was empty at the cleaning and stayed
+        empty: the bags' count said 0. Hestia's own kilos count now."""
+        bags = {"sacs": 6, "sac_kg": 15}
+        mem = run(None, burning(5), 60 * 10, bags=bags, step=5)                          # 16 kg, no bag declared
+        self.assertEqual(granules._left_in_tank(mem, 15), 0.0)
+        mem = granules.cleaned(mem, bags, NOW + timedelta(minutes=601))
+        self.assertEqual(mem["reste_nettoyage"], 0.0)
+        mem = run(mem, burning(5), 60 * 3, bags=bags, start=NOW + timedelta(minutes=605), step=5)  # 3 h 05: 4.9 kg
+        v = granules.view(mem, bags, 10, None, None)["brasier"]
+        self.assertAlmostEqual(v["kg"], 4.9, places=1)
+        self.assertEqual(v["texte"], "4,9 kg brûlés depuis le dernier nettoyage, sur 10.")
+        # A bag poured later: the bags' count only knows what burnt since; Hestia's own count keeps the rest.
+        mem = granules.advance(mem, burning(5), {"sacs": 7, "sac_kg": 15}, NOW + timedelta(minutes=786), RATES)
+        mem = run(mem, burning(5), 60, bags={"sacs": 7, "sac_kg": 15}, start=NOW + timedelta(minutes=787), step=5)
+        own = mem["total_kg"] - mem["base_nettoyage"]
+        self.assertGreater(own, 6.5)
+        self.assertAlmostEqual(granules.since_cleaning(mem, {"sacs": 7, "sac_kg": 15}), own, places=1)
+
     def test_a_new_season_of_suivi_stock_pellet_keeps_the_fire_pots_count(self):
         mem = {"sacs": 30, "sacs_nettoyage": 28, "nettoye_le": NOW.isoformat(), "total_brut": 5.0,
                "brut_remplissage": 5.0, "reste_nettoyage": 3.0, "correction": 1.0}

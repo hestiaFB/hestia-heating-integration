@@ -431,7 +431,7 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_the_days_wait_for_hestia_energie_while_it_starts(self):
-        """1.0.0b13: a card asked while Hestia Énergie was not ready kept « Donnez le prix du kWh » ten minutes. The
+        """1.0.1b1: a card asked while Hestia Énergie was not ready kept « Donnez le prix du kWh » ten minutes. The
         days read without its prices are kept one minute only; an hour it cannot price leaves its day without euros
         instead of losing all its prices."""
         import time as clock

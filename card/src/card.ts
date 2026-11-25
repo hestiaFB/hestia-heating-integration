@@ -95,7 +95,7 @@ const CONFIRM_MS=5_000;
 const KWH_PER_KG=4.176;
 const HISTORY_MS=600_000;
 /** The flat price of a kWh the cards fall back on when Hestia Énergie's hour-by-hour euros are not there (yet): its
-    price now, else the one of Réglages (1.0.0b13: a card asked before Hestia Énergie was ready showed « Donnez le prix
+    price now, else the one of Réglages (1.0.1b1: a card asked before Hestia Énergie was ready showed « Donnez le prix
     du kWh » although Énergie gave it). */
 const kwhPrice=(v:View)=>v.prix_energie?.kwh??v.prix_kwh??null;
 /** Where that price comes from, as the cards' notes say it. */

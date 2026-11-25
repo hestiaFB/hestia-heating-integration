@@ -1,6 +1,6 @@
 # Hestia Chauffage — fonctionnement technique
 
-Version 1.0.0b9. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
+Version 1.0.1b1. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
 
 ## Les fichiers
 
@@ -89,7 +89,7 @@ Depuis la 0.6 (`engine/granules.py`, Python pur, appelé par `house.py` à chaqu
 - **Le débit** (kg/h) se lit sur l’état du poêle, jamais sur sa flamme seule : `allumage` a le sien, `chauffe` et `nettoyage` suivent la flamme réelle (une valeur par flamme, `debits` du profil : Micronova 1,2 à l’allumage, puis 0,55 · 0,81 · 1,07 · 1,34 · 1,60), un poêle `inconnu` (muet, pas « à traduire ») dont la prise tire plus de 60 W compte le palier du milieu, le reste 0.
 - **Les kilos** : à chaque calcul, le débit vu au calcul d’avant, pendant le temps écoulé (5 min au plus), multiplié par le facteur appris. Total (jamais remis à zéro), jour, saison (du 1er septembre, ou du mois `mois_debut_saison` de Suivi Stock Pellet). Rien n’est arrondi pendant le compte.
 - **Le facteur** se cale sur les sacs : un sac déclaré consommé dans Suivi Stock Pellet, c’est un réservoir vide, donc un sac entier brûlé depuis le précédent. Facteur = poids du sac ÷ kilos estimés (sans facteur) depuis le sac précédent, si l’estimation dépasse 5 kg, borné entre 0,7 et 1,6. Pas au premier sac vu : le réservoir n’était pas connu vide au départ. Plusieurs sacs déclarés d’un coup n’apprennent rien. Une nouvelle saison de Suivi Stock Pellet (son compte qui redescend) déplace les repères sans rien perdre.
-- **Le brasier** : « J’ai nettoyé » note l’heure et le total. Avec Suivi Stock Pellet, les kilos depuis le nettoyage = ce qui restait dans le réservoir au nettoyage + les sacs versés depuis − ce qui reste maintenant (un sac moins ce qui est compté depuis le dernier sac versé) ; sinon, le total moins celui du nettoyage. Seuil `brasier_kg` (15 kg par défaut), « bientôt » à 4 kg du seuil.
+- **Le brasier** : « J’ai nettoyé » note l’heure et le total. Les kilos depuis le nettoyage = le total moins celui du nettoyage ; avec Suivi Stock Pellet, ou ce qui restait dans le réservoir au nettoyage + les sacs versés depuis − ce qui reste maintenant (un sac moins ce qui est compté depuis le dernier sac versé), quand ce compte-là dit plus (1.0.1b1, `granules.since_cleaning`). Le réservoir estimé ne descend jamais sous 0 : sans le total, un réservoir cru vide et aucun sac déclaré laissaient le brasier à 0 tant que le poêle brûlait. Seuil `brasier_kg` (15 kg par défaut), « bientôt » à 4 kg du seuil.
 - **L’énergie** : kilos × 4,176 kWh utiles (4,8 × 0,87). **Le prix** : `granules_prix_sac`, sinon la dépense ÷ les sacs achetés de Suivi Stock Pellet ; ÷ `granules_poids_sac`, sinon `poids_sac_kg`, sinon 15 kg.
 - **La mémoire** (`granules` dans `.storage/hestia_heating.planning_etat`) : écrite au plus toutes les 5 min pendant que le poêle brûle, tout de suite quand un sac, le facteur, le nettoyage, le jour ou la saison changent, et quand la brique s’arrête. Au démarrage, le débit d’avant n’est pas repris : le temps où Home Assistant était arrêté ne compte rien.
 

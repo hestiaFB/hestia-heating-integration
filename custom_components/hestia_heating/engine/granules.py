@@ -150,16 +150,21 @@ def cleaned(mem: dict, bags: dict | None, now: datetime) -> dict:
 
 
 def since_cleaning(mem: dict, bags: dict | None) -> float | None:
-    """Kilos burnt since the fire pot was last cleaned, or None if it never was (in Hestia)."""
+    """Kilos burnt since the fire pot was last cleaned, or None if it never was (in Hestia): Hestia's own kilos since
+    then, or the bags' count when it says more. The bags alone stalled (1.0.1b1): when Hestia's own count passes a
+    bag since the last one declared, its guess of the tank is empty (0, never less), and with no new bag declared,
+    « bags poured − tank now + tank at the cleaning » stays 0 however long the stove burns. The larger of the two
+    errs on the side of cleaning early."""
     if mem.get("nettoye_le") is None:
         return None
+    total, base = mem.get("total_kg", 0.0), mem.get("base_nettoyage", 0.0)
+    own = total if total < base - 0.5 else max(total - base, 0.0)
     bag_kg = (bags or {}).get("sac_kg")
     if bag_kg and mem.get("sacs") is not None and mem.get("sacs_nettoyage") is not None:
         kg = (bag_kg * (mem["sacs"] - mem["sacs_nettoyage"]) - _left_in_tank(mem, bag_kg)
               + mem.get("reste_nettoyage", 0.0))
-        return round(max(kg, 0.0), 2)
-    total, base = mem.get("total_kg", 0.0), mem.get("base_nettoyage", 0.0)
-    return round(total if total < base - 0.5 else max(total - base, 0.0), 2)
+        own = max(own, kg)
+    return round(max(own, 0.0), 2)
 
 
 def days_left(mem: dict, burnt: float | None, threshold: float, now: datetime | None) -> float | None:

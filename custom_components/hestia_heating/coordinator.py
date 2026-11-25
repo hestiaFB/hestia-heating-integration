@@ -840,7 +840,7 @@ class HeatingCoordinator:
                 view["energie"] = {"euros": [{"jour": d["jour"], **(euros.get(d["jour"]) or {"total": None})}
                                              for d in view["jours"]],
                                    **(money.seen(prices) or {"prix": {}, "couleur": None})}
-        # 1.0.0b13: Hestia Énergie installed but not ready yet (Home Assistant starting): these days, read without its
+        # 1.0.1b1: Hestia Énergie installed but not ready yet (Home Assistant starting): these days, read without its
         # prices, are kept one minute only, so that the cards get its euros as soon as it gives them.
         waiting = stat and "energie" not in view and reader.ENERGY_API in self.hass.data
         self._days["histoire/" + target] = (time.monotonic() + (HISTORY_RETRY_S if waiting else HISTORY_CACHE_S), view)
