@@ -130,6 +130,11 @@ def read(climate: dict) -> dict:
         "fenetre_capteur": window.get("window_sensor_entity_id"),
         "delestage": power.get("overpowering_state") == "on" or attrs.get("overpowering_state") == "on",
         "securite": safety.get("safety_state") == "on" or attrs.get("security_state") is True,
+        # Which probe a safety is about (1.0.0b7, the stove's thermostat): Versatile Thermostat's delay and the last
+        # time each of its probes spoke, the room's and the outdoor one.
+        "securite_delai_min": _number(safety.get("safety_delay_min")),
+        "sonde_piece_a": specific.get("last_temperature_datetime", attrs.get("last_temperature_datetime")),
+        "sonde_dehors_a": specific.get("last_ext_temperature_datetime", attrs.get("last_ext_temperature_datetime")),
         "pente": _number(specific.get("temperature_slope", attrs.get("temperature_slope"))),
         # Versatile Thermostat's smoothed temperature: a puff of hot air on the probe does not move it.
         "temperature_lissee": _number(specific.get("ema_temp", attrs.get("ema_temp"))),

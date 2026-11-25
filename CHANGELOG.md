@@ -1,5 +1,16 @@
 # Changements
 
+## 1.0.0b7 — La station dehors figée n’éteint plus le poêle
+
+### Corrections
+- **Le poêle n’est plus éteint quand seule la sonde dehors ne donne plus de nouvelles.** Le thermostat du poêle (Versatile Thermostat) se met en sécurité et s’éteint quand une de ses sondes reste muette une heure : Hestia prenait ça pour un vrai arrêt et éteignait le poêle 30 secondes après. Maintenant, pour la sonde dehors seule, la pièce reste surveillée : Hestia garde le poêle à la flamme la plus basse jusqu’au retour du thermostat, et ne l’éteint que si ça dure plus de 2 heures.
+- **La sonde de la pièce sans nouvelles arrête toujours le poêle**, comme un thermostat éteint : sans elle, ni la consigne ni la sécurité des 28 °C ne voient plus la pièce. De même quand le thermostat ne dit pas quelle sonde est muette.
+- **Le retour du thermostat après sa sécurité ne rallume pas le poêle** : ce n’est pas un passage en Boost. Un poêle arrêté attend le prochain.
+
+### Améliorations
+- **La carte et le journal le disent** : « Thermostat en sécurité, la sonde dehors ne répond plus : flamme au plus bas », ou « la sonde de la pièce ne répond plus : arrêt du poêle ».
+- **Réglages › Avancé › Les sécurités** : « Sonde dehors sans nouvelles, au plus », 2 heures par défaut, seulement plus court.
+
 ## 1.0.0b6 — L’horloge du poêle montre ses paliers en entier, et la carte son brasier
 
 ### Améliorations

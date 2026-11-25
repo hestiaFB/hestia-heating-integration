@@ -72,7 +72,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.0.0b6';
+const VERSION='1.0.0b7';
 // The whole pilot's answers, as on the phone.
 const ANSWER:Record<string,string>={oui:'Oui, allumer',non:'Non',couper:'Couper la prise',ignorer:'Ignorer',nettoye:'J’ai nettoyé'};
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
@@ -960,13 +960,14 @@ export class HestiaHeatingSetup extends LitElement {
      value:toggle('Couper la prise sans réponse',this.val<boolean>('couper_prise')!==false,on=>this.set('couper_prise',on))}),
     listRow({label:'L’interrupteur de sa prise',control:true,sub:cut?'Choisi par vous.':f.coupure?'Trouvé seul, d’après la prise mesurée.':'Aucun trouvé : en dernier recours, Hestia vous dira de couper le poêle vous-même.',
      value:this.select('Interrupteur de la prise du poêle',cut,(f.coupures??[]).map(x=>[x.id,x.nom]),f.coupure?'Trouvé seul':'Aucun',x=>this.set('poele_prise_switch',x))}),
-    always('Thermostat du poêle qui passe en Hors gel, ou éteint 30 secondes : le poêle s’arrête. Un poêle allumé à la main, son thermostat en Hors gel, n’est pas arrêté : Hestia met son thermostat en Boost. Hestia n’éteint jamais un thermostat, sauf celui du poêle pour un verrou de sécurité.'),
+    always('Thermostat du poêle qui passe en Hors gel, ou éteint 30 secondes : le poêle s’arrête. Éteint par sa propre sécurité, il compte aussi, sauf pour la sonde dehors seule : flamme au plus bas jusqu’à son retour. Un poêle allumé à la main, son thermostat en Hors gel, n’est pas arrêté : Hestia met son thermostat en Boost. Hestia n’éteint jamais un thermostat, sauf celui du poêle pour un verrou de sécurité.'),
    ])}
    ${listSection('Les sécurités',[
     fig('surchauffe_c','Couper au-dessus de','°C','La pièce du poêle au-dessus de cette température pendant qu’il brûle : Hestia l’éteint.',0.5),
     fig('alarme_min','Une alarme compte après','min','Une alarme du poêle qui dure : Hestia l’éteint.'),
     fig('muet_min','Poêle muet après','min','Il ne donne plus de nouvelles : Hestia vous prévient.'),
     fig('prise_brule_w','Il brûle encore au-dessus de','W','Un poêle muet dont la prise tire plus que ça brûle encore.'),
+    fig('securite_max_min','Sonde dehors sans nouvelles, au plus','min','Le thermostat du poêle se met en sécurité quand une sonde ne donne plus de nouvelles. Pour la sonde dehors seule, la pièce reste surveillée : Hestia garde le poêle au plus bas, et l’éteint si ça dure plus longtemps que ça.'),
     always('Un allumage refusé pour la pièce trop chaude, le brasier, une alarme ou un poêle muet éteint le thermostat du poêle (un verrou). « J’ai nettoyé » le rallume pour le brasier ; sinon, rallumez-le vous-même. Rien n’est jamais envoyé à un poêle recopié d’une autre maison.'),
    ])}
    ${listSection('Le comptage des granulés',[

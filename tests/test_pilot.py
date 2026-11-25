@@ -32,6 +32,14 @@ def seen(stove_now, thermostat_now, **mem):
 HOUSE_C = 17.5                                  # the house, cold enough to start without asking
 
 
+def safe(at, piece=None, dehors=None, preset="boost"):
+    """The stove's thermostat in Versatile Thermostat's safety at `at`: by default its room probe spoke 5 minutes ago,
+    its outdoor one 61 minutes before NOW (the station still, as on 25 November 2026)."""
+    return thermostat(preset, mode="off", demand=0, target=21.5, securite=True, securite_delai_min=60,
+                      sonde_piece_a=(piece or at - timedelta(minutes=5)).isoformat(),
+                      sonde_dehors_a=(dehors or NOW - timedelta(minutes=61)).isoformat())
+
+
 def decide(s, t, mem, now=NOW, house_c=HOUSE_C, over_c=None):
     return pilot.decide(s, t, mem, now, house_c, over_c=over_c)
 
@@ -233,6 +241,92 @@ class StartAndStop(unittest.TestCase):
             decision, mem, _ = decide(s, thermostat("boost", mode="off", demand=50), seen(s, before))
             decision, _, _ = decide(s, thermostat("boost", mode="off", demand=50), mem, NOW + timedelta(seconds=40))
             self.assertNotEqual(decision["action"], "arreter")
+
+    def test_the_outdoor_probe_alone_is_not_a_switch_off(self):
+        # 1.0.0b7, 25 November at 13 h 28: the outdoor station still for an hour, Versatile Thermostat in safety switches
+        # itself off. The room is still watched: not a stop, the flame at its lowest until it comes back.
+        s, boost = stove("chauffe", 5), thermostat("boost", demand=100, target=21.5)
+        decision, mem, _ = decide(s, safe(NOW), seen(s, boost))
+        decision, mem, _ = decide(s, safe(NOW + timedelta(minutes=5)), mem, NOW + timedelta(minutes=5))
+        self.assertEqual((decision["action"], decision["flamme"], decision["securite"]), ("flamme", 1, "dehors"))
+        self.assertIn("la sonde dehors ne donne plus de nouvelles. La pièce reste surveillée", decision["texte"])
+        self.assertIn("le poêle s’arrête si ça dure 2 h", decision["texte"])
+        # The station speaks a moment before the thermostat comes back: still the outdoor probe's safety.
+        back = safe(NOW + timedelta(minutes=6), dehors=NOW + timedelta(minutes=6))
+        decision, mem, _ = decide(stove("chauffe", 1), back, mem, NOW + timedelta(minutes=6))
+        self.assertEqual((decision["action"], decision["securite"]), ("garder", "dehors"))
+        # Its way back, on in boost: not a step up, the flame goes on as usual.
+        decision, mem, _ = decide(stove("chauffe", 1), boost, mem, NOW + timedelta(minutes=7))
+        self.assertIn(decision["action"], ("flamme", "garder"))
+        self.assertIsNone(decision["securite"])
+        # A real switch-off still counts after 30 seconds.
+        off = thermostat("boost", mode="off", demand=0, target=21.5)
+        decision, mem, _ = decide(stove("chauffe", 3), off, mem, NOW + timedelta(minutes=10))
+        decision, mem, _ = decide(stove("chauffe", 3), off, mem, NOW + timedelta(minutes=10, seconds=40))
+        self.assertEqual(decision["action"], "arreter")
+        self.assertIn("Le thermostat est éteint.", decision["texte"])
+
+    def test_the_rooms_probe_stops_the_stove(self):
+        # Frank, 25 November: « si la température intérieure est figée, il vaut mieux mettre en sécurité ».
+        s, boost = stove("chauffe", 3), thermostat("boost", demand=60)
+        room = safe(NOW, piece=NOW - timedelta(minutes=61), dehors=NOW - timedelta(minutes=2))
+        decision, mem, _ = decide(s, room, seen(s, boost))
+        self.assertEqual((decision["action"], decision["flamme"], decision["securite"]), ("flamme", 1, "piece"))
+        decision, mem, _ = decide(s, room, mem, NOW + timedelta(seconds=40))
+        self.assertEqual(decision["action"], "arreter")
+        self.assertIn("Le thermostat est en sécurité : la sonde de la pièce ne donne plus de nouvelles.",
+                      decision["texte"])
+        # Both still: the room's probe first.
+        both = safe(NOW, piece=NOW - timedelta(minutes=70), dehors=NOW - timedelta(minutes=70))
+        _, mem, _ = decide(s, both, seen(s, boost))
+        self.assertEqual(mem["securite_sonde"], "piece")
+
+    def test_a_safety_that_does_not_say_which_probe_stops_the_stove(self):
+        s, boost = stove("chauffe", 3), thermostat("boost", demand=60)
+        blind = thermostat("boost", mode="off", demand=0, securite=True)      # no dates: another thermostat
+        decision, mem, _ = decide(s, blind, seen(s, boost))
+        decision, mem, _ = decide(s, blind, mem, NOW + timedelta(seconds=40))
+        self.assertEqual((decision["action"], decision["securite"]), ("arreter", "inconnue"))
+        self.assertIn("sans dire quelle sonde ne donne plus de nouvelles : Hestia l’arrête par prudence",
+                      decision["texte"])
+
+    def test_an_outdoor_safety_that_lasts_stops_the_stove(self):
+        s, boost = stove("chauffe", 2), thermostat("boost", demand=60, target=21.5)
+        _, mem, _ = decide(s, safe(NOW, preset="safety"), seen(s, boost))
+        later = NOW + timedelta(minutes=119)
+        decision, mem, _ = decide(stove("chauffe", 1), safe(later, preset="safety"), mem, later)
+        self.assertEqual(decision["action"], "garder")
+        later = NOW + timedelta(minutes=120)
+        decision, mem, _ = decide(stove("chauffe", 1), safe(later, preset="safety"), mem, later)
+        self.assertEqual(decision["action"], "arreter")
+        self.assertIn("Le thermostat est en sécurité depuis 2 h : la sonde dehors ne donne plus de nouvelles.",
+                      decision["texte"])
+        # Stopped, then the thermostat back in boost: no step up, the stove never relights on its own.
+        for minutes, state in ((125, "extinction"), (150, "eteint")):
+            later = NOW + timedelta(minutes=minutes)
+            _, mem, _ = decide(stove(state, 1), safe(later, preset="safety"), mem, later)
+        decision, mem, _ = decide(stove("eteint", 1), boost, mem, NOW + timedelta(minutes=151))
+        self.assertNotIn(decision["action"], ("demarrer", "demander", "refuser"))
+        # The next real step to boost starts it again.
+        _, mem, _ = decide(stove("eteint", 1), thermostat("frost"), mem, NOW + timedelta(hours=4))
+        decision, mem, _ = decide(stove("eteint", 1), boost, mem, NOW + timedelta(hours=5))
+        self.assertEqual(decision["action"], "demarrer")
+
+    def test_the_safety_limit_may_only_be_shortened(self):
+        from engine import tuning
+        self.assertEqual(tuning.SPEC["securite_max_min"], (120, 15, 120))
+        with self.assertRaises(ValueError):
+            tuning.clean({"securite_max_min": 180})
+        tuning.set_values({"securite_max_min": 30})
+        try:
+            s, boost = stove("chauffe", 2), thermostat("boost", demand=60)
+            _, mem, _ = decide(s, safe(NOW), seen(s, boost))
+            later = NOW + timedelta(minutes=30)
+            decision, _, _ = decide(s, safe(later), mem, later)
+            self.assertEqual(decision["action"], "arreter")
+            self.assertIn("depuis 30 min", decision["texte"])
+        finally:
+            tuning.set_values({})
 
     def test_a_warm_house_stops_it_after_two_minutes(self):
         s, t = stove("chauffe", 2), thermostat("comfort", demand=20, target=20.0)

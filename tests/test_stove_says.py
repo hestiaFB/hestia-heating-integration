@@ -36,6 +36,19 @@ class WhileItBurns(unittest.TestCase):
         self.assertEqual(say(stove(), thermostat(t=18.0, slope=0.5))["texte"], "Consigne à plus de 5 h")
         self.assertEqual(say(stove(), thermostat(t=None))["texte"], "En chauffe")
 
+    def test_its_thermostat_in_its_own_safety(self):
+        # 1.0.0b7: a probe without news, Versatile Thermostat switches itself off; Hestia keeps the flame at its lowest.
+        th = {**thermostat(mode="off"), "securite": True}
+        self.assertEqual(say(stove(pilote={"securite": "dehors"}), th),
+                         {"texte": "Thermostat en sécurité, la sonde dehors ne répond plus : flamme au plus bas",
+                          "ton": "act"})
+        self.assertEqual(say(stove(pilote={"securite": "piece"}), th),
+                         {"texte": "Thermostat en sécurité, la sonde de la pièce ne répond plus : arrêt du poêle",
+                          "ton": "alert"})
+        self.assertEqual(say(stove(), th), {"texte": "Thermostat en sécurité : une sonde ne répond plus", "ton": "act"})
+        self.assertEqual(say(stove("eteint"), th), {"texte": "Thermostat en sécurité, une sonde ne répond plus : le "
+                                                              "poêle ne démarrera pas", "ton": "act"})
+
     def test_a_window_open_in_its_room(self):
         self.assertEqual(say(stove(), room={"fenetre": True}), {"texte": "En chauffe, fenêtre ouverte", "ton": "alert"})
 

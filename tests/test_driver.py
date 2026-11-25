@@ -357,6 +357,56 @@ class ByHand(unittest.TestCase):
                                  "pour le conduire."), [(e["qui"], e["texte"]) for e in p.events])
 
 
+def safe(p: "Pilot", after=timedelta(0), piece_min=5, dehors_min=61, **more):
+    """The stove's thermostat in Versatile Thermostat's safety at the pilot's next look, `after` from now: its room
+    probe last spoke `piece_min` minutes before that look, its outdoor one `dehors_min` minutes before the first look."""
+    return thermostat("boost", mode="off", demand=0, securite=True, securite_delai_min=60,
+                      sonde_piece_a=(p.now + after - timedelta(minutes=piece_min)).isoformat(),
+                      sonde_dehors_a=(NOW - timedelta(minutes=dehors_min)).isoformat(), **more)
+
+
+class ThermostatSafety(unittest.TestCase):
+    """1.0.0b7: the stove's thermostat in its own safety. On 25 November 2026 the outdoor station stood still for an
+    hour, Versatile Thermostat switched itself off, and Hestia stopped the stove 30 seconds later."""
+
+    def test_the_outdoor_probe_alone_is_not_a_stop_and_said_once(self):
+        p = Pilot()
+        boost = thermostat("boost", demand=100, target=21.5)
+        p.look(stove("chauffe", 5, **HOT), boost)
+        orders = p.look(stove("chauffe", 5, **HOT), safe(p), timedelta(minutes=1))
+        self.assertIn("Le thermostat du poêle est en sécurité : la sonde dehors ne donne plus de nouvelles. La pièce "
+                      "reste surveillée : Hestia garde le poêle au plus bas et attend son retour.",
+                      [e["texte"] for e in p.events])
+        orders += p.look(stove("chauffe", 5, **HOT), safe(p), timedelta(seconds=40))
+        orders += p.look(stove("chauffe", 1, **HOT), safe(p), timedelta(minutes=4))
+        self.assertEqual(gestures(orders), [])
+        self.assertFalse([e for e in p.events if e["qui"] == "hestia"])      # said once
+        # Back on, in boost: said, and nothing sent (no start, no stop).
+        orders = p.look(stove("chauffe", 1, **HOT), boost, timedelta(minutes=1))
+        self.assertEqual(gestures(orders), [])
+        self.assertIn("Le thermostat du poêle est sorti de sa sécurité.", [e["texte"] for e in p.events])
+        self.assertIsNone(p.run.get("securite"))
+
+    def test_the_rooms_probe_stops_the_stove(self):
+        p = Pilot()
+        p.look(stove("chauffe", 3, **HOT), thermostat("boost"))
+        p.look(stove("chauffe", 3, **HOT), safe(p, piece_min=61, dehors_min=3), timedelta(minutes=1))
+        self.assertIn("Le thermostat du poêle est en sécurité : la sonde de la pièce ne donne plus de nouvelles. "
+                      "Hestia arrête le poêle.", [e["texte"] for e in p.events])
+        orders = p.look(stove("chauffe", 3, **HOT), safe(p, piece_min=62, dehors_min=3), timedelta(seconds=40))
+        self.assertEqual(gestures(orders), ["eteindre"])
+
+    def test_two_hours_of_outdoor_safety_stop_the_stove(self):
+        p = Pilot()
+        p.look(stove("chauffe", 2, **HOT), thermostat("boost"))
+        p.look(stove("chauffe", 1, **HOT), safe(p), timedelta(minutes=1))
+        later, last = timedelta(minutes=118), timedelta(minutes=2)
+        self.assertEqual(p.look(stove("chauffe", 1, **HOT), safe(p, later), later), [])
+        orders = p.look(stove("chauffe", 1, **HOT), safe(p, last), last)
+        self.assertEqual(gestures(orders), ["eteindre"])
+        self.assertIn("Le thermostat est en sécurité depuis 2 h", p.decision["texte"])
+
+
 class Safety(unittest.TestCase):
     def test_an_alarm_that_lasts_switches_the_thermostat_off_then_stops(self):
         p = Pilot()

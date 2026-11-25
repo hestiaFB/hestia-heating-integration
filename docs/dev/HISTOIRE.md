@@ -62,6 +62,10 @@ La v0.1 ne commandait rien. Les versions, et la suite proposée :
 
 ## Décisions prises
 
+Le 25 novembre 2026 :
+
+- L’après-midi, le poêle allumé « Par Hestia » s’arrête au bout de dix minutes. La station dehors était restée figée une heure : le thermostat du poêle (Versatile Thermostat) s’est mis en sécurité et s’est éteint, et Hestia l’a pris pour un vrai arrêt. Choix de Frank : une sécurité en plus de l’ÉCO Stop quand la sonde de la pièce est figée (le poêle s’arrête), pas pour la sonde dehors seule (flamme au plus bas, arrêt au bout de 2 heures). Codé en 1.0.0b7.
+
 Le 24 novembre 2026 :
 
 - 1.0.0b1 et 1.0.0b2 : la version de production (sans mots d’essai), la phrase du poêle, le simulateur du mode Entier, la ventilation au choix, les cartes compactes.
