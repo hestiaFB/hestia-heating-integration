@@ -530,7 +530,7 @@ import{a as bn,b as T}from"./hub-REI7QGCF.js";var Ce=globalThis,Ee=Ce.ShadowRoot
   .g-lead{margin:0 0 18px;color:var(--nk-muted);max-width:640px}
   input.num{width:88px;flex:0 0 88px}
   @media(max-width:640px){.modes.three{grid-template-columns:1fr}.crans button{min-width:36px;padding:0 6px}}
-  /* 1.0.0b9: the overview's tiles, the rooms' table, the changes kept on another page. */
+  /* 1.0.0b10: the overview's tiles, the rooms' table, the changes kept on another page. */
   .plan-top>button.add{margin-top:4px}
   .band.now{display:flex;flex-direction:column;gap:6px}.band.now b{font-size:var(--nw-fs-title,17px);font-weight:650;line-height:1.35;text-wrap:balance}.band.now p{margin:0}
   .tk{font-size:var(--nw-fs-label,11px);letter-spacing:.08em;text-transform:uppercase;font-weight:650;color:var(--nk-muted)}

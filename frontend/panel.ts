@@ -2,7 +2,7 @@ import {LitElement,html,nothing,css,type TemplateResult} from 'lit';
 import {customElement,property,state} from 'lit/decorators.js';
 import {hubStyles,modernStyles,pageStyles,listSection,listRow,saveBar,toggle,aboutPage,kpis,noteBox,moreRow,segmented,tabBar,numberField,helpTip,SOCLE} from './socle/ui';
 
-/* The « Chauffage » tab of the Hestia-FB panel. Since 1.0.0b9 (the mock-up « nouveau parcours » validated by Frank on
+/* The « Chauffage » tab of the Hestia-FB panel. Since 1.0.0b10 (the mock-up « nouveau parcours » validated by Frank on
    25 Nov. 2026) each thing the household owns has its own page: « Vue d'ensemble » (a sentence, what is to fix, four
    tiles), « Pièces » (a table, then one page per room with its planning, its thermostats and what Hestia reads), « Poêle »
    (one page in tabs: Maintenant, Conduite, Granulés et brasier, Avancé), the plannings (as they were), « Réglages » (the
@@ -157,7 +157,7 @@ const byRole=(a:{role:string},b:{role:string})=>(ROLE_ORDER.indexOf(a.role)+1||9
 const FAN_WORD=(x:string|null|undefined)=>x==null?'—':x.toLowerCase()==='auto'?'AUTO':x;
 /** The flame by Hestia (« La flamme : Automatique »), from the pilot's mode and `flamme_manuelle`. */
 const flameByHestia=(pilote:string|undefined,manual:boolean|undefined)=>pilote==='flamme'||pilote==='entier'&&manual!==true;
-/** Which settings each page saves (1.0.0b9): « Enregistrer » sends those of the page open. Any other setting is the stove's. */
+/** Which settings each page saves (1.0.0b10): « Enregistrer » sends those of the page open. Any other setting is the stove's. */
 const SCOPES:Record<string,string[]>={pieces:['sources','types','planning_autorises','planning'],planning:['planning','planning_autorises'],
  reglages:['equipements','pilote_thermometre','weather_place','prix_kwh','pilote_notifier'],extensions:['extensions','weather_place']};
 const SCOPE_NAME:Record<string,string>={pieces:'Pièces',planning:'Planning',reglages:'Réglages',extensions:'Extensions',poele:'Poêle'};
@@ -315,7 +315,7 @@ export class HestiaHeatingSetup extends LitElement {
   .g-lead{margin:0 0 18px;color:var(--nk-muted);max-width:640px}
   input.num{width:88px;flex:0 0 88px}
   @media(max-width:640px){.modes.three{grid-template-columns:1fr}.crans button{min-width:36px;padding:0 6px}}
-  /* 1.0.0b9: the overview's tiles, the rooms' table, the changes kept on another page. */
+  /* 1.0.0b10: the overview's tiles, the rooms' table, the changes kept on another page. */
   .plan-top>button.add{margin-top:4px}
   .band.now{display:flex;flex-direction:column;gap:6px}.band.now b{font-size:var(--nw-fs-title,17px);font-weight:650;line-height:1.35;text-wrap:balance}.band.now p{margin:0}
   .tk{font-size:var(--nw-fs-label,11px);letter-spacing:.08em;text-transform:uppercase;font-weight:650;color:var(--nk-muted)}
@@ -548,7 +548,7 @@ export class HestiaHeatingSetup extends LitElement {
   ];
  }
 
- /* ── Le poêle: one page in tabs (1.0.0b9), Maintenant, Conduite, Granulés et brasier, Avancé ── */
+ /* ── Le poêle: one page in tabs (1.0.0b10), Maintenant, Conduite, Granulés et brasier, Avancé ── */
  private stovePage(v:View,tab?:string){
   const s=v.poele,set=this.settings;
   if(!s||!set||!this.hasStove(v,set))return html`${this.head('Poêle',{lead:!s?'Aucun poêle trouvé. Hestia Chauffage reconnaît Micronova Agua IOT ; les autres poêles viendront un par un.'
@@ -715,7 +715,7 @@ export class HestiaHeatingSetup extends LitElement {
   const stoveSay=starts?`Avec ce planning, le poêle s’allumerait ${starts} fois par semaine.`
    :p.reste==='boost'?'Avec ce planning, le poêle resterait en boost tout le temps.':'Avec ce planning, le poêle ne s’allumerait jamais : aucune plage en boost.';
   const ownerIn=(plans:Record<string,Plan>,t:string)=>Object.entries(plans).find(([,x])=>x.thermostats.includes(t))?.[0];
-  // Ticking a thermostat here also lets Hestia change its mode (1.0.0b9): one choice, as on the room's page, where it can
+  // Ticking a thermostat here also lets Hestia change its mode (1.0.0b10): one choice, as on the room's page, where it can
   // be withheld. A copied thermostat is never given it.
   const tick=(t:string,on:boolean)=>{this.setPlan(mm=>{for(const x of Object.values(mm.plannings))x.thermostats=x.thermostats.filter(y=>y!==t);if(on)mm.plannings[id].thermostats.push(t);});
    const allowed=this.val<string[]>('planning_autorises')??[],copy=th.find(x=>x.id===t)?.recopie;
@@ -782,7 +782,7 @@ export class HestiaHeatingSetup extends LitElement {
  }
 
  /* ── Réglages and the guide's pieces ── */
- /* ── Réglages: the house only (1.0.0b9). A room's settings are on its page, the stove's on its own. ── */
+ /* ── Réglages: the house only (1.0.0b10). A room's settings are on its page, the stove's on its own. ── */
  private settingsPage(v:View){
   const s=this.settings;
   if(!s)return html`${this.head('Réglages',{lead:'Lecture…'})}`;
@@ -839,7 +839,7 @@ export class HestiaHeatingSetup extends LitElement {
     value:this.select('Service de notification',notifier,(f.notifieurs??[]).map(n=>[n,n.replace(/^notify\./,'')]),'Aucun',x=>this.set('pilote_notifier',x))})])}`;
  }
 
- /* ── Pièces: a table, then one page per room (1.0.0b9) ── */
+ /* ── Pièces: a table, then one page per room (1.0.0b10) ── */
  private roomsPage(v:View){
   const s=this.settings,cut=s?.trouve.coupes??[],allowed=this.allowedSet(),plans=this.plan().plannings;
   const say=(r:Room)=>{const kinds=[...new Set(r.sources.map(id=>v.sources.find(x=>x.id===id)).filter((x):x is Source=>!!x)

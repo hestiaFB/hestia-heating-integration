@@ -39,7 +39,7 @@ La clim est lue comme un thermostat. Elle est développée sur un thermostat sim
 
 Un onglet **Chauffage** dans le panneau Hestia-FB (adresse `/hestia/chauffage`) et une carte pour les tableaux de bord, sur le socle commun, comme Weather, Confort et Énergie.
 
-Depuis la 1.0.0b3 (maquette « panneau technique » validée par Frank le 24 novembre), l’onglet est technique et simple : il dit si tout marche et ce que Hestia a fait ; la température de chaque pièce vit sur les cartes. Depuis la 1.0.0b9 (maquette « nouveau parcours », validée le 25 novembre), chaque chose que l’on possède a sa page : une pièce, le poêle. Un réglage n’existe qu’à un endroit, et « Enregistrer » ne garde que les changements de la page ouverte (une note dit quand une autre page en garde).
+Depuis la 1.0.0b3 (maquette « panneau technique » validée par Frank le 24 novembre), l’onglet est technique et simple : il dit si tout marche et ce que Hestia a fait ; la température de chaque pièce vit sur les cartes. Depuis la 1.0.0b10 (maquette « nouveau parcours », validée le 25 novembre), chaque chose que l’on possède a sa page : une pièce, le poêle. Un réglage n’existe qu’à un endroit, et « Enregistrer » ne garde que les changements de la page ouverte (une note dit quand une autre page en garde).
 
 | Page | Ce qu’on y voit |
 | --- | --- |
@@ -336,7 +336,7 @@ Toute la logique d’affichage vit dans le calcul, la page ne fait que la mettre
 
 ## Les réglages
 
-Ce qui dépend du foyer, avec sa valeur par défaut. Depuis la 1.0.0b3, tous les chiffres du pilote sont dans Réglages › Poêle à granulés › Avancé (page Poêle, onglet Avancé, depuis la 1.0.0b9) (`engine/tuning.py`, leurs bornes y sont) : ce qui était « fixe » ci-dessous l’est seulement par défaut.
+Ce qui dépend du foyer, avec sa valeur par défaut. Depuis la 1.0.0b3, tous les chiffres du pilote sont dans Réglages › Poêle à granulés › Avancé (page Poêle, onglet Avancé, depuis la 1.0.0b10) (`engine/tuning.py`, leurs bornes y sont) : ce qui était « fixe » ci-dessous l’est seulement par défaut.
 
 | Réglage | Par défaut | Où |
 | --- | --- | --- |

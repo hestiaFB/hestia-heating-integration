@@ -14,7 +14,7 @@ from .socle import async_register_brick, async_register_card
 ASSETS = "/hestia_heating-assets"
 CARD_FILE = "hestia-heating-card.js"
 CARD_URL = f"{ASSETS}/{CARD_FILE}"
-# The tab's menu (socle 1.20): [path, label, icon]. Since 1.0.0b9 each thing the household owns has its page: the
+# The tab's menu (socle 1.20): [path, label, icon]. Since 1.0.0b10 each thing the household owns has its page: the
 # rooms (pieces, then one room each) and the stove (poele, in tabs); Réglages keeps the house only. The guide
 # (guide/<n>) opens from « Vue d'ensemble ».
 MENU = [["", "Vue d’ensemble", "home"], ["pieces", "Pièces", "rooms"], ["poele", "Poêle", "heating"],
