@@ -7,13 +7,10 @@ ha-card { padding:18px; display:flex; flex-direction:column; gap:12px; container
 .head .nw-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .nw-chip.stove { --c:var(--hc-stove); } .nw-chip.heat { --c:var(--nw-heat); } .nw-chip.cold { --c:var(--nw-cold); } .nw-chip.calm { --c:var(--nw-calm); }
 .nw-chip.act { --c:var(--nw-act); } .nw-chip.alert { --c:var(--nw-alert); } .nw-chip.off { --c:var(--hc-off); }
-.band { --c:var(--nw-calm); padding:16px; border-radius:16px; border:1px solid var(--nw-line); background:color-mix(in oklab, var(--c) 16%, var(--nw-bg)); }
+/* The house's band (1.0.0b8): the charter's (.nw-band, as Confort's « Rien à faire »), tinted by what heats. */
+.band { --c:var(--nw-calm); background:color-mix(in oklab, var(--c) 14%, var(--nw-glass-clear)); }
 .band.chauffe { --c:var(--hc-stove); } .band.rafraichit { --c:var(--nw-cold); }
-.band .kicker { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:4px; font-size:var(--nw-fs-label); line-height:14px; font-weight:650; letter-spacing:.08em; text-transform:uppercase; }
-.band .kicker i { font-style:normal; text-transform:none; letter-spacing:0; font-weight:600; color:var(--nw-fg2); }
-.band .title { font-size:min(var(--nw-fs-value), 8cqi); font-weight:650; letter-spacing:-.03em; line-height:1.1; text-wrap:balance; }
-.band .line { margin-top:6px; color:var(--nw-fg2); }
-.band .line b { color:var(--nw-fg); font-weight:650; }
+.band .nw-band-title { font-size:min(var(--nw-fs-value), 8cqi); }
 .rooms { display:flex; flex-direction:column; }
 .room { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:8px 2px; border-top:1px solid color-mix(in srgb, var(--nw-fg) 6%, transparent);
   background:none; border-left:0; border-right:0; border-bottom:0; text-align:left; cursor:pointer; width:100%; box-sizing:border-box; }
@@ -99,8 +96,9 @@ ha-card.tap { cursor:pointer; }
 }
 ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .top { padding:22px; display:flex; flex-direction:column; gap:16px; }
-.chead { display:grid; grid-template-columns:minmax(0, 1fr) auto auto; grid-template-areas:"ttl pills gear"; align-items:center; gap:8px; }
-.ttl { grid-area:ttl; min-width:0; }
+/* The head (1.0.0b8): the name and its line on the left, the pills on the right, stacked; the settings at the foot. */
+.chead { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:start; gap:10px; min-width:0; }
+.ttl { min-width:0; }
 .ttl .nw-title { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ttl .sub { font-size:var(--nw-fs-small); color:var(--nw-fg2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 /* 1.0: the stove's sentence under its name, coloured by its tone (engine/stove_says.py). */
@@ -108,11 +106,11 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .ttl .sub .say.alert, .ttl .sub .say.act { color:color-mix(in oklab, var(--c) var(--nw-ink), var(--nw-fg)); }
 .ttl .sub .say.alert { --c:var(--nw-alert); } .ttl .sub .say.act { --c:var(--nw-act); }
 .ttl .sub .say.off { font-weight:500; color:var(--nw-fg2); }
-.pills { grid-area:pills; display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; min-width:0; }
-.gear { grid-area:gear; flex:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--nw-line); background:var(--hc-raised2);
-  display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
-.gear:hover { border-color:color-mix(in srgb, var(--nw-fg) 34%, transparent); }
-.gear svg { width:18px; height:18px; fill:none; stroke:var(--nw-fg2); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.pills { display:flex; flex-direction:column; align-items:flex-end; gap:6px; min-width:0; }
+.foot { display:flex; padding:12px 22px 16px; border-top:1px solid var(--nw-line-soft); }
+.setb { gap:6px; cursor:pointer; }
+.setb:hover { border-color:color-mix(in srgb, var(--nw-fg) 34%, transparent); }
+.setb svg { width:14px; height:14px; flex:none; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; }
 .pill { --c:var(--hc-off); display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 12px; border-radius:var(--nw-radius-pill); box-sizing:border-box;
   font-size:var(--nw-fs-small); font-weight:650; white-space:nowrap; color:var(--nw-fg); background:color-mix(in oklab, var(--c) var(--nw-chip-tint), var(--nw-bg)); }
 .pill.heat { --c:var(--nw-heat); } .pill.cold { --c:var(--nw-cold); } .pill.stove { --c:var(--hc-stove); } .pill.calm { --c:var(--nw-calm); }
@@ -125,9 +123,7 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .gauge { display:block; width:36px; height:6px; border-radius:3px; overflow:hidden; background:color-mix(in srgb, var(--nw-fg) 16%, transparent); }
 .gauge i { display:block; height:100%; border-radius:3px; background:var(--hc-demand); }
 @container (max-width:440px) {
-  .chead { grid-template-columns:minmax(0, 1fr) auto; grid-template-areas:"ttl gear" "pills pills"; }
-  .pills { justify-content:flex-start; }
-  .top { padding:16px; } .dbox { padding-left:16px; padding-right:16px; }
+  .top { padding:16px; } .dbox, .foot { padding-left:16px; padding-right:16px; }
 }
 
 /* The clock (0.8.0b3, « la roue au survol »): drawn in a 440 × 386 box; the middle's words are sized on the wheel's
@@ -137,12 +133,18 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 /* 1.0, the compact version of the stove's and a room's cards: the clock small, beside its sentence; its hours and its
    scale left out (too small to read), its centre kept readable. */
 .top.compact { gap:14px; }
-.pair { display:grid; grid-template-columns:minmax(140px, 44%) 1fr; gap:16px; align-items:center; }
+/* 1.0.0b8 (Frank: « trop petite, on voit rien »): the wheel bigger and lighter: cut to itself, only the steps reached,
+   no dotted degrees, a thicker trace. */
+.pair { display:grid; grid-template-columns:minmax(170px, 56%) 1fr; gap:16px; align-items:center; }
+.compact .steps .blk:not(.on) { display:none; }
+.compact .wheel .grid { display:none; }
+.compact .wheel .trace { stroke-width:4; }
+.compact .cell path { stroke-width:13; }
 .pair .side { display:flex; flex-direction:column; align-items:flex-start; gap:10px; min-width:0; }
 .compact .wheel .hl, .compact .wheel .gt { display:none; }
-.compact .mid { width:34cqi; }
-.compact .mid .ct { font-size:max(17px, 7cqi); }
-.compact .mid .art { width:max(24px, 13cqi); }
+.compact .mid { width:42cqi; }
+.compact .mid .ct { font-size:max(18px, 9cqi); }
+.compact .mid .art { width:max(26px, 16cqi); }
 .compact .mid .cs { display:none; }
 @container (max-width:300px) { .pair { grid-template-columns:1fr; } }
 .wheel > svg { width:100%; height:auto; display:block; overflow:visible; font-family:inherit; touch-action:manipulation; }
@@ -158,16 +160,16 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .cell .t-boost { stroke:var(--hc-r-boost); }
 .cell.on path { stroke-width:18; } .cell.near path { stroke-width:13; }
 .picking .cell.far path { opacity:.42; }
-/* The hours' strokes: as long and as orange as it heated; yesterday's in grey for the hours to come. */
-.spk line { fill:none; stroke-width:7; stroke-linecap:round; stroke:color-mix(in oklch, var(--hi) var(--p), var(--lo));
-  stroke-dasharray:calc(var(--len) + var(--grow, 0px)) 999px;
-  transition:stroke-dasharray .28s var(--hc-ease), stroke-width .28s var(--hc-ease), opacity .28s; animation:hc-grow 1s var(--hc-ease) backwards; }
-.spk.flame { --lo:var(--hc-flame-lo); --hi:var(--hc-flame-hi); } .spk.demand { --lo:var(--hc-dem-lo); --hi:var(--hc-dem-hi); }
-.spk.none line { stroke:color-mix(in srgb, var(--nw-fg) 14%, transparent); stroke-width:4; }
-.spk.yday line { stroke:var(--hc-yday); }
-.spk.on { --grow:13px; } .spk.on line { stroke-width:12; } .spk.near { --grow:4px; } .spk.near line { stroke-width:9; }
-.picking .spk.far line { opacity:.22; }
-@keyframes hc-grow { from { stroke-dasharray:0px 999px; } }
+/* Each hour's steps, outside the ring (1.0.0b8): small blocks, the steps it reached lit, from pale to deep orange; the
+   others stay faint, so that the 24 hours always make a whole circle. */
+.steps { animation:hc-fade .6s var(--hc-ease) backwards; transition:opacity .28s; }
+.steps .blk { fill:color-mix(in srgb, var(--nw-fg) 4.5%, transparent); transition:fill .28s; }
+.steps.flame { --lo:var(--hc-flame-lo); --hi:var(--hc-flame-hi); } .steps.demand { --lo:var(--hc-dem-lo); --hi:var(--hc-dem-hi); }
+.steps .blk.on { fill:color-mix(in oklch, var(--hi) var(--p), var(--lo)); }
+.steps.ahead .blk { fill:color-mix(in srgb, var(--nw-fg) 3%, transparent); }
+.steps.on .blk:not(.on) { fill:color-mix(in srgb, var(--nw-fg) 16%, transparent); }
+.picking .steps.far { opacity:.3; }
+@keyframes hc-fade { from { opacity:0; } }
 /* The trace over its dotted whole degrees, its set point in steps, the values written in the gap after the hand. */
 .wheel .grid { fill:none; stroke:color-mix(in srgb, var(--nw-fg) 22%, transparent); stroke-width:1; stroke-dasharray:1.5 3.5; stroke-linecap:round; }
 .wheel .gs0 { stop-color:var(--hc-trace); stop-opacity:0; } .wheel .gs1 { stop-color:var(--hc-trace); stop-opacity:.34; }
@@ -210,8 +212,8 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .mid .ph, .mid .pl { max-width:30cqi; overflow:hidden; text-overflow:ellipsis; }
 .hint { margin:-4px 0 0; text-align:center; font-size:var(--nw-fs-small); font-weight:650; color:var(--nw-fg2); }
 @media (prefers-reduced-motion:reduce) {
-  .spk line, .wheel .trace, .wheel .ping { animation:none; } .wheel .ping { display:none; }
-  .cell path, .spk line, .mid > div, .wheel .disc, .wheel .lit, .wheel .tdot { transition:none; }
+  .steps, .wheel .trace, .wheel .ping { animation:none; } .wheel .ping { display:none; }
+  .cell path, .steps, .steps .blk, .mid > div, .wheel .disc, .wheel .lit, .wheel .tdot { transition:none; }
 }
 /* The pictures. A stove is dark in both themes. */
 .art .metal { fill:color-mix(in srgb, var(--nw-fg) 82%, var(--nw-bg)); }
@@ -234,7 +236,7 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 @keyframes hc-flick { 0% { transform:scale(1, 1) skewX(0deg); } 35% { transform:scale(.96, 1.05) skewX(-3deg); } 70% { transform:scale(1.03, .96) skewX(2deg); }
   100% { transform:scale(.99, 1.03) skewX(-1deg); } }
 @keyframes hc-beat { 0%, 100% { opacity:1; } 50% { opacity:.45; } }
-@media (prefers-reduced-motion:reduce) { .rise, .blow, .flick, .flick2, .pill .beat { animation:none; } .chev, .switch i { transition:none; } }
+@media (prefers-reduced-motion:reduce) { .rise, .blow, .flick, .flick2, .pill .beat { animation:none; } .switch i { transition:none; } }
 
 .legend { display:flex; justify-content:center; gap:8px 14px; flex-wrap:wrap; font-size:var(--nw-fs-small); color:var(--nw-fg2); }
 .legend span { display:inline-flex; align-items:center; gap:6px; }
@@ -245,9 +247,10 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .legend .sw.set { height:0; border-radius:0; background:none; border-top:2px dashed color-mix(in oklab, var(--hc-set) 75%, transparent); }
 .legend .sw.ramp { width:18px; background:linear-gradient(90deg, var(--hc-dem-lo), var(--hc-dem-hi)); }
 .legend .sw.ramp.flame { background:linear-gradient(90deg, var(--hc-flame-lo), var(--hc-flame-hi)); }
-.legend .sw.yday { background:var(--hc-yday); }
-.legend .sw.ring { width:9px; height:9px; border-radius:50%; border:2px solid var(--hc-trace); box-sizing:border-box; background:none; }
-.legend .sw.ring.lit { border-color:var(--hc-stove); } .legend .sw.ring.stop { border-color:var(--nw-cold); }
+/* A block of steps, as outside the ring: three small blocks from pale to deep. */
+.legend .sw.blocks { display:inline-flex; gap:1.5px; width:auto; height:auto; background:none; border-radius:0; }
+.legend .sw.blocks b { width:5px; height:9px; border-radius:1.5px; background:color-mix(in oklch, var(--hi) var(--p), var(--lo)); }
+.legend .sw.blocks.flame { --lo:var(--hc-flame-lo); --hi:var(--hc-flame-hi); } .legend .sw.blocks.demand { --lo:var(--hc-dem-lo); --hi:var(--hc-dem-hi); }
 .say, .why { margin:0; font-size:var(--nw-fs-text); line-height:1.45; }
 .why { font-weight:600; }
 
@@ -274,14 +277,13 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .btn.auto.on .switch { background:color-mix(in oklab, var(--nw-calm) 80%, #000 12%); } .btn.auto.on .switch i { left:15px; }
 
 /* The drawers, under the card's top; each one closed or open on a tap. */
-.dbox { padding:2px 22px 18px; background:var(--hc-sunk); border-top:1px solid var(--nw-line-soft); }
-.dbox.pellets { background:var(--hc-sunk2); }
-.drawer { display:flex; align-items:center; gap:10px; width:100%; min-height:54px; padding:0; border:0; background:none; font-size:var(--nw-fs-text);
-  font-weight:700; cursor:pointer; text-align:left; }
-.drawer .dt { flex:1; min-width:0; }
-.drawer .ds { display:block; font-size:var(--nw-fs-small); font-weight:500; color:var(--nw-fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.chev { width:20px; height:20px; flex:none; fill:none; stroke:var(--nw-fg2); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; transition:transform .2s; }
-.drawer[aria-expanded="true"] .chev { transform:rotate(180deg); }
+/* The drawers (1.0.0b8): the charter's folding section, as Confort's « Détails » : its label in small capitals, its
+   summary under it, the round chevron on the right; no more darker box. */
+.dbox { padding:0 22px 16px; border-top:1px solid var(--nw-line-soft); }
+.dbox:not(:has(.dbody)) { padding-bottom:0; }
+.drawer { min-height:60px; color:inherit; }
+.drawer .dt { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.drawer .nw-sum { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .dbody, .panel { display:flex; flex-direction:column; gap:12px; }
 .dbody { padding-top:4px; }
 .tabs { display:flex; gap:4px; padding:4px; border-radius:14px; background:var(--hc-well); }
@@ -295,14 +297,29 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .tile .u { font-size:var(--nw-fs-small); font-weight:600; color:var(--nw-fg2); margin-left:3px; }
 .tile .k { font-size:var(--nw-fs-small); color:var(--nw-fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .bars { display:flex; flex-direction:column; gap:6px; padding:12px 12px 8px; border-radius:16px; background:var(--hc-raised); }
-.bars > div { display:grid; grid-template-columns:repeat(var(--n), minmax(0, 1fr)); gap:clamp(3px, 1.2cqi, 8px); text-align:center; font-size:var(--nw-fs-label);
+.bars > .cols, .bars > .vals, .bars > .days { display:grid; grid-template-columns:repeat(var(--n), minmax(0, 1fr)); gap:clamp(3px, 1.2cqi, 8px); text-align:center; font-size:var(--nw-fs-label);
   color:var(--nw-fg2); }
-.bars .cols { height:72px; align-items:end; }
+.bars .cols { position:relative; height:72px; align-items:end; }
 .bars .cols span { display:block; border-radius:6px 6px 2px 2px; background:color-mix(in oklab, var(--hc-demand) 38%, var(--nw-bg)); }
 .bars .cols span.today { background:var(--hc-demand); }
 .pellets .bars .cols span { background:color-mix(in oklab, var(--hc-stove) 40%, var(--nw-bg)); } .pellets .bars .cols span.today { background:var(--hc-stove); }
 .bars .vals span { white-space:nowrap; overflow:hidden; } .bars .vals span.today { color:var(--nw-fg); font-weight:700; }
-.bhead { display:flex; justify-content:space-between; gap:8px; font-size:var(--nw-fs-small); color:var(--nw-fg2); }
+.bhead { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:var(--nw-fs-small); color:var(--nw-fg2); margin-bottom:4px; }
+.bhead b { color:var(--nw-fg); font-weight:650; }
+/* 1.0.0b8: the mean of the days before today, dotted across the bars; the bars' legend under their days. */
+.bars .avg { position:absolute; left:0; right:0; height:0; border-top:1.5px dashed color-mix(in srgb, var(--nw-fg) 45%, transparent); pointer-events:none; }
+.bars .cols span.stack { display:flex; flex-direction:column-reverse; overflow:hidden; background:none; gap:1px; }
+.bars .cols span.stack i { display:block; min-height:0; }
+.bars .stack .hc, .blegend .sw.hc { background:color-mix(in oklab, var(--nw-cold) 70%, var(--nw-bg)); }
+.bars .stack .hp, .blegend .sw.hp { background:color-mix(in oklab, var(--hc-demand) 70%, var(--nw-bg)); }
+.bars .stack .base, .blegend .sw.base { background:color-mix(in oklab, var(--nw-calm) 70%, var(--nw-bg)); }
+.bars .stack.today { outline:2px solid color-mix(in srgb, var(--nw-fg) 55%, transparent); outline-offset:1px; }
+.blegend { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 14px; margin-top:6px; font-size:var(--nw-fs-small); color:var(--nw-fg2); }
+.blegend span { display:inline-flex; align-items:center; gap:6px; }
+.blegend .sw { width:12px; height:8px; border-radius:2px; }
+.blegend .sw.past { background:color-mix(in oklab, var(--hc-demand) 38%, var(--nw-bg)); } .blegend .sw.today { background:var(--hc-demand); }
+.pellets .blegend .sw.past { background:color-mix(in oklab, var(--hc-stove) 40%, var(--nw-bg)); } .pellets .blegend .sw.today { background:var(--hc-stove); }
+.blegend .sw.mean { height:0; border-radius:0; border-top:1.5px dashed color-mix(in srgb, var(--nw-fg) 45%, transparent); }
 .rows { display:flex; flex-direction:column; }
 .rows.boxed { padding:4px 14px; border-radius:16px; background:var(--hc-raised); }
 .row { display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-top:1px solid var(--nw-line-soft); font-size:var(--nw-fs-text); line-height:1.4; }
@@ -353,12 +370,18 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .ctl { display:flex; flex-direction:column; gap:0; margin:10px 0; padding:4px 14px; border-radius:16px; background:var(--hc-raised); }
 .ctl-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding:10px 0; border-top:1px solid var(--nw-line-soft); }
 .ctl-row:first-child { border-top:0; }
-.ctl-row > b { width:92px; flex:none; font-size:var(--nw-fs-text); }
+.ctl-row { flex-wrap:nowrap; justify-content:space-between; }
+.ctl-row:has(.ctl-say) { flex-wrap:wrap; }
+.ctl-row > b { flex:none; font-size:var(--nw-fs-text); }
 .segs, .steps { display:inline-flex; border:1px solid var(--nw-line); border-radius:12px; overflow:hidden; }
 .seg, .step { height:36px; padding:0 12px; border:0; border-left:1px solid var(--nw-line); background:transparent; color:var(--nw-fg); font:inherit; font-size:var(--nw-fs-small); font-weight:650; cursor:pointer; }
-.step { min-width:36px; padding:0 8px; }
+.step { min-width:32px; padding:0 6px; }
+/* 1.0.0b8: Auto (or the stove, Hestia) and the powers in one row; in Auto, the power Hestia set is outlined. */
+.segs.one { flex:none; }
+.segs.one .seg { height:34px; padding:0 10px; } .segs.one .step { padding:0 6px; }
+.seg.cur { box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--nw-fg) 55%, transparent); }
 .seg:first-child, .step:first-child { border-left:0; }
 .seg.on, .step.on { background:var(--nw-fg); color:var(--nw-bg); }
 .seg:disabled, .step:disabled { opacity:.5; cursor:not-allowed; }
 .ctl-say { flex-basis:100%; margin:0; font-size:var(--nw-fs-small); color:var(--nw-fg2); line-height:1.4; }
-@media (max-width:420px) { .ctl-row > b { width:100%; } }
+@container (max-width:380px) { .ctl-row { flex-wrap:wrap; } }

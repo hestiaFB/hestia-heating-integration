@@ -13,6 +13,8 @@ export const VIEW_W=440,VIEW_H=386;
 const CX=220,CY=193,DISC=64,T_IN=76,T_W=40,RING=128,SP_IN=142,SP_L=28,LAB=184,HIT_OUT=190;
 /** The trace stops this long before the hand, so that yesterday's end never meets today's start. */
 export const TRACE_MIN=20*60;
+/** The half-size of a compact card's drawing: the steps' outer edge, and a little more. */
+const TIGHT=SP_IN+SP_L+4;
 const STEP=5;
 
 /** [minutes since the window's start, value]: the integration's day view (hestia_heating/day, `heures`). */
@@ -41,6 +43,8 @@ export type Wheel={
  say:(h:Hour)=>Detail;onHover:(k?:number)=>void;onPin:(k?:number)=>void;
  /** A tap on the middle (a room's card opens its thermostat): its words for a screen reader, and the press. */
  tap?:{label:string;run:(e:Event)=>void};
+ /** The compact cards (1.0.0b8): the drawing cut to the wheel itself, without the room left for the hours' words. */
+ tight?:boolean;
 };
 
 const f=(n:number)=>n.toFixed(1);
@@ -94,8 +98,8 @@ export function hours(w:Span,segments:Seg[],s:Series):Hour[]{
 /** The set points worth drawing: those the trace comes near. A set point more than FAR degrees under the whole trace
     (a frost guard while the room stays warm) would only squash the trace against the middle and be read as its level. */
 const FAR=3;
-/** A flame's lowest step still reads as a stroke: flame 1 is this share of the longest, flame 5 the whole of it. */
-const STEP_MIN=.36;
+/** A thermostat's demand in blocks of 20 %; the gap between two blocks. */
+const DEMAND_STEPS=5,BLOCK_GAP=1.6;
 const deg=(t:number)=>`${t.toLocaleString('fr-FR',{maximumFractionDigits:1})}°`;
 /** A label's box in the drawing's units: about 6 per character at 10.5 px, and 11 high. */
 const box=(text:string)=>6*text.length+4;
@@ -173,7 +177,7 @@ export function wheel(w:Wheel,rest:TemplateResult):TemplateResult{
  const discKey=(e:KeyboardEvent)=>{if(w.tap&&(e.key==='Enter'||e.key===' ')){e.preventDefault();w.tap.run(e);}};
  // A tap on the middle lets go of the hour pinned; else it is the card's (a room's card opens its thermostat).
  const discClick=(e:Event)=>{if(w.pin!=null){e.stopPropagation();w.onPin(undefined);}};
- return html`<div class=${'wheel'+(pick!=null?' picking':'')}><svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" role="group" aria-label=${w.label}
+ return html`<div class=${'wheel'+(pick!=null?' picking':'')}><svg viewBox=${w.tight?`${CX-TIGHT} ${CY-TIGHT} ${2*TIGHT} ${2*TIGHT}`:`0 0 ${VIEW_W} ${VIEW_H}`} role="group" aria-label=${w.label}
    @pointerleave=${()=>w.onHover(undefined)}>
   <defs><radialGradient id="hcArea" cx=${CX} cy=${CY} r=${T_IN+T_W} gradientUnits="userSpaceOnUse">
    <stop class="gs0" offset=".52"></stop><stop class="gs1" offset="1"></stop></radialGradient></defs>
@@ -186,15 +190,17 @@ export function wheel(w:Wheel,rest:TemplateResult):TemplateResult{
   ${trace.length?svg`<path class="trace" pathLength="1" d=${trace.map(line).join('')}></path>`:nothing}
   ${setPath?svg`<path class="set" d=${setPath}></path>`:nothing}
   ${w.hours.map(h=>{
-   // A stove's stroke is its flame's step, whole however long it burnt in the hour (1.0.0b6: a flame 3 for twenty
-   // minutes no longer looks like a flame 1); the minutes are in the middle, over the hour. A thermostat's, its demand.
-   const flame=w.kind==='flame',none=flame?!(h.burn!=null&&h.burn>0&&h.level!=null):h.heat==null||h.heat<.02;
-   const cls=h.ahead?'yday':none?'none':w.kind;
-   const p=flame?Math.max(0,((h.level??1)-1)/(max-1)):Math.min(1,(h.heat??0)*1.4);
-   const len=none?0:flame?(STEP_MIN+(1-STEP_MIN)*Math.max(0,Math.min(1,p)))*SP_L:(h.heat??0)*SP_L;
-   return svg`<g class=${'spk '+cls+near(h.k)} style=${`--len:${f(len)}px;--p:${Math.round(p*100)}%`}
-    transform=${`translate(${CX} ${CY}) rotate(${f((h.k*60+30)/4-90)})`}><line x1=${SP_IN} y1="0" x2=${SP_IN+SP_L+20} y2="0"
-    style=${`animation-delay:${h.k*22}ms`}></line></g>`;})}
+   // Each hour, outside the ring, its steps as small blocks (1.0.0b8, after Frank: the strokes of the 0.8.0b3 read as
+   // big dashes, never a whole circle): every hour has them all, the steps it reached are lit. A stove's flame lights
+   // as many as its step (a flame 3 for twenty minutes is still a flame 3, its minutes are in the middle); a
+   // thermostat's demand one for each 20 %. The hours still to come keep theirs unlit.
+   const flame=w.kind==='flame',n=flame?max:DEMAND_STEPS;
+   const lit=h.ahead?0:flame?(h.burn!=null&&h.burn>0&&h.level!=null?Math.max(1,Math.min(n,Math.round(h.level))):0)
+    :h.heat==null||h.heat<.02?0:Math.max(1,Math.min(n,Math.ceil(h.heat*n-.001)));
+   const a=h.k*60+6,b=h.k*60+54,size=(SP_L-(n-1)*BLOCK_GAP)/n;
+   return svg`<g class=${'steps '+w.kind+(h.ahead?' ahead':'')+near(h.k)} style=${`animation-delay:${h.k*22}ms`}>${Array.from({length:n},(_,i)=>{
+    const r1=SP_IN+i*(size+BLOCK_GAP);
+    return svg`<path class=${i<lit?'blk on':'blk'} style=${i<lit?`--p:${n>1?Math.round(i/(n-1)*100):100}%`:nothing} d=${wedge(r1,r1+size,a,b)}></path>`;})}</g>`;})}
   ${labels.map(l=>svg`<text class=${l.set?'gt set':'gt'} x=${f(l.x)} y=${f(l.y)}>${deg(l.t)}</text>`)}
   <line class="hand" x1=${f(hx1)} y1=${f(hy1)} x2=${f(hx2)} y2=${f(hy2)}></line>
   ${last?svg`<circle class="now" cx=${f(ex)} cy=${f(ey)} r="4.5"></circle>`:nothing}

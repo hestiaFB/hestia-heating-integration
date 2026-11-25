@@ -1,5 +1,20 @@
 # Changements
 
+## 1.0.0b8 — Les cartes à l’image de Hestia Confort
+
+### Améliorations
+- **Les cartes ressemblent à celles de Hestia Confort.** Les pastilles (chauffe, mode) en haut à droite, l’une sous l’autre ; la phrase sous l’horloge retirée (le centre de l’horloge et le nom du poêle la disent déjà) ; plus de pastille qui répète le mode choisi ou « Flamme auto », déjà dits par leurs boutons ; le bouton des réglages passe en bas de la carte (« Réglages de la pièce », « Réglages du poêle »), comme « Configurer cette pièce » dans Confort : le nom n’est plus serré en haut. Les tiroirs prennent la forme de la section « Détails » de Confort, et le bandeau de la carte maison celle de son bandeau.
+- **Les paliers du poêle se lisent d’un coup d’œil.** Autour de l’horloge, chaque heure a ses petits pavés, un par palier de flamme : autant d’allumés que le palier atteint, du jaune pâle à l’orange. Toutes les heures ont les leurs, le tour est complet. Pour une pièce, un pavé par 20 % de chauffe.
+- **Une légende plus courte** : les modes du planning, la température, la consigne, les pavés. Plus de pastilles « allumage », « arrêt prévu », « prochain changement », ni la phrase « Survolez ou touchez une heure » (le survol marche toujours).
+- **La flamme et la ventilation tiennent chacune sur une ligne** dans le tiroir du poêle : « Auto 1 2 3 4 5 » et « Poêle Hestia 1 2 3 4 5 ». En Auto, la puissance que Hestia a réglée est entourée.
+- **La roue des cartes compactes est plus grande et plus légère** : coupée à sa taille, seulement les pavés allumés, sans les cercles de repère, la courbe plus épaisse, avec sa légende. Pour une pièce, la légende dit « temps de chauffe : un pavé par 20 % de l’heure ».
+- **Le brasier se comprend** : « Brasier propre · nettoyage dans 12 jours », puis « Brasier rempli à 40 % · nettoyage dans 7 jours », au lieu de « Brasier 0 % ».
+- **Les graphes des tiroirs parlent** : un titre (« Euros par jour », « kWh par jour », « Granulés brûlés, kg par jour »), la moyenne des jours d’avant en pointillé, et une légende.
+- **« Argent » reprend les prix de Hestia Énergie** quand elle est installée : chaque heure à son prix (heures creuses, heures pleines), les euros de chaque jour empilés par période, et le poêle comparé à la même chaleur à l’électricité à ces prix. Sans Hestia Énergie, le prix du kWh des Réglages, comme avant. Tempo : Hestia Énergie ne donne encore que la couleur du jour, les jours d’avant restent sans euros plutôt que comptés à la mauvaise couleur.
+
+### Corrections
+- **La carte maison ne dit plus « au repos » pour une pièce en confort.** Une pièce qui ne chauffe pas dit son mode, comme sa carte : confort, éco, hors gel ou boost.
+
 ## 1.0.0b7 — La station dehors figée n’éteint plus le poêle
 
 ### Corrections

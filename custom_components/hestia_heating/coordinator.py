@@ -22,7 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from . import reader
 from .const import API_KEY, DOMAIN, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
-from .engine import driver, granules, home_planning, house, phrases, pilot, profiles, sources, tuning
+from .engine import driver, granules, home_planning, house, money, phrases, pilot, profiles, sources, tuning
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -305,6 +305,10 @@ class HeatingCoordinator:
         # The price of a kWh of electricity (Réglages, 0.8): the cards' « Argent » for a room, and the stove's against
         # the same heat bought as electricity. None: the cards say where to set it.
         view["prix_kwh"] = self.settings.get("prix_kwh")
+        # Hestia Énergie's price of a kWh now (1.0.0b8): when it is installed, the cards count the money at its prices.
+        now_price = (reader.energy_prices(self.hass, [dt_util.now()]) or [None])[0]
+        view["prix_energie"] = {"kwh": now_price["price"], "periode": now_price["period"], "couleur": now_price["color"]} \
+            if now_price and now_price.get("price") is not None else None
         view["extensions"] = self._extensions()
         view["changements"] = self._changes(today)
         self.data = view
@@ -824,6 +828,17 @@ class HeatingCoordinator:
                           for n in range(HISTORY_DAYS - 1, -1, -1)],
                 "mois": round(sum(v for d, v in days.items() if d >= today.replace(day=1).date().isoformat()), 2)
                 if days else None}
+        # With Hestia Énergie (1.0.0b8): each day's euros at its prices, hour by hour, split by period (a room's kWh,
+        # or the stove's kilos as the same heat bought as electricity). Without it, the card keeps the price of Réglages.
+        if stat and reader.energy_prices(self.hass, []) is not None:
+            rows = await reader.hourly_totals(self.hass, stat, unit, first, now)
+            prices = reader.energy_prices(self.hass, [at for at, _ in rows])
+            if prices is not None:
+                per_unit = tuning.kwh_per_kg() if unit == "kg" else 1.0
+                euros = money.days(rows, prices, now, per_unit)
+                view["energie"] = {"euros": [{"jour": d["jour"], **(euros.get(d["jour"]) or {"total": None})}
+                                             for d in view["jours"]],
+                                   **(money.seen(prices) or {"prix": {}, "couleur": None})}
         self._days["histoire/" + target] = (time.monotonic(), view)
         return view
 
