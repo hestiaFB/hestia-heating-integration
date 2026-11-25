@@ -49,6 +49,20 @@ class WhileItBurns(unittest.TestCase):
         self.assertEqual(say(stove("eteint"), th), {"texte": "Thermostat en sécurité, une sonde ne répond plus : le "
                                                               "poêle ne démarrera pas", "ton": "act"})
 
+    def test_the_stove_holding_back_by_itself(self):
+        # 1.0.0b9: its own probe at the temperature set in it, the stove burns at its lowest whatever it is given.
+        held = stove(flamme=1, flamme_reglee=5, air=25.0, consigne_poele=25.0)
+        self.assertEqual(say(held), {"texte": "Se bride lui-même en flamme 1 : sa sonde lit 25 °C pour 25 °C réglés "
+                                              "dans le poêle", "ton": "act"})
+        # Half a degree under it: still holding back (its probe cools slowly); a degree under, it gives the flame back.
+        self.assertEqual(say({**held, "air": 24.5})["ton"], "act")
+        self.assertEqual(say({**held, "air": 24.0})["texte"], "21,5 °C vers 18 h 30")
+        # Its flame still climbing (its probe far under), its flame followed, or nothing known: not holding back.
+        self.assertEqual(say({**held, "flamme": 3, "air": 19.0})["texte"], "21,5 °C vers 18 h 30")
+        self.assertEqual(say({**held, "flamme": 5})["texte"], "21,5 °C vers 18 h 30")
+        self.assertEqual(say({**held, "air": None})["texte"], "21,5 °C vers 18 h 30")
+        self.assertEqual(say({**held, "etat": "allumage"})["texte"], "Allumage en cours")
+
     def test_a_window_open_in_its_room(self):
         self.assertEqual(say(stove(), room={"fenetre": True}), {"texte": "En chauffe, fenêtre ouverte", "ton": "alert"})
 

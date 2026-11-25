@@ -34,7 +34,10 @@ SPEC: dict[str, tuple[float | None, float, float]] = {
     "allumage_verif_min": (3, 1, 10),     # the order to light checked after this
     "recharge_s": (20, 5, 120),           # after reloading the stove's integration
     "demarrages_max": (3, 1, 3),          # starts by Hestia a day
-    "consigne_poele": (25, 15, 30),       # the temperature set in the stove itself, sent before a start
+    # The temperature set in the stove itself, sent before a start: high enough that its own probe (near the stove,
+    # warmer than the room) does not reach it, else the stove holds back at its lowest flame by itself (25 before
+    # 1.0.0b9: reached in 40 minutes at flame 5 in a house).
+    "consigne_poele": (30, 15, 35),
     # Stopping.
     "arret_ecart_c": (1, 0.2, 3),         # the house no more than this under the set point: warm enough
     "chaud_min": (2, 1, 30),              # warm enough for this long
