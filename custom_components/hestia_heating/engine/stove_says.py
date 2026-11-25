@@ -4,7 +4,8 @@ atteinte, le poêle entretient »). Plain Python, the first true of a list, from
 
 Its tone gives the colour: « alert » (red) for an alarm, an overheat, a silent stove whose plug still draws, a stove
 burning with a window open in its room; « act » (orange) for a fire pot to clean, a silent stove, an order that did not
-go through, a start refused or waiting for an answer, the stove's thermostat in its own safety; « stove » while it
+go through, a start refused or waiting for an answer, the stove's thermostat in its own safety, a stove holding back by
+itself (its own probe at the temperature set in it); « stove » while it
 burns; « off » otherwise.
 """
 from __future__ import annotations
@@ -17,6 +18,7 @@ from .phrases import degrees, hour, number
 PLUG_HOT_W = 60            # a silent stove whose plug draws more burns without orders
 SLOW_C_PER_H = 0.4         # under this, the room « monte lentement »
 FAR_H = 5                  # beyond this, the set point is « à plus de 5 h »
+BRIDLE_C = 0.5             # its own probe this close to its own set point: the stove holds back by itself
 LOCKS = {"brasier": "brasier à nettoyer, « J’ai nettoyé » rallumera son thermostat",
          "surchauffe": "Hestia a éteint son thermostat, la pièce était trop chaude",
          "alarme": "Hestia a éteint son thermostat, le poêle était en alarme",
@@ -43,6 +45,16 @@ def _arrival(t: float | None, target: float | None, slope: float | None, now: da
     at = (at + timedelta(minutes=2, seconds=30)).replace(second=0, microsecond=0)
     at = at.replace(minute=at.minute - at.minute % 5)
     return f"{degrees(target)} vers {hour(at)}"
+
+
+def bridled(stove: dict) -> bool:
+    """The stove holding back by itself (1.0.0b9): it burns lower than the flame it was given because its own probe
+    has reached the temperature set in the stove (it then burns at its lowest whatever it is asked, and its ÉCO Stop
+    may stop it). Not while its flame is still climbing: its probe is then well under that temperature."""
+    real, given = stove.get("flamme"), stove.get("flamme_reglee")
+    air, own = stove.get("air"), stove.get("consigne_poele")
+    return (stove.get("etat") == "chauffe" and None not in (real, given, air, own) and real < given
+            and air >= own - BRIDLE_C)
 
 
 def sentence(stove: dict, thermostat: dict | None, room: dict | None, now: datetime) -> dict:
@@ -89,6 +101,9 @@ def sentence(stove: dict, thermostat: dict | None, room: dict | None, now: datet
     if state == "chauffe":
         if (room or {}).get("fenetre"):
             return _say("En chauffe, fenêtre ouverte", "alert")
+        if bridled(stove):
+            return _say(f"Se bride lui-même en flamme {stove['flamme']} : sa sonde lit {degrees(stove['air'])} pour "
+                        f"{degrees(stove['consigne_poele'])} réglés dans le poêle", "act")
         return _say(_arrival(t, target, (thermostat or {}).get("pente"), now), "stove")
     # Off.
     if stove.get("veille"):

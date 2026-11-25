@@ -1,6 +1,6 @@
 # Hestia Chauffage — fonctionnement technique
 
-Version 1.0.0b7. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
+Version 1.0.0b9. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
 
 ## Les fichiers
 
@@ -32,7 +32,7 @@ Version 1.0.0b7. Ce document décrit ce que la brique lit, ce qu’elle publie e
 - **Le planning** : les interrupteurs de Scheduler (sinon les `switch.schedule_*` qui ont des `timeslots`) qui visent un thermostat. Le premier planning allumé qui s’applique au jour et vise le thermostat donne la journée. « Jours ouvrés » suit le capteur Workday quand il existe, sinon du lundi au vendredi.
 - **Le temps** : `hestia_weather_api` version 1 (`places()`, `hourly(lieu)`, `add_listener(lieu, update, brick="hestia_heating")`). Le lieu est celui choisi dans Extensions, sinon le premier. Sans Hestia Weather, le froid à venir n’est pas dit.
 
-Pour les thermostats, la brique n’écrit qu’une chose : le préréglage (ou la consigne) des thermostats d’un planning Hestia « Actif », cochés dans Réglages, onglet Thermostats, « Le planning change son mode » (« Ce que Hestia peut régler » avant la 1.0.0b3 ; `planning_autorises`, vide par défaut ; voir plus bas). Au poêle, seulement ce que le pilote envoie quand il est choisi (« Le pilote du poêle », plus bas). Aucun réglage d’une autre intégration. Des tests le vérifient (`tests/test_coordinator_ha.py`).
+Pour les thermostats, la brique n’écrit qu’une chose : le préréglage (ou la consigne) des thermostats d’un planning Hestia « Actif », avec « Hestia change son mode » allumé sur la page de leur pièce (depuis la 1.0.0b10 ; avant, Réglages, onglet Thermostats, « Le planning change son mode », et « Ce que Hestia peut régler » avant la 1.0.0b3 ; cocher un thermostat dans un planning l’allume ; `planning_autorises`, vide par défaut ; voir plus bas). Au poêle, seulement ce que le pilote envoie quand il est choisi (« Le pilote du poêle », plus bas). Aucun réglage d’une autre intégration. Des tests le vérifient (`tests/test_coordinator_ha.py`).
 
 ## Ce qui est publié
 
@@ -125,7 +125,7 @@ Ce que devient un changement dû, pour chaque thermostat (le journal du jour, 60
 | `bloque` | un planning Scheduler allumé vise encore le thermostat (« suit deux plannings », dans À régler, quand le planning est actif) |
 | `recopie` | le thermostat est une copie d’une autre maison (`remote_homeassistant`) : jamais rien envoyé |
 | `ombre` | le planning est « En pause » |
-| `verrou` | le thermostat n’est pas coché dans Réglages, onglet Thermostats, « Le planning change son mode » (`planning_autorises`, aucun par défaut depuis la 0.4) : rien n’est envoyé, et À régler le dit quand le planning est actif |
+| `verrou` | « Hestia change son mode » est coupé sur la page de la pièce du thermostat (`planning_autorises`, aucun par défaut depuis la 0.4) : rien n’est envoyé, et À régler le dit quand le planning est actif |
 | `eteint` | le thermostat est éteint ou absent : il reste éteint |
 | `sans_prereglage` | le préréglage n’existe pas sur ce Versatile Thermostat |
 | `deja` | il est déjà sur ce préréglage (ou cette consigne) |
@@ -170,6 +170,8 @@ Réglage `pilote` = `entier`. La 1.0.0b1 l’avait retiré de Réglages ; depuis
 
 **Le thermostat du poêle en sécurité (1.0.0b7)** : `sources.read()` lit dans les attributs de Versatile Thermostat `safety_manager.safety_state` (« on »), `safety_manager.safety_delay_min` (`securite_delai_min`), `specific_states.last_temperature_datetime` (`sonde_piece_a`) et `specific_states.last_ext_temperature_datetime` (`sonde_dehors_a`). `pilot._stale_probe()` en tire la sonde muette depuis au moins le délai : `piece` d’abord, sinon `dehors`, sinon rien. La mémoire du pilote garde la sonde de l’épisode (`securite_sonde` : `dehors`, `piece`, `inconnue`), car la sonde peut reparler un instant avant que le thermostat ne sorte de sa sécurité (au cycle suivant). `dehors` : l’arrêt de 30 s ne compte pas, la flamme va au plus bas, l’arrêt vient après `securite_max_min` (120 min par défaut, de 15 à 120, Réglages › Avancé), compté depuis le début de la sécurité (`securite_a`). `piece` et `inconnue` : l’arrêt de 30 s, comme avant. Le retour du thermostat (sécurité vue il y a 2 min au plus, `securite_vue`) n’est pas un passage en boost. La décision porte `securite`, que lit la phrase du poêle ; `driver.drive()` le dit une fois par sonde dans le journal (`conduite.securite`).
 
+**Le poêle qui se bride lui-même (1.0.0b9)** : `stove_says.bridled()` est vrai quand le poêle est en chauffe, sa flamme réelle (`flamme`) plus basse que la flamme réglée (`flamme_reglee`), et sa propre sonde (`air`) à moins de 0,5 °C de la température réglée dans le poêle (`consigne_poele`) : un poêle Micronova brûle alors au plus bas, quelle que soit la flamme demandée, et repart quand sa sonde redescend. La vue du poêle porte `bride` ; la phrase du poêle le dit, et la page Réglages du poêle conseille de monter `consigne_poele`. Depuis la 1.0.0b9, ce chiffre se règle à côté de l’ÉCO Stop (onglet Poêle à granulés) et plus dans Avancé : il reste rangé dans `avance` (de 15 à 35, 28 par défaut) ; le panneau l’enregistre aussitôt (`hestia_heating/set_settings` avec tout `avance`) et, flamme automatique, l’envoie aussitôt au poêle (`climate.set_temperature`, depuis le navigateur). Le pilote ne change rien à ses ordres : la flamme réglée reste celle qu’il envoie, et le poêle la reprend seul.
+
 `pilot.decide()` dit ce qu’il faut (le passage en boost, l’arrêt, la coupure…) ; `driver.drive()` (Python pur, appelé par `house.py`) en fait des séquences qui survivent aux retards du cloud, une à la fois, et rend les gestes à faire maintenant et dans combien de secondes regarder de nouveau. Le coordinateur fait les gestes dans l’ordre, dans une seule tâche (30 s au plus chacun), et se rappelle à l’heure demandée (`async_call_later`, sous la minute ; au-delà, la minuterie d’une minute suffit).
 
 | Geste | Service |
@@ -202,7 +204,7 @@ Dans Réglages (onglet Poêle à granulés) et dans le tiroir de la carte du po�
 | ÉCO Stop | `switch.turn_on` ou `turn_off` sur l’entité du rôle `eco_stop`, et le réglage `poele_eco_stop` |
 | Délai de l’ÉCO Stop | `number.set_value` sur l’entité du rôle `eco_stop_delai` |
 
-Après un enregistrement, la flamme remise en Automatique remet la température du poêle à `consigne_poele` (25 °C par défaut) et la ventilation remise en « par le poêle » repasse en `AUTO`.
+Après un enregistrement, la flamme remise en Automatique remet la température du poêle à `consigne_poele` (28 °C par défaut depuis la 1.0.0b9, 25 °C avant) et la ventilation remise en « par le poêle » repasse en `AUTO`.
 
 ### La flamme et l’allumage
 

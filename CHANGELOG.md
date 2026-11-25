@@ -8,6 +8,26 @@
 - **Une lumière de couleur en haut des cartes**, comme sur Confort : orange quand la pièce chauffe ou que le poêle brûle, bleue en éco, grise à l’arrêt. Sur les cartes compactes et complètes.
 - Sur un téléphone étroit, l’horloge de la carte compacte repasse au-dessus du texte.
 
+## 1.0.0b10 — Un panneau rangé par pièce et par appareil
+
+### Améliorations
+- **Une page par chose que vous possédez.** Le menu de Chauffage devient : Vue d’ensemble, Pièces, Poêle, Planning, Réglages, Extensions, À propos. Les réglages d’un même appareil ne sont plus éparpillés sur plusieurs écrans.
+- **Pièces** : un tableau de vos pièces (ce qui les chauffe, leur température, leur planning, et si Hestia change leur mode ou regarde seulement). Une pièce a sa page : son planning, « Hestia change son mode », ce qui la chauffe, la montrer ou non, ce que Hestia y lit. Chaque thermostat est dans son cadre : plus de dépliants dont on ne voit pas la fin.
+- **Poêle** : une seule page, en quatre onglets. Maintenant (ce que Hestia lit et a changé aujourd’hui, l’ancienne page cachée), Conduite (la flamme, la ventilation, l’ÉCO Stop, qui allume et éteint), Granulés et brasier, Avancé.
+- **Réglages** ne garde que la maison, sur une seule page. Le prix de l’électricité est repris de Hestia Énergie quand elle est installée : plus rien à saisir.
+- **La vue d’ensemble** : la phrase « Maintenant », ce qui est à régler, puis quatre tuiles (Pièces, Poêle, Planning, Aujourd’hui) qui mènent chacune à leur page. Le guide devient un bouton en haut.
+- **Un seul geste pour qu’un planning règle un thermostat** : le cocher dans le planning suffit. La permission « Hestia change son mode » s’allume avec, et reste sur la page de la pièce pour la retirer.
+- **« Enregistrer » ne garde que les changements de la page ouverte.** Si une autre page en garde encore, une note le dit en haut, avec son lien.
+
+## 1.0.0b9 — Le poêle ne se bride plus tout seul
+
+### Corrections
+- **Le poêle ne se met plus tout seul en flamme 1.** Avant un allumage, Hestia réglait la température du poêle lui-même à 25 °C. Sa sonde, posée près de lui, lit plus chaud que la pièce : elle atteignait ces 25 °C en 40 minutes à la flamme 5, la pièce encore à 21 °C. Le poêle se mettait alors seul en flamme 1, quelle que soit la flamme demandée, et revenait à la flamme demandée dès que sa sonde redescendait : la flamme et la ventilation faisaient le yoyo, et l’ÉCO Stop pouvait l’éteindre. Hestia règle maintenant 28 °C par défaut : sa sonde n’y arrive pas pendant une chauffe normale, et l’ÉCO Stop reste la sécurité du poêle. Sans rien changer, les 28 °C partent au poêle au prochain allumage par Hestia, ou en revenant à la flamme Automatique.
+
+### Améliorations
+- **La température réglée dans le poêle se règle à côté de l’ÉCO Stop** (Réglages › Poêle à granulés), et plus dans Avancé : de 15 à 35 °C, 28 °C conseillés. Elle part au poêle dès qu’on la change, avec la flamme automatique. Un avertissement de sécurité l’accompagne : avec l’ÉCO Stop, c’est la seule sécurité qui marche sans Home Assistant ni internet ; plus elle est haute, plus la pièce chauffe avant que le poêle ne se bride puis ne s’éteigne. Au-dessus de 30 °C, ou l’ÉCO Stop coupé, l’avertissement le dit en gras.
+- **La carte et la phrase du poêle disent quand il se bride lui-même** : « Se bride lui-même en flamme 1 : sa sonde lit 25 °C pour 25 °C réglés dans le poêle ». Sur la page Réglages du poêle, l’explication de l’ÉCO Stop le dit aussi, et conseille de monter un peu la température réglée dans le poêle.
+
 ## 1.0.0b8 — Les cartes à l’image de Hestia Confort
 
 ### Améliorations

@@ -71,7 +71,9 @@ class Figures(unittest.TestCase):
                  "service": "climate.set_temperature", "donnees": {"temperature": 25}}
         eco = {"nom": "ECO Stop", "role": "eco_stop", "valeur": "on", "service": "switch.turn_on"}
         fan = {"nom": "Ventilation en AUTO", "role": "ventilation", "valeur": "AUTO"}
-        self.assertEqual(tuning.stove_setting(point)["donnees"], {"temperature": 25})
+        # 28 °C by default since 1.0.0b9 (25 °C before: the stove's own probe reached it and held the flame back).
+        self.assertEqual(tuning.stove_setting(point)["donnees"], {"temperature": 28})
+        self.assertEqual(tuning.stove_setting(point)["nom"], "Consigne interne à 28 °C")
         self.assertEqual(tuning.stove_setting(fan), fan)
         tuning.set_values({"consigne_poele": 22}, eco_stop=False)
         moved = tuning.stove_setting(point)
