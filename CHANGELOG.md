@@ -1,5 +1,13 @@
 # Changements
 
+## 1.0.0b11 — La carte compacte se replie, comme celle de Hestia Confort
+
+### Améliorations
+- **La carte compacte est plus large que haute.** L’horloge à gauche ; à droite, la phrase (« Éco jusqu’à 20 h, puis confort »), les modes du thermostat en deux rangées, puis une légende courte. Pour le poêle : Éteindre, Flamme auto et le bouton du brasier.
+- **Elle se replie, comme la carte de Confort.** Un appui sur la carte, ou sur la petite barre en bas, la déplie : les onglets Argent · Conso · Confort d’une pièce, le feu et les granulés du poêle, avec les chiffres du jour, puis le bouton des réglages. Un appui sur l’horloge d’une pièce ouvre toujours son thermostat.
+- **Une lumière de couleur en haut des cartes**, comme sur Confort : orange quand la pièce chauffe ou que le poêle brûle, bleue en éco, grise à l’arrêt. Sur les cartes compactes et complètes.
+- Sur un téléphone étroit, l’horloge de la carte compacte repasse au-dessus du texte.
+
 ## 1.0.0b10 — Un panneau rangé par pièce et par appareil
 
 ### Améliorations

@@ -94,7 +94,14 @@ ha-card.tap { cursor:pointer; }
   --hc-flame-lo: oklch(.91 .09 96); --hc-flame-hi: oklch(.7 .16 45);
   --hc-dem-lo: oklch(.9 .045 55); --hc-dem-hi: oklch(.68 .15 38);
 }
-ha-card.clock { padding:0; gap:0; overflow:hidden; }
+ha-card.clock { padding:0; gap:0; overflow:hidden; position:relative; isolation:isolate; }
+/* 1.0.0b9, as on Confort's cards: a still light at the top, in the colour of what the room or the stove does now
+   (heating, éco, confort, the stove burning), wide and soft from the top right. */
+.glow { position:absolute; z-index:-1; pointer-events:none; left:0; right:0; top:0; height:340px;
+  background:radial-gradient(75% 60% at 95% 4%, color-mix(in oklab, var(--c) 30%, transparent), transparent 72%),
+    radial-gradient(60% 45% at 20% 0%, color-mix(in oklab, var(--c) 11%, transparent), transparent 72%),
+    linear-gradient(180deg, color-mix(in oklab, var(--c) 7%, transparent), transparent 80%);
+  -webkit-mask-image:linear-gradient(to bottom, #000 45%, transparent 100%); mask-image:linear-gradient(to bottom, #000 45%, transparent 100%); }
 .top { padding:22px; display:flex; flex-direction:column; gap:16px; }
 /* The head (1.0.0b8): the name and its line on the left, the pills on the right, stacked; the settings at the foot. */
 .chead { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:start; gap:10px; min-width:0; }
@@ -146,6 +153,35 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .compact .mid .ct { font-size:max(18px, 9cqi); }
 .compact .mid .art { width:max(26px, 16cqi); }
 .compact .mid .cs { display:none; }
+/* 1.0.0b9 (Frank: « plus large que haute ») : the compact card folds as Confort's does. Folded: the head, the clock
+   with its sentence, its modes or buttons (the fire pot's too) and a short legend on the right, a handle. Unfolded:
+   the drawers with the day's figures, and the settings' button. */
+ha-card.small.folded { cursor:pointer; }
+.small .top.compact { padding:18px 20px 4px; gap:12px; }
+.small .pair { grid-template-columns:minmax(140px, 42%) minmax(0, 1fr); gap:20px; padding-left:2px; }
+.small .pair .side { gap:12px; align-self:center; }
+.small .side .say { margin:0; font-size:var(--nw-fs-body, 14px); line-height:1.35; color:var(--nw-fg); }
+.small .side .say.off { color:var(--nw-fg2); }
+.small .side .say.alert { color:color-mix(in oklab, var(--nw-alert) var(--nw-ink, 60%), var(--nw-fg)); }
+.small .side .modes { width:100%; margin:0; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px; }
+@container (min-width:620px) { .small .side .modes { grid-template-columns:repeat(var(--n, 4), minmax(0, 1fr)); } }
+.small .side .mode { padding:7px 4px; font-size:var(--nw-fs-small); border-radius:10px; }
+.small .side .note { margin:0; text-align:left; }
+.small .side .btns { width:100%; gap:6px; }
+.small .side .btn { flex:1 1 120px; height:38px; font-size:var(--nw-fs-small); }
+.small .side .btn.pot { flex-basis:100%; height:auto; min-height:42px; padding:6px 14px; }
+.small .side .btn.pot { white-space:normal; text-align:left; }
+.small .side .btn.pot .pot-say b { font-size:var(--nw-fs-small); white-space:normal; }
+.legend.mini { display:grid; grid-template-columns:repeat(2, max-content); justify-content:start; gap:5px 16px; font-size:11.5px; }
+.legend.mini .wide { grid-column:1 / -1; }
+.handle { display:block; width:100%; height:22px; padding:0; margin:0; border:0; background:none; cursor:pointer; }
+.handle i { display:block; width:34px; height:3px; border-radius:2px; margin:0 auto; background:color-mix(in oklab, var(--nw-fg) 22%, transparent); }
+.handle:hover i { background:color-mix(in oklab, var(--nw-fg) 40%, transparent); }
+.handle:focus-visible { outline:none; } .handle:focus-visible i { background:var(--nw-fg); }
+.unfold { cursor:default; }
+.dbox.inline { padding-top:16px; }
+.unfold > .dbox:first-child { border-top:1px solid var(--nw-line-soft); }
+@container (max-width:380px) { .small .pair { grid-template-columns:1fr; } .small .pair .wheel { max-width:220px; margin:0 auto; width:100%; } }
 @container (max-width:300px) { .pair { grid-template-columns:1fr; } }
 .wheel > svg { width:100%; height:auto; display:block; overflow:visible; font-family:inherit; touch-action:manipulation; }
 .wheel .disc { fill:var(--hc-disc); stroke:var(--nw-line); stroke-width:1; r:64px; transition:r .28s var(--hc-ease); outline:none; }
