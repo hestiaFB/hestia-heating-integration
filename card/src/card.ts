@@ -242,6 +242,9 @@ class HestiaHeatingCard extends LitElement {
  /* A room's modes: the thermostat's own presets. The press is the user's, sent from this browser as Home Assistant's
     own thermostat card does; never to a thermostat copied from another house (a lab), where it would reach that
     house. */
+ /** Whether the card shows the thermostat's modes as buttons: then the chosen one says the mode, no pill repeats it
+     (1.0.0b8, Frank: « confort » said twice). */
+ private _modeButtons(r:Room){return !!r.principal&&(r.modes??[]).some(m=>m!=='none');}
  private _modes(r:Room){
   const modes=[...(r.modes??[])].filter(m=>m!=='none').sort((a,b)=>modeRank(a)-modeRank(b));
   if(!modes.length||!r.principal)return nothing;
@@ -383,8 +386,7 @@ class HestiaHeatingCard extends LitElement {
    ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
     `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
     <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`)}
-   <div class="pair">${clock}<div class="side">${why?html`<p class="why">${why}</p>`:nothing}
-    <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Flamme auto':'Flamme à la main'}</span></div></div>
+   <div class="pair">${clock}<div class="side">${why?html`<p class="why">${why}</p>`:nothing}</div></div>
    ${this._stoveButtons(s,auto)}
   </div>
   ${this._fireDrawer(v,s,room)}
@@ -393,8 +395,7 @@ class HestiaHeatingCard extends LitElement {
   return html`<div class="top">
    ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
     `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
-    <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>
-    <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Flamme auto':'Flamme à la main'}</span>`)}
+    <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`)}
    ${clock}
    ${this._legend(tones,(series.temperature??[]).length?`température du ${where.toLowerCase()}`:null,sets.some(p=>p[1]!=null),'flame',max)}
    ${this._stoveButtons(s,auto)}
@@ -621,13 +622,13 @@ class HestiaHeatingCard extends LitElement {
    center(art,r.temperature!=null?`${num(r.temperature)}°`:'—',sub));
   if(this._config.compacte)return html`<div class="top compact">
    ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}`)}
-   <div class="pair">${clock}<div class="side">${r.raison?html`<p class="say">${r.raison}</p>`:nothing}${this._modePill(r)}</div></div>
+   <div class="pair">${clock}<div class="side">${r.raison?html`<p class="say">${r.raison}</p>`:nothing}${this._modeButtons(r)?nothing:this._modePill(r)}</div></div>
    ${this._modes(r)}
   </div>
   ${this._roomDrawer(v,r)}
   ${this._foot('pieces/'+r.id,`Ouvrir les réglages de ${r.nom}`,'Réglages de la pièce')}`;
   return html`<div class="top">
-   ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}${this._modePill(r)}`)}
+   ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}${this._modeButtons(r)?nothing:this._modePill(r)}`)}
    ${clock}
    ${this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),demand?'demand':null)}
    ${this._modes(r)}
