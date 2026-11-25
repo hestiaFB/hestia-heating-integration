@@ -387,6 +387,7 @@ class HestiaHeatingCard extends LitElement {
     `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
     <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`)}
    <div class="pair">${clock}<div class="side">${why?html`<p class="why">${why}</p>`:nothing}</div></div>
+   ${this._legend(tones,(series.temperature??[]).length?`température du ${where.toLowerCase()}`:null,sets.some(p=>p[1]!=null),'flame',max)}
    ${this._stoveButtons(s,auto)}
   </div>
   ${this._fireDrawer(v,s,room)}
@@ -411,7 +412,7 @@ class HestiaHeatingCard extends LitElement {
   const blocks=()=>html`<i class=${'sw blocks '+kind}>${Array.from({length:3},(_,i)=>html`<b style=${`--p:${Math.round(i/2*100)}%`}></b>`)}</i>`;
   return html`<div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
    ${temp?html`<span><i class="sw line"></i>${temp}</span>`:nothing}${set?html`<span><i class="sw set"></i>consigne</span>`:nothing}
-   ${kind?html`<span>${blocks()}${kind==='flame'?`flamme : un pavé par palier, ${max} au plus`:'chauffe : un pavé par 20 %'}</span>`:nothing}</div>`;
+   ${kind?html`<span>${blocks()}${kind==='flame'?`flamme : un pavé par palier, ${max} au plus`:'temps de chauffe : un pavé par 20 % de l’heure'}</span>`:nothing}</div>`;
  }
  /* The sentence under the clock: what Hestia does when it drives the stove (« Gestion auto »), else what the stove does. */
  private _why(s:Stove,room:Room|undefined,auto:boolean,level:number){
@@ -623,6 +624,7 @@ class HestiaHeatingCard extends LitElement {
   if(this._config.compacte)return html`<div class="top compact">
    ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}`)}
    <div class="pair">${clock}<div class="side">${r.raison?html`<p class="say">${r.raison}</p>`:nothing}${this._modeButtons(r)?nothing:this._modePill(r)}</div></div>
+   ${this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),demand?'demand':null)}
    ${this._modes(r)}
   </div>
   ${this._roomDrawer(v,r)}
