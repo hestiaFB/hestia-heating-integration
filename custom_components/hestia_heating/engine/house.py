@@ -567,7 +567,7 @@ def _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules) -> list[di
     for s in srcs:
         if s["etat"] == "inconnu" and s["type"] != "poele":
             out.append({"titre": f"{s['nom']} ne répond pas", "texte": "Le thermostat est indisponible dans Home Assistant.",
-                        "page": "reglages/thermostats"})
+                        "page": f"pieces/{s['id']}"})
     if stove and stove["a_traduire"] and stove["texte"]:
         out.append({"titre": f"Le poêle dit « {stove['texte']} »",
                     "texte": "Ce mot n’est pas encore dans son profil : il est montré tel quel. Signalez-le pour qu’il soit traduit.",
@@ -575,7 +575,7 @@ def _todo(found, srcs, stove, raw_stove, stove_thermostat, schedules) -> list[di
     if raw_stove and stove_thermostat is None:
         out.append({"titre": "Le poêle n’a pas de thermostat",
                     "texte": "Choisissez le Versatile Thermostat qui le pilote : la demande du thermostat sera lue face à sa flamme.",
-                    "page": "reglages/poele"})
+                    "page": "poele/conduite"})
     if any(s.partial for s in schedules):
         out.append({"titre": "Un planning n’est pas lu en entier",
                     "texte": "Un créneau commence au lever ou au coucher du soleil : Hestia ne le devine pas.",
@@ -667,10 +667,10 @@ def _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, ai
                              "page": f"planning/{key}"})
             elif p["actif"] and t not in allowed and t not in copies:
                 todo.append({"titre": f"Hestia n’a pas le droit de régler {s['nom']}",
-                             "texte": f"Il est dans « {p['nom']} », qui est actif, mais il n’est pas coché dans Réglages, "
-                                      "onglet Thermostats, « Le planning change son mode » : Hestia ne lui envoie rien. "
-                                      "Cochez-le, ou remettez le planning en pause.",
-                             "page": "reglages/thermostats"})
+                             "texte": f"Il est dans « {p['nom']} », qui est actif, mais « Hestia change son mode » est "
+                                      "coupé sur la page de sa pièce : Hestia ne lui envoie rien. Allumez-le, ou remettez "
+                                      "le planning en pause.",
+                             "page": f"pieces/{t}"})
             try:
                 last = datetime.fromisoformat((applied.get(t) or {}).get("a") or "")
             except ValueError:

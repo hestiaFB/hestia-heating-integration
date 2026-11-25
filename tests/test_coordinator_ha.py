@@ -244,7 +244,7 @@ class PlanningHestia(SendsThePlanning, HomeAssistantWithAHouse):
         entry, c = await self._planning("climate.vt_sejour", allowed=False)
         self.assertEqual(self.sent, [])
         self.assertEqual(c.journal[-1]["statut"], "verrou")
-        self.assertEqual(c.data["planning"]["journal"][-1]["texte"], "pas autorisé dans Réglages, rien envoyé")
+        self.assertEqual(c.data["planning"]["journal"][-1]["texte"], "pas permis sur la page de sa pièce, rien envoyé")
         self.assertIn("Hestia n’a pas le droit de régler Radiateur séjour", [t["titre"] for t in c.data["a_regler"]])
         self.assertEqual(c.data["planning"]["hestia"][0]["verrouilles"], [{"id": "climate.vt_sejour", "nom": "Radiateur séjour"}])
         self.assertEqual(c.settings["planning_autorises"], [])

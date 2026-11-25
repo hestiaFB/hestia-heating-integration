@@ -10,10 +10,11 @@ Elle ne remplace pas votre thermostat : elle s’appuie sur les intégrations qu
 
 Un onglet **Chauffage** dans le panneau Hestia-FB :
 
-- **Vue d’ensemble** : si tout marche (les thermostats qui répondent, les mesures reçues), vos appareils avec leur dernière nouvelle, ce que Hestia fait pour vous et ce qu’elle a changé aujourd’hui. La température de chaque pièce est sur les cartes.
-- **Le poêle, côté technique** : chaque entité lue, sa valeur et son âge, ce que Hestia y a changé, le journal du jour, l’essai à blanc, le brasier avec « J’ai nettoyé ».
+- **Vue d’ensemble** : si tout marche, ce qui est à régler, quatre tuiles (Pièces, Poêle, Planning, Aujourd’hui), ce que Hestia a le droit de faire et ce qu’elle a changé aujourd’hui. La température de chaque pièce est aussi sur les cartes.
+- **Pièces** : un tableau de vos pièces, puis une page par pièce avec son planning, ses thermostats (« Hestia change son mode », ce qui chauffe la pièce, la montrer ou non) et ce que Hestia y lit.
+- **Poêle** : une page en quatre onglets. Maintenant (chaque entité lue, ce que Hestia y a changé, le journal du jour), Conduite (la flamme et la ventilation en Automatique ou en Manuel, l’ÉCO Stop, qui allume et éteint le poêle), Granulés et brasier (avec « J’ai nettoyé »), Avancé (tous les chiffres du pilote).
 - **Planning** : la liste de vos plannings. Un planning, c’est une semaine en couleurs (tous les jours pareils, semaine et week-end, ou jour par jour) et les thermostats qu’il règle, « En pause » ou « Actif ». Les plannings de Scheduler sont lus, et se reprennent dans Hestia en un clic.
-- **Réglages**, en onglets : La maison, Thermostats, Poêle à granulés (la flamme et la ventilation en Automatique ou en Manuel, l’ÉCO Stop, qui allume et éteint le poêle, les granulés) et son écran Avancé, où se trouvent tous les chiffres du pilote. Un **guide** en cinq étapes les passe en revue.
+- **Réglages** : ce qui vaut pour toute la maison (ce qui chauffe chez vous, sa température, les prix, le téléphone). Un **guide** en cinq étapes passe tout en revue.
 - **Extensions** : les intégrations que la brique lit.
 
 Et une **carte** pour vos tableaux de bord, sous quatre formes :
@@ -62,7 +63,7 @@ Hestia Chauffage rejoint [Hestia Weather](https://github.com/hestiaFB/hestia-wea
 ## Ce qui viendra ensuite
 
 - **D’autres conseils** : quand le poêle chauffe moins cher que l’électrique.
-- **Les boutons Allumer et Éteindre** de la page technique du poêle.
+- **Les boutons Allumer et Éteindre** de la page du poêle.
 - **D’autres poêles** : un profil par intégration, après Micronova Agua IOT.
 
 ## Licence

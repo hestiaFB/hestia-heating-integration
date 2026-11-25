@@ -57,7 +57,7 @@ PELLET_LIMITS = {"brasier_kg": (5, 60), "granules_prix_sac": (0.5, 50), "granule
 # What became of a change of a planning Hestia, for each thermostat, as the journal says it.
 FATE = {"envoye": "envoyé", "deja": "déjà réglé", "ombre": "en pause, rien envoyé", "bloque": "bloqué par Scheduler",
         "recopie": "thermostat recopié, jamais commandé", "eteint": "thermostat éteint, laissé tel quel",
-        "sans_prereglage": "préréglage absent du thermostat", "verrou": "pas autorisé dans Réglages, rien envoyé"}
+        "sans_prereglage": "préréglage absent du thermostat", "verrou": "pas permis sur la page de sa pièce, rien envoyé"}
 JOURNAL_MAX = 60
 # The stove's pilot in « Conseil » (key ombre): its journal says what Hestia would have done and what the house did. Kept a week,
 # through a restart, so that several days can be weighed (« d'accord 46 fois sur 48 »).

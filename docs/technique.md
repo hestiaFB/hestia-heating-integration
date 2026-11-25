@@ -32,7 +32,7 @@ Version 1.0.0b7. Ce document décrit ce que la brique lit, ce qu’elle publie e
 - **Le planning** : les interrupteurs de Scheduler (sinon les `switch.schedule_*` qui ont des `timeslots`) qui visent un thermostat. Le premier planning allumé qui s’applique au jour et vise le thermostat donne la journée. « Jours ouvrés » suit le capteur Workday quand il existe, sinon du lundi au vendredi.
 - **Le temps** : `hestia_weather_api` version 1 (`places()`, `hourly(lieu)`, `add_listener(lieu, update, brick="hestia_heating")`). Le lieu est celui choisi dans Extensions, sinon le premier. Sans Hestia Weather, le froid à venir n’est pas dit.
 
-Pour les thermostats, la brique n’écrit qu’une chose : le préréglage (ou la consigne) des thermostats d’un planning Hestia « Actif », cochés dans Réglages, onglet Thermostats, « Le planning change son mode » (« Ce que Hestia peut régler » avant la 1.0.0b3 ; `planning_autorises`, vide par défaut ; voir plus bas). Au poêle, seulement ce que le pilote envoie quand il est choisi (« Le pilote du poêle », plus bas). Aucun réglage d’une autre intégration. Des tests le vérifient (`tests/test_coordinator_ha.py`).
+Pour les thermostats, la brique n’écrit qu’une chose : le préréglage (ou la consigne) des thermostats d’un planning Hestia « Actif », avec « Hestia change son mode » allumé sur la page de leur pièce (depuis la 1.0.0b9 ; avant, Réglages, onglet Thermostats, « Le planning change son mode », et « Ce que Hestia peut régler » avant la 1.0.0b3 ; cocher un thermostat dans un planning l’allume ; `planning_autorises`, vide par défaut ; voir plus bas). Au poêle, seulement ce que le pilote envoie quand il est choisi (« Le pilote du poêle », plus bas). Aucun réglage d’une autre intégration. Des tests le vérifient (`tests/test_coordinator_ha.py`).
 
 ## Ce qui est publié
 
@@ -125,7 +125,7 @@ Ce que devient un changement dû, pour chaque thermostat (le journal du jour, 60
 | `bloque` | un planning Scheduler allumé vise encore le thermostat (« suit deux plannings », dans À régler, quand le planning est actif) |
 | `recopie` | le thermostat est une copie d’une autre maison (`remote_homeassistant`) : jamais rien envoyé |
 | `ombre` | le planning est « En pause » |
-| `verrou` | le thermostat n’est pas coché dans Réglages, onglet Thermostats, « Le planning change son mode » (`planning_autorises`, aucun par défaut depuis la 0.4) : rien n’est envoyé, et À régler le dit quand le planning est actif |
+| `verrou` | « Hestia change son mode » est coupé sur la page de la pièce du thermostat (`planning_autorises`, aucun par défaut depuis la 0.4) : rien n’est envoyé, et À régler le dit quand le planning est actif |
 | `eteint` | le thermostat est éteint ou absent : il reste éteint |
 | `sans_prereglage` | le préréglage n’existe pas sur ce Versatile Thermostat |
 | `deja` | il est déjà sur ce préréglage (ou cette consigne) |
