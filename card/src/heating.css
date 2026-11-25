@@ -133,12 +133,18 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 /* 1.0, the compact version of the stove's and a room's cards: the clock small, beside its sentence; its hours and its
    scale left out (too small to read), its centre kept readable. */
 .top.compact { gap:14px; }
-.pair { display:grid; grid-template-columns:minmax(140px, 44%) 1fr; gap:16px; align-items:center; }
+/* 1.0.0b8 (Frank: « trop petite, on voit rien »): the wheel bigger and lighter: cut to itself, only the steps reached,
+   no dotted degrees, a thicker trace. */
+.pair { display:grid; grid-template-columns:minmax(170px, 56%) 1fr; gap:16px; align-items:center; }
+.compact .steps .blk:not(.on) { display:none; }
+.compact .wheel .grid { display:none; }
+.compact .wheel .trace { stroke-width:4; }
+.compact .cell path { stroke-width:13; }
 .pair .side { display:flex; flex-direction:column; align-items:flex-start; gap:10px; min-width:0; }
 .compact .wheel .hl, .compact .wheel .gt { display:none; }
-.compact .mid { width:34cqi; }
-.compact .mid .ct { font-size:max(17px, 7cqi); }
-.compact .mid .art { width:max(24px, 13cqi); }
+.compact .mid { width:42cqi; }
+.compact .mid .ct { font-size:max(18px, 9cqi); }
+.compact .mid .art { width:max(26px, 16cqi); }
 .compact .mid .cs { display:none; }
 @container (max-width:300px) { .pair { grid-template-columns:1fr; } }
 .wheel > svg { width:100%; height:auto; display:block; overflow:visible; font-family:inherit; touch-action:manipulation; }

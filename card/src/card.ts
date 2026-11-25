@@ -378,7 +378,7 @@ class HestiaHeatingCard extends LitElement {
    return this._past(h,[`flamme ${num(h.level??0,0)}${(h.burn??0)<.95?` · ${minutes} min`:` sur ${max}`}`,kilos,
     h.set!=null?`consigne ${num(h.set)}°`:null,this._plan(h)]);
   };
-  const clock=wheel({span,segments,series:series_,hours:hrs,kind:'flame',max,marks,say,...this._picker(),
+  const clock=wheel({span,segments,series:series_,hours:hrs,kind:'flame',max,marks,say,...this._picker(),tight:!!this._config.compacte,
    label:`Horloge du jour : ${where} à ${deg(t)}, poêle ${state}${stop?`, arrêt prévu à ${isoHm(stop.a)}`:''}.`},
    center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
   const why=this._why(s,room,auto,level);
@@ -617,7 +617,7 @@ class HestiaHeatingCard extends LitElement {
     h.set!=null?`consigne ${num(h.set)}°`:null,this._plan(h)]);
   };
   const clock=wheel({span,segments,series:series_,hours:hrs,kind:'demand',marks:[],say,
-   ...this._picker(),tap:tap?{label:what,run:(e:Event)=>this._tap(e,r)}:undefined,
+   ...this._picker(),tight:!!this._config.compacte,tap:tap?{label:what,run:(e:Event)=>this._tap(e,r)}:undefined,
    label:`Horloge du jour : ${r.nom} à ${deg(r.temperature)}${r.consigne!=null?`, consigne ${deg(r.consigne)}`:''}${next?`, ${this._next(next,v)}`:''}.`},
    center(art,r.temperature!=null?`${num(r.temperature)}°`:'—',sub));
   if(this._config.compacte)return html`<div class="top compact">

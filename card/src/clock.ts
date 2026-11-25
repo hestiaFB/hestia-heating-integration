@@ -13,6 +13,8 @@ export const VIEW_W=440,VIEW_H=386;
 const CX=220,CY=193,DISC=64,T_IN=76,T_W=40,RING=128,SP_IN=142,SP_L=28,LAB=184,HIT_OUT=190;
 /** The trace stops this long before the hand, so that yesterday's end never meets today's start. */
 export const TRACE_MIN=20*60;
+/** The half-size of a compact card's drawing: the steps' outer edge, and a little more. */
+const TIGHT=SP_IN+SP_L+4;
 const STEP=5;
 
 /** [minutes since the window's start, value]: the integration's day view (hestia_heating/day, `heures`). */
@@ -41,6 +43,8 @@ export type Wheel={
  say:(h:Hour)=>Detail;onHover:(k?:number)=>void;onPin:(k?:number)=>void;
  /** A tap on the middle (a room's card opens its thermostat): its words for a screen reader, and the press. */
  tap?:{label:string;run:(e:Event)=>void};
+ /** The compact cards (1.0.0b8): the drawing cut to the wheel itself, without the room left for the hours' words. */
+ tight?:boolean;
 };
 
 const f=(n:number)=>n.toFixed(1);
@@ -173,7 +177,7 @@ export function wheel(w:Wheel,rest:TemplateResult):TemplateResult{
  const discKey=(e:KeyboardEvent)=>{if(w.tap&&(e.key==='Enter'||e.key===' ')){e.preventDefault();w.tap.run(e);}};
  // A tap on the middle lets go of the hour pinned; else it is the card's (a room's card opens its thermostat).
  const discClick=(e:Event)=>{if(w.pin!=null){e.stopPropagation();w.onPin(undefined);}};
- return html`<div class=${'wheel'+(pick!=null?' picking':'')}><svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" role="group" aria-label=${w.label}
+ return html`<div class=${'wheel'+(pick!=null?' picking':'')}><svg viewBox=${w.tight?`${CX-TIGHT} ${CY-TIGHT} ${2*TIGHT} ${2*TIGHT}`:`0 0 ${VIEW_W} ${VIEW_H}`} role="group" aria-label=${w.label}
    @pointerleave=${()=>w.onHover(undefined)}>
   <defs><radialGradient id="hcArea" cx=${CX} cy=${CY} r=${T_IN+T_W} gradientUnits="userSpaceOnUse">
    <stop class="gs0" offset=".52"></stop><stop class="gs1" offset="1"></stop></radialGradient></defs>
