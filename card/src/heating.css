@@ -96,8 +96,8 @@ ha-card.tap { cursor:pointer; }
 }
 ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .top { padding:22px; display:flex; flex-direction:column; gap:16px; }
-/* The head (1.0.0b8, as Confort's card): the name and its line, then the pills under them; the settings at the foot. */
-.chead { display:block; min-width:0; }
+/* The head (1.0.0b8): the name and its line on the left, the pills on the right, stacked; the settings at the foot. */
+.chead { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:start; gap:10px; min-width:0; }
 .ttl { min-width:0; }
 .ttl .nw-title { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ttl .sub { font-size:var(--nw-fs-small); color:var(--nw-fg2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -106,7 +106,7 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .ttl .sub .say.alert, .ttl .sub .say.act { color:color-mix(in oklab, var(--c) var(--nw-ink), var(--nw-fg)); }
 .ttl .sub .say.alert { --c:var(--nw-alert); } .ttl .sub .say.act { --c:var(--nw-act); }
 .ttl .sub .say.off { font-weight:500; color:var(--nw-fg2); }
-.pills { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-start; min-width:0; margin-top:-6px; }
+.pills { display:flex; flex-direction:column; align-items:flex-end; gap:6px; min-width:0; }
 .foot { display:flex; padding:12px 22px 16px; border-top:1px solid var(--nw-line-soft); }
 .setb { gap:6px; cursor:pointer; }
 .setb:hover { border-color:color-mix(in srgb, var(--nw-fg) 34%, transparent); }
@@ -364,12 +364,18 @@ ha-card.clock { padding:0; gap:0; overflow:hidden; }
 .ctl { display:flex; flex-direction:column; gap:0; margin:10px 0; padding:4px 14px; border-radius:16px; background:var(--hc-raised); }
 .ctl-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding:10px 0; border-top:1px solid var(--nw-line-soft); }
 .ctl-row:first-child { border-top:0; }
-.ctl-row > b { width:92px; flex:none; font-size:var(--nw-fs-text); }
+.ctl-row { flex-wrap:nowrap; justify-content:space-between; }
+.ctl-row:has(.ctl-say) { flex-wrap:wrap; }
+.ctl-row > b { flex:none; font-size:var(--nw-fs-text); }
 .segs, .steps { display:inline-flex; border:1px solid var(--nw-line); border-radius:12px; overflow:hidden; }
 .seg, .step { height:36px; padding:0 12px; border:0; border-left:1px solid var(--nw-line); background:transparent; color:var(--nw-fg); font:inherit; font-size:var(--nw-fs-small); font-weight:650; cursor:pointer; }
-.step { min-width:36px; padding:0 8px; }
+.step { min-width:32px; padding:0 6px; }
+/* 1.0.0b8: Auto (or the stove, Hestia) and the powers in one row; in Auto, the power Hestia set is outlined. */
+.segs.one { flex:none; }
+.segs.one .seg { height:34px; padding:0 10px; } .segs.one .step { padding:0 6px; }
+.seg.cur { box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--nw-fg) 55%, transparent); }
 .seg:first-child, .step:first-child { border-left:0; }
 .seg.on, .step.on { background:var(--nw-fg); color:var(--nw-bg); }
 .seg:disabled, .step:disabled { opacity:.5; cursor:not-allowed; }
 .ctl-say { flex-basis:100%; margin:0; font-size:var(--nw-fs-small); color:var(--nw-fg2); line-height:1.4; }
-@media (max-width:420px) { .ctl-row > b { width:100%; } }
+@container (max-width:380px) { .ctl-row { flex-wrap:wrap; } }

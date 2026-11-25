@@ -187,10 +187,10 @@ class HestiaHeatingCard extends LitElement {
  /* The clock cards' pieces: the head (name, what heats, two pills, the settings' button), a drawer, its tabs, a press
     that asks again before it is sent. */
  private _head(title:string,sub:unknown,pills:unknown){
-  // 1.0.0b8: the name, its line, then the pills under them (as Confort's card: its state under the room's name); the
-  // settings' button moved to the card's foot (_foot), so that nothing squeezes the name.
-  return html`<div class="chead"><div class="ttl"><h2 class="nw-title">${title}</h2>${sub?html`<div class="sub">${sub}</div>`:nothing}</div></div>
-   <div class="pills">${pills}</div>`;
+  // 1.0.0b8: the name and its line on the left, the pills on the right (Frank, 25 Nov.); the settings' button moved to
+  // the card's foot (_foot), so that nothing squeezes the name.
+  return html`<div class="chead"><div class="ttl"><h2 class="nw-title">${title}</h2>${sub?html`<div class="sub">${sub}</div>`:nothing}</div>
+   <div class="pills">${pills}</div></div>`;
  }
  /** The card's foot (1.0.0b8): the settings' button, at the bottom as on Confort's card (« Configurer cette pièce »). */
  private _foot(path:string,label:string,word:string){
@@ -397,7 +397,6 @@ class HestiaHeatingCard extends LitElement {
     <span class=${'pill '+(auto?'calm':'off')}><i class="dot"></i>${auto?'Flamme auto':'Flamme à la main'}</span>`)}
    ${clock}
    ${this._legend(tones,(series.temperature??[]).length?`température du ${where.toLowerCase()}`:null,sets.some(p=>p[1]!=null),'flame',max)}
-   ${why?html`<p class="why">${why}</p>`:nothing}
    ${this._stoveButtons(s,auto)}
   </div>
   ${this._fireDrawer(v,s,room)}
@@ -496,10 +495,12 @@ class HestiaHeatingCard extends LitElement {
    :'Le poêle ne s’éteint jamais seul : il descend à la flamme 1 et continue de brûler.';
   const seg=(on:boolean,label:string,run:()=>void,dis=false)=>html`<button class=${'seg'+(on?' on':'')} aria-pressed=${on?'true':'false'} ?disabled=${locked||busy||dis} @click=${run}>${label}</button>`;
   return html`<div class="ctl" @click=${(e:Event)=>e.stopPropagation()}>
-   ${ids.flamme?html`<div class="ctl-row"><b>Flamme</b><span class="segs">${seg(auto,'Auto',()=>void this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:true})),!!s.copie)}${seg(!auto,'Manuel',()=>void this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:false})))}</span>
-    <span class="steps">${Array.from({length:hi-lo+1},(_,i)=>i+lo).map(n=>html`<button class=${'step'+(set===n?' on':'')} aria-label=${`Puissance ${n}`} ?disabled=${locked||busy} @click=${()=>void power(n)}>${n}</button>`)}</span></div>`:nothing}
-   ${ids.ventilation&&levels.length?html`<div class="ctl-row"><b>Ventilation</b><span class="segs">${seg(fanBy==='auto','Par le poêle',()=>void fanAuto())}${seg(fanBy==='flamme','Par Hestia',()=>void this._press('fan',()=>settings({pilote_ventilation:'flamme'})))}${seg(fanBy==='manuel','Manuel',()=>void this._press('fan',()=>settings({pilote_ventilation:'manuel'})))}</span>
-    <span class="steps">${levels.map(n=>html`<button class=${'step'+(fanNow===n?' on':'')} aria-label=${`Vitesse ${n}`} ?disabled=${locked||busy} @click=${()=>void speed(n)}>${n}</button>`)}</span></div>`:nothing}
+   ${ids.flamme?html`<div class="ctl-row"><b>Flamme</b><span class="segs one">${seg(auto,'Auto',()=>void this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:true})),!!s.copie)}${
+    Array.from({length:hi-lo+1},(_,i)=>i+lo).map(n=>html`<button class=${'seg step'+(!auto&&set===n?' on':auto&&set===n?' cur':'')} aria-pressed=${!auto&&set===n?'true':'false'}
+     aria-label=${`Puissance ${n}, à la main`} title=${auto&&set===n?'La flamme que Hestia a réglée':''} ?disabled=${locked||busy} @click=${()=>void power(n)}>${n}</button>`)}</span></div>`:nothing}
+   ${ids.ventilation&&levels.length?html`<div class="ctl-row"><b>Ventilation</b><span class="segs one">${seg(fanBy==='auto','Poêle',()=>void fanAuto())}${seg(fanBy==='flamme','Hestia',()=>void this._press('fan',()=>settings({pilote_ventilation:'flamme'})))}${
+    levels.map(n=>html`<button class=${'seg step'+(fanBy==='manuel'&&fanNow===n?' on':fanBy!=='manuel'&&fanNow===n?' cur':'')} aria-pressed=${fanBy==='manuel'&&fanNow===n?'true':'false'}
+     aria-label=${`Vitesse ${n}, à la main`} ?disabled=${locked||busy} @click=${()=>void speed(n)}>${n}</button>`)}</span></div>`:nothing}
    ${ids.eco_stop&&eco!=null?html`<div class="ctl-row"><b>ÉCO Stop</b><span class="segs">${seg(eco,'Activé',()=>void this._press('eco',async()=>{await this._hass!.callService('switch','turn_on',{entity_id:ids.eco_stop});await settings({poele_eco_stop:true});}))}${seg(!eco,'Coupé',()=>void this._press('eco',async()=>{await this._hass!.callService('switch','turn_off',{entity_id:ids.eco_stop});await settings({poele_eco_stop:false});}))}</span>
     <p class="ctl-say">${ecoSay}</p></div>`:nothing}
   </div>`;
@@ -629,7 +630,6 @@ class HestiaHeatingCard extends LitElement {
    ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}${this._modePill(r)}`)}
    ${clock}
    ${this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),demand?'demand':null)}
-   ${r.raison?html`<p class="say">${r.raison}</p>`:nothing}
    ${this._modes(r)}
   </div>
   ${this._roomDrawer(v,r)}
