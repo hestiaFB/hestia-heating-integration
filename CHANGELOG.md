@@ -1,6 +1,6 @@
 # Changements
 
-## À venir — Un panneau rangé par pièce et par appareil
+## 1.0.0b10 — Un panneau rangé par pièce et par appareil
 
 ### Améliorations
 - **Une page par chose que vous possédez.** Le menu de Chauffage devient : Vue d’ensemble, Pièces, Poêle, Planning, Réglages, Extensions, À propos. Les réglages d’un même appareil ne sont plus éparpillés sur plusieurs écrans.

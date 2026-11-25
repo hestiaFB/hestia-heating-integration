@@ -22,5 +22,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/hestiaFB/hestia-heating-integration/issues",
   "requirements": [],
-  "version": "1.0.0b8"
+  "version": "1.0.0b10"
 }
