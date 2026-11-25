@@ -11,6 +11,15 @@
 - **Un seul geste pour qu’un planning règle un thermostat** : le cocher dans le planning suffit. La permission « Hestia change son mode » s’allume avec, et reste sur la page de la pièce pour la retirer.
 - **« Enregistrer » ne garde que les changements de la page ouverte.** Si une autre page en garde encore, une note le dit en haut, avec son lien.
 
+## 1.0.0b9 — Le poêle ne se bride plus tout seul
+
+### Corrections
+- **Le poêle ne se met plus tout seul en flamme 1.** Avant un allumage, Hestia réglait la température du poêle lui-même à 25 °C. Sa sonde, posée près de lui, lit plus chaud que la pièce : elle atteignait ces 25 °C en 40 minutes à la flamme 5, la pièce encore à 21 °C. Le poêle se mettait alors seul en flamme 1, quelle que soit la flamme demandée, et revenait à la flamme demandée dès que sa sonde redescendait : la flamme et la ventilation faisaient le yoyo, et l’ÉCO Stop pouvait l’éteindre. Hestia règle maintenant 28 °C par défaut : sa sonde n’y arrive pas pendant une chauffe normale, et l’ÉCO Stop reste la sécurité du poêle. Sans rien changer, les 28 °C partent au poêle au prochain allumage par Hestia, ou en revenant à la flamme Automatique.
+
+### Améliorations
+- **La température réglée dans le poêle se règle à côté de l’ÉCO Stop** (Réglages › Poêle à granulés), et plus dans Avancé : de 15 à 35 °C, 28 °C conseillés. Elle part au poêle dès qu’on la change, avec la flamme automatique. Un avertissement de sécurité l’accompagne : avec l’ÉCO Stop, c’est la seule sécurité qui marche sans Home Assistant ni internet ; plus elle est haute, plus la pièce chauffe avant que le poêle ne se bride puis ne s’éteigne. Au-dessus de 30 °C, ou l’ÉCO Stop coupé, l’avertissement le dit en gras.
+- **La carte et la phrase du poêle disent quand il se bride lui-même** : « Se bride lui-même en flamme 1 : sa sonde lit 25 °C pour 25 °C réglés dans le poêle ». Sur la page Réglages du poêle, l’explication de l’ÉCO Stop le dit aussi, et conseille de monter un peu la température réglée dans le poêle.
+
 ## 1.0.0b8 — Les cartes à l’image de Hestia Confort
 
 ### Améliorations

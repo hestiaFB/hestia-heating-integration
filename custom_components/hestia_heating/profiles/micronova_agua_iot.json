@@ -34,8 +34,8 @@
     "allume_si": {"role": "thermostat", "etat": "heat"},
     "recharger": true,
     "reglages": [
-      {"nom": "Consigne interne à 25 °C", "role": "thermostat", "attribut": "temperature", "valeur": 25,
-       "service": "climate.set_temperature", "donnees": {"temperature": 25}},
+      {"nom": "Consigne interne à 28 °C", "role": "thermostat", "attribut": "temperature", "valeur": 28,
+       "service": "climate.set_temperature", "donnees": {"temperature": 28}},
       {"nom": "ECO Stop", "role": "eco_stop", "valeur": "on", "service": "switch.turn_on"},
       {"nom": "Ventilation en AUTO", "role": "ventilation", "attribut": "fan_mode", "valeur": "AUTO",
        "service": "climate.set_fan_mode", "donnees": {"fan_mode": "AUTO"}, "reserve": 6}
