@@ -65,6 +65,7 @@ La v0.1 ne commandait rien. Les versions, et la suite proposée :
 Le 25 novembre 2026 :
 
 - L’après-midi, le poêle allumé « Par Hestia » s’arrête au bout de dix minutes. La station dehors était restée figée une heure : le thermostat du poêle (Versatile Thermostat) s’est mis en sécurité et s’est éteint, et Hestia l’a pris pour un vrai arrêt. Choix de Frank : une sécurité en plus de l’ÉCO Stop quand la sonde de la pièce est figée (le poêle s’arrête), pas pour la sonde dehors seule (flamme au plus bas, arrêt au bout de 2 heures). Codé en 1.0.0b7.
+- Le soir, Frank voit la flamme et la ventilation faire le yoyo entre 1 et 5. Ce n’est pas Hestia (une flamme envoyée à la fois, chacune une fois) : la sonde du poêle lui-même a atteint les 25 °C réglés dans le poêle en 40 minutes à la flamme 5, la pièce encore à 21 °C. Le poêle s’est alors mis seul en flamme 1, et y revient chaque fois que sa sonde y remonte. Proposé : 30 °C par défaut. Frank les trouve un peu hauts, et veut ce réglage au même niveau que l’ÉCO Stop, avec un avertissement de sécurité. La température réglée dans le poêle passe à 28 °C par défaut, se règle à côté de l’ÉCO Stop (de 15 à 35 °C), avec son avertissement, et la phrase du poêle dit quand il se bride lui-même. Codé en 1.0.0b9.
 
 Le 24 novembre 2026 :
 

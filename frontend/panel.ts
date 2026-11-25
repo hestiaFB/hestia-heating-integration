@@ -27,7 +27,7 @@ type Conso={debit_kg_h:number;kg_jour:number;correction:number;brasier:FirePot};
 type Read={role:string;entite:string;valeur:string|null;unite:string|null;mode_ventilation:string|null;consigne:number|null;vu:string|null};
 type Stove={nom:string;fabricant:string|null;modele:string|null;piece:string|null;profil:string;profil_nom:string;cloud:boolean;etat:string;texte:string|null;
  a_traduire:boolean;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_min:number;flamme_max:number;fumees:number|null;
- air:number|null;alarme:boolean|null;alarme_texte:string|null;eco_stop:boolean|null;eco_stop_delai?:number|null;consigne_poele?:number|null;
+ air:number|null;alarme:boolean|null;alarme_texte:string|null;eco_stop:boolean|null;eco_stop_delai?:number|null;consigne_poele?:number|null;bride?:boolean;
  ecritures:number|null;ecritures_max:number|null;ecritures_lues?:boolean;thermostat:string|null;thermostat_nom:string|null;demande_pct:number|null;
  consigne:number|null;preset:string|null;prise:string|null;prise_w:number|null;entites:Record<string,string>;lues?:Read[];ventilation?:string|null;
  ventilation_niveaux?:string[];copie?:boolean;pilote?:Pilot;conso?:Conso;pilotable?:boolean;phrase?:Badge;debits?:{allumage?:number;flammes?:number[]}};
@@ -72,7 +72,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.0.0b8';
+const VERSION='1.0.0b9';
 // The whole pilot's answers, as on the phone.
 const ANSWER:Record<string,string>={oui:'Oui, allumer',non:'Non',couper:'Couper la prise',ignorer:'Ignorer',nettoye:'J’ai nettoyé'};
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
@@ -294,6 +294,7 @@ export class HestiaHeatingSetup extends LitElement {
   .dim{opacity:.55}
   .explain{display:block;padding:12px 16px;font-size:var(--nw-fs-small,12px);color:var(--nk-muted);line-height:1.55;border-top:1px solid var(--nk-border)}
   .explain p{margin:0 0 8px}.explain p:last-child{margin:0}.explain b{color:var(--primary-text-color);font-weight:600}
+  .explain p.warn{border-left:3px solid var(--nk-todo,#e0912b);padding-left:10px}
   .always{padding:12px 16px;font-size:var(--nw-fs-small,12px);color:var(--nk-muted);border-top:1px solid var(--nk-border);line-height:1.5}.always b{color:var(--primary-text-color)}
   .g-steps{list-style:none;display:flex;flex-wrap:wrap;gap:6px;padding:0;margin:0 0 14px}
   .g-steps button{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:4px 12px 4px 6px;border-radius:999px;font-weight:600;font-size:var(--nw-fs-small,12px)}
@@ -376,7 +377,7 @@ export class HestiaHeatingSetup extends LitElement {
   const s=this.view?.poele;
   if(!s||s.copie||this.settings?.trouve.poele_copie)return;
   const auto=flameByHestia(next('pilote') as string,next('flamme_manuelle') as boolean);
-  const wanted=((next('avance') as Record<string,number>|undefined)??{}).consigne_poele??this.settings?.trouve.avance?.consigne_poele?.[0]??25;
+  const wanted=((next('avance') as Record<string,number>|undefined)??{}).consigne_poele??this.settings?.trouve.avance?.consigne_poele?.[0]??28;
   if(('pilote' in draft||'flamme_manuelle' in draft)&&auto&&s.entites.thermostat&&s.consigne_poele!=null&&s.consigne_poele!==wanted)
    await this.act('consigne','climate','set_temperature',{entity_id:s.entites.thermostat,temperature:wanted});
   if('pilote_ventilation' in draft&&next('pilote_ventilation')==='auto'&&s.entites.ventilation&&s.ventilation&&s.ventilation.toLowerCase()!=='auto'){
@@ -397,6 +398,20 @@ export class HestiaHeatingSetup extends LitElement {
   await this.act('eco',`switch`,on?'turn_on':'turn_off',{entity_id:s.entites.eco_stop});
   if(!this.failed){try{await this.hass!.callWS({type:'hestia_heating/set_settings',reglages:{poele_eco_stop:on}});await this.load();}
    catch(e){this.failed=(e as {message?:string}).message??'Le choix de l’ÉCO Stop n’a pas été gardé.';}}
+ }
+ /** « Température réglée dans le poêle », beside the ÉCO Stop (1.0.0b9, Frank): the figure Hestia sends before each
+     start while the flame is automatic. Kept at once, and sent to the stove at once while the flame is automatic (the
+     user's press, as from its app). Never to a stove copied from another house. */
+ private async stoveTemp(s:Stove,n:number){
+  const [d,lo,hi]=this.settings?.trouve.avance?.consigne_poele??[28,15,35];
+  if(!Number.isFinite(n)||n<lo||n>hi){this.failed=`La température réglée dans le poêle va de ${num(lo)} à ${num(hi)} °C.`;return;}
+  if(this.modeChoice().auto&&s.entites.thermostat&&!s.copie)await this.act('consigne','climate','set_temperature',{entity_id:s.entites.thermostat,temperature:n});
+  if(this.failed)return;
+  const put=(a:Record<string,number>|undefined)=>{const x={...(a??{})};if(n===d)delete x.consigne_poele;else x.consigne_poele=n;return x;};
+  try{await this.hass!.callWS({type:'hestia_heating/set_settings',reglages:{avance:put(this.stored('avance') as Record<string,number>|undefined)}});
+   if('avance' in this.draft)this.draft={...this.draft,avance:put(this.draft.avance as Record<string,number>)};
+   await this.load();}
+  catch(e){this.failed=(e as {message?:string}).message??'La température réglée dans le poêle n’a pas été gardée.';}
  }
  /** A figure of the stove (Réglages › Avancé) in force: the one saved, else its default. */
  private fig(key:string,draft=false):number{
@@ -858,8 +873,10 @@ export class HestiaHeatingSetup extends LitElement {
   const f=s.trouve,st=v.poele,locked=!!f.poele_copie||!!st?.copie,p=st?.pilote,week=p?.accord_semaine;
   const thermo=this.val<string|null>('poele_thermostat'),plug=this.val<string|null>('poele_prise'),{auto}=this.modeChoice();
   const fan=this.val<string>('pilote_ventilation')??'auto',ids=st?.entites??{},busy=!!this.busy;
-  const changedFigs=Object.keys(this.val<Record<string,number>>('avance')??{}).length,figs=Object.keys(f.avance??{}).length+8;
+  // The stove's own temperature is shown beside the ÉCO Stop (1.0.0b9), not in Avancé.
+  const changedFigs=Object.keys(this.val<Record<string,number>>('avance')??{}).filter(k=>k!=='consigne_poele').length,figs=Object.keys(f.avance??{}).length+7;
   const g=v.granules;
+  const [tempD,tempLo,tempHi]=f.avance?.consigne_poele??[28,15,35],tempDflt=tempD??28,temp=this.fig('consigne_poele');
   return html`${locked?noteBox('Recopié','Ce poêle est recopié d’une autre maison : ses commandes sont grisées, Hestia ne lui envoie rien.'):nothing}
    ${listSection('Votre poêle',[
     listRow({label:html`<b>${st?.nom??'Poêle'}</b>`,name:st?.nom??'Poêle',sub:st?`${st.fabricant?`${st.fabricant}, `:''}profil ${st.profil_nom} · Hestia connaît cette marque`:undefined,value:'Ce que Hestia y lit',go:()=>this.go('poele')}),
@@ -873,20 +890,24 @@ export class HestiaHeatingSetup extends LitElement {
     html`<div class=${auto?'dim':''}>${listRow({label:'En manuel : la puissance',control:true,sub:auto?'Choisissez « Manuel » pour la régler vous-même.':'Part au poêle dès que vous la touchez.',
       value:this.steps('Puissance du poêle',Array.from({length:(st?.flamme_max??5)-(st?.flamme_min??1)+1},(_,i)=>String(i+(st?.flamme_min??1))),st?.flamme_reglee!=null?String(st.flamme_reglee):null,
        n=>void this.act('flame','number','set_value',{entity_id:ids.flamme,value:Number(n)}),locked||auto||busy||!ids.flamme)})}
-     ${listRow({label:'et la température du poêle',control:true,sub:'Celle réglée dans le poêle lui-même : sa propre sonde la compare à la pièce.',
+     ${auto?nothing:listRow({label:'et la température du poêle',control:true,sub:'Celle réglée dans le poêle lui-même : sa propre sonde la compare à la pièce.',
       value:html`<input class="num" type="number" inputmode="decimal" aria-label="Température réglée dans le poêle" min="5" max="35" step="0.5" .value=${st?.consigne_poele!=null?String(st.consigne_poele):''}
        ?disabled=${locked||auto||busy||!ids.thermostat} @change=${(e:Event)=>{const n=Number((e.target as HTMLInputElement).value.replace(',','.'));
         if(Number.isFinite(n))void this.act('consigne','climate','set_temperature',{entity_id:ids.thermostat,temperature:n});}}> °C`})}</div>`,
     ...(ids.ventilation?[this.fanChoice(v),...(fan==='manuel'?[listRow({label:'La vitesse',control:true,sub:'Part au poêle dès que vous la touchez.',
       value:this.steps('Vitesse de la ventilation',st?.ventilation_niveaux??[],st?.ventilation,n=>void this.act('fan','climate','set_fan_mode',{entity_id:ids.ventilation,fan_mode:n}),locked||busy)})]:[])]:[]),
     ...(ids.eco_stop&&st?[listRow({label:'ÉCO Stop',control:true,sub:'La sécurité du poêle lui-même.',value:toggle('ÉCO Stop',st.eco_stop===true,on=>void this.ecoStop(st,on),locked||busy||st.eco_stop==null)}),
+     ...(ids.thermostat?[listRow({label:'Température réglée dans le poêle',control:true,sub:`Celle que surveille l’ÉCO Stop, avec la flamme automatique. ${num(tempDflt)}\u00a0°C conseillés.${auto?' Part au poêle dès que vous la changez.':' En manuel, c’est la température choisie plus haut qui compte.'}`,
+      value:html`<input class="num" type="number" inputmode="numeric" aria-label="Température réglée dans le poêle, flamme automatique" min=${tempLo} max=${tempHi} step="1" .value=${String(temp)}
+       ?disabled=${locked||busy} @change=${(e:Event)=>{const n=Number((e.target as HTMLInputElement).value.replace(',','.'));void this.stoveTemp(st,n);}}> °C`})]:[]),
      ...(ids.eco_stop_delai?[listRow({label:'Attendre avant de s’éteindre',control:true,sub:'Le délai ÉCO Stop du poêle, de 0 à 30 minutes. Lu dans le poêle.',
       value:html`<input class="num" type="number" inputmode="numeric" aria-label="Délai ÉCO Stop" min="0" max="30" step="1" .value=${st.eco_stop_delai!=null?String(st.eco_stop_delai):''}
        ?disabled=${locked||busy} @change=${(e:Event)=>{const n=Number((e.target as HTMLInputElement).value);if(Number.isFinite(n))void this.act('delai','number','set_value',{entity_id:ids.eco_stop_delai,value:n});}}> min`})]:[]),
      html`<div class="explain"><p>Activé, le poêle s’éteint seul quand sa propre sonde reste ${st.eco_stop_delai??5} minutes au-dessus de la température réglée dans le poêle, puis se rallume quand la pièce redescend. Il le fait même si Home Assistant est arrêté ou internet coupé.</p>
-      <p>Avec la flamme automatique, Hestia règle le poêle sur ${num(this.fig('consigne_poele'))} °C : sa sonde n’y arrive presque jamais, donc il ne s’éteint seul qu’en cas de vraie surchauffe, et c’est Hestia qui tient la température voulue. En manuel, c’est la température choisie ci-dessus qui compte.</p>
-      ${st.air!=null&&st.consigne_poele!=null?html`<p><b>En ce moment : sa sonde lit ${deg(st.air)} pour ${deg(st.consigne_poele)} réglés.</b>${st.eco_stop?' Activé ne veut pas dire qu’il s’éteint : il le fera seulement s’il dépasse.':''}</p>`:nothing}
-      <p>Sans ÉCO Stop, le poêle ne s’éteint jamais seul : il descend à la flamme 1 et continue de brûler.</p></div>`]:[]),
+      <p>Avec la flamme automatique, Hestia règle le poêle sur ${num(temp)} °C avant chaque allumage. Sa sonde, posée près de lui, lit plus chaud que la pièce. Si elle arrive à cette température, il se bride lui-même à la flamme 1, quelle que soit la flamme demandée, puis l’ÉCO Stop l’éteint. Réglée juste assez haut, elle ne sert qu’en surchauffe, et c’est Hestia qui tient la température voulue.</p>
+      ${st.air!=null&&st.consigne_poele!=null?html`<p><b>En ce moment : sa sonde lit ${deg(st.air)} pour ${deg(st.consigne_poele)} réglés.</b>${st.bride?' Il se bride lui-même : montez un peu la température réglée dans le poêle.':st.eco_stop?' Activé ne veut pas dire qu’il s’éteint : il le fera seulement s’il dépasse.':''}</p>`:nothing}
+      <p>Sans ÉCO Stop, le poêle ne s’éteint jamais seul : il descend à la flamme 1 et continue de brûler.</p>
+      <p class="warn"><b>Sécurité.</b> L’ÉCO Stop et cette température sont la seule sécurité qui marche même sans Home Assistant ni internet. Plus elle est haute, plus la pièce chauffe avant que le poêle ne se bride puis ne s’éteigne. Trop basse, il se bride en pleine chauffe. Montez-la par petits pas, seulement s’il se bride.${temp>30?html` <b>Au-dessus de 30\u00a0°C, il ne réagit plus qu’à une forte surchauffe.</b>`:nothing}${st.eco_stop===false?html` <b>ÉCO Stop coupé : le poêle ne s’éteint jamais seul. Seule la sécurité de Hestia l’arrête (la pièce au-dessus de ${num(this.fig('surchauffe_c'))} °C), et seulement quand Home Assistant tourne.</b>`:nothing}</p></div>`]:[]),
    ])}
    ${listSection('Allumer et éteindre',[this.lightChoice(v,s),
     ...(week?.sur&&p?.mode!=='entier'?[listRow({label:'Ce que Hestia aurait fait',sub:`Pareil que vos automatisations ${week.oui} fois sur ${week.sur} depuis le ${dayOf(week.depuis)}, sans rien envoyer.`,go:()=>this.go('poele')})]:[]),
@@ -899,7 +920,7 @@ export class HestiaHeatingSetup extends LitElement {
    ])}
    ${listSection('',[listRow({label:html`<b>Avancé : comment Hestia conduit le poêle</b>`,name:'Avancé',
      sub:`Les paliers de la flamme, l’allumage, l’arrêt, les sécurités, le comptage des granulés. ${figs} réglages, ${changedFigs?`${changedFigs} changé${changedFigs>1?'s':''}`:'tous à leur valeur par défaut'}.`,go:()=>this.go('reglages/poele/avance')})])}
-   <p class="hint after" style="margin-top:-8px">La flamme en manuel, la vitesse de la ventilation et l’ÉCO Stop partent au poêle dès que vous les changez, ici ou sur sa carte, comme depuis son application. Chaque changement s’écrit dans la mémoire du poêle, qui en permet ${st?.ecritures_max??20} par jour : Hestia en garde toujours ${this.fig('garde')} pour pouvoir l’éteindre. Les choix Automatique ou Manuel s’enregistrent avec le bouton Enregistrer.</p>`;
+   <p class="hint after" style="margin-top:-8px">La flamme en manuel, la température réglée dans le poêle, la vitesse de la ventilation et l’ÉCO Stop partent au poêle dès que vous les changez, ici ou sur sa carte, comme depuis son application. Chaque changement s’écrit dans la mémoire du poêle, qui en permet ${st?.ecritures_max??20} par jour : Hestia en garde toujours ${this.fig('garde')} pour pouvoir l’éteindre. Les choix Automatique ou Manuel s’enregistrent avec le bouton Enregistrer.</p>`;
  }
 
  /* ── Avancé: every figure the stove's pilot follows ── */
@@ -945,7 +966,6 @@ export class HestiaHeatingSetup extends LitElement {
     fig('allumage_verif_min','Vérifier l’allumage après','min','Pas pris : l’intégration du poêle est rechargée et l’ordre renvoyé.'),
     fig('recharge_s','Attendre après le rechargement','s','Le temps que l’intégration du poêle revienne.'),
     fig('demarrages_max','Allumages par jour, au plus','','Au-delà, allumez-le vous-même.'),
-    fig('consigne_poele','Température réglée dans le poêle','°C','Envoyée avant chaque allumage quand la flamme est automatique, et quand vous revenez à Automatique. Assez haute pour que l’ÉCO Stop ne coupe qu’en vraie surchauffe.',0.5),
     always('Hestia n’allume jamais le poêle de lui-même : seulement au passage de son thermostat en Boost. Pas si le thermostat est éteint, le poêle en alarme ou muet, ni pendant le démarrage de Home Assistant.'),
    ],{help:pilote==='entier'?'Hestia allume et éteint le poêle.':'Ces chiffres servent quand Hestia allume et éteint le poêle, et à son essai à blanc.'})}
    ${listSection('L’arrêt',[

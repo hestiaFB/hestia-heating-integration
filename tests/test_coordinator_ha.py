@@ -543,13 +543,14 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         self.assertIn(("persistent_notification", "create"), [s[:2] for s in self.sent])
         self.assertEqual(p["conduite"]["question"]["reponses"], ["oui", "non"])
         self.assertFalse([s for s in self.sent if s[0] in ("climate", "switch", "number")], "nothing to the stove yet")
-        # « Oui » on the phone: the question goes, the stove's own set point to 25 °C, then the order to light 2 s later.
+        # « Oui » on the phone: the question goes, the stove's own set point to 28 °C (1.0.0b9), then the order to light
+        # 2 s later.
         self.sent.clear()
         hass.bus.async_fire("mobile_app_notification_action", {"action": "HESTIA_POELE_OUI"})
         await hass.async_block_till_done()
         self.assertIn(("notify", "telephones", {"message": "clear_notification", "data": {"tag": "hestia_poele_saison"}}),
                       self.sent)
-        self.assertIn(("climate", "set_temperature", {"entity_id": "climate.poele", "temperature": 25}), self.sent)
+        self.assertIn(("climate", "set_temperature", {"entity_id": "climate.poele", "temperature": 28}), self.sent)
         self.assertNotIn("set_hvac_mode", [s[1] for s in self.sent])
         await asyncio.sleep(2.5)
         await hass.async_block_till_done()

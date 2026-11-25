@@ -232,6 +232,8 @@ def build(snap: dict) -> dict:
         # The stove's sentence (1.0), once its pilot has said what it does.
         stove["phrase"] = stove_says.sentence(stove, stove_thermostat, next((r for r in room_list if r.get("poele")), None),
                                               now)
+        # Holding back by itself, its own probe at the temperature set in it (1.0.0b9): the Poêle tab says what to do.
+        stove["bride"] = stove_says.bridled(stove)
     lanes = _lanes(room_list, srcs, stove_thermostat, lines, naive_now)
     room_names = {r["id"]: r["nom"] for r in room_list}
     plan = _home_planning(plannings, home_lines, srcs, stove_thermostat, room_names, aimed_on, schedules, copies,
