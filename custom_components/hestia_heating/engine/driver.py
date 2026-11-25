@@ -23,6 +23,9 @@ cloud's delays, one at a time:
   minutes later (its state, its smoke under 60 °C, its plug under 70 W); else the order again, and 30 s later the
   question « Couper la prise ? », cut after 5 minutes without an answer when Réglages allow it.
 - Safety (an alarm that lasts 2 minutes, the room over 28 °C while it burns): the thermostat off, then the stop.
+- The stove's thermostat in its own safety (1.0.0b7: a probe without news, it switches itself off). The outdoor probe
+  alone: not a stop, the flame at its lowest until it comes back, the stop only when it lasts 2 hours. The room's
+  probe, or a safety that does not say which: the stop, as for a switch-off.
 - A silent stove for 15 minutes: said, with what its plug draws, and the plug offered; nothing else.
 - After a restart of Home Assistant: 3 minutes later, once the stove's state is known, a stove that burns with its
   thermostat off gets its thermostat back on, in boost. Nothing is sent to the stove.
@@ -199,6 +202,21 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
         run.log("Le poêle a été allumé sans Hestia : Hestia passe le thermostat du poêle en boost pour le conduire.")
     elif state not in BURNING and state != "inconnu":
         mem["adopte"] = None
+    # The thermostat in its own safety (1.0.0b7: a probe without news, it switches itself off). The outdoor probe alone:
+    # not a stop, the pilot keeps the stove at its lowest flame and stops it only when the safety lasts. The room's
+    # probe, or a safety that does not say which: the stop (pilot.decide). Said once in the journal, for each probe.
+    probe = pilot_mem.get("securite_sonde") if thermostat.get("securite") else None
+    if probe and probe != mem.get("securite") and state in BURNING:
+        mem["securite"] = probe
+        run.log({"dehors": "Le thermostat du poêle est en sécurité : la sonde dehors ne donne plus de nouvelles. La "
+                           "pièce reste surveillée : Hestia garde le poêle au plus bas et attend son retour.",
+                 "piece": "Le thermostat du poêle est en sécurité : la sonde de la pièce ne donne plus de nouvelles. "
+                          "Hestia arrête le poêle."}.get(probe, "Le thermostat du poêle est en sécurité, sans dire quelle "
+                                                          "sonde ne donne plus de nouvelles : Hestia arrête le poêle par "
+                                                          "prudence."), sent=False)
+    elif not probe and mem.get("securite"):
+        mem["securite"] = None
+        run.log("Le thermostat du poêle est sorti de sa sécurité.", sent=False)
     # 1. Safety and stop, on the decision's change (the house's automations stop on a change, not on a state).
     before = mem.get("voulu")
     mem["voulu"] = action

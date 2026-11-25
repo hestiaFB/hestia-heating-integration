@@ -236,7 +236,7 @@ L’escalier est **une seule fonction**, appelée par le pilote et par l’affic
 **Déclenché** par :
 
 - le préréglage qui passe en hors gel ;
-- le thermostat éteint **depuis 30 s**, et seulement s’il était avant dans un état connu, avec un préréglage (pas un retour de redémarrage) ;
+- le thermostat éteint **depuis 30 s**, et seulement s’il était avant dans un état connu, avec un préréglage (pas un retour de redémarrage) ; éteint par sa propre sécurité, il compte aussi, sauf pour la sonde dehors seule (voir « Les sécurités ») ;
 - la maison assez chaude depuis 2 minutes (le préréglage passe alors en hors gel).
 
 Un thermostat **déjà** éteint ne déclenche rien : les sécurités et le bouton Éteindre lancent alors l’arrêt eux-mêmes.
@@ -261,8 +261,11 @@ Couper la prise en pleine chauffe arrête aussi l’extracteur qui refroidit le 
 | Poêle muet | 15 min | prévient seulement, avec la prise : au-dessus de 60 W, « il chauffe encore et ne reçoit plus d’ordre » ; sinon « physiquement à l’arrêt ». Propose de couper la prise |
 | Brasier à nettoyer | aucun | prévient : la chauffe en cours finit, le prochain démarrage est bloqué |
 | Maison assez chaude | 2 min | hors gel, donc arrêt |
+| Thermostat du poêle en sécurité, sonde de la pièce sans nouvelles (ou sans dire laquelle) | 30 s | arrêt, comme un thermostat éteint |
+| Thermostat du poêle en sécurité, sonde dehors seule sans nouvelles | 2 h | flamme au plus bas jusqu’à son retour, puis arrêt |
 
 - **Un poêle muet ne coupe pas le thermostat** (le choix de la maison de référence) : les ordres ne passent plus, couper ne ferait qu’arrêter la modulation et perdre la trace. Le seul levier qui marche encore est la prise.
+- **Le thermostat du poêle en sécurité** (1.0.0b7) : Versatile Thermostat se met en sécurité quand une de ses sondes ne donne plus de nouvelles pendant son délai (60 min dans la maison de référence), et s’éteint (chauffe de sécurité à 0 %). Il dit dans ses attributs quand chaque sonde a parlé pour la dernière fois (`last_temperature_datetime`, `last_ext_temperature_datetime`). **La sonde de la pièce sans nouvelles** : la pièce n’est plus surveillée (ni la consigne, ni les 28 °C), Hestia arrête le poêle, comme pour un thermostat éteint ; de même quand le thermostat ne dit pas quelle sonde. **La sonde dehors seule** : elle ne sert qu’à affiner la chauffe (coefficient 0,03 contre 0,7 pour la pièce dans la maison de référence), la pièce reste surveillée : flamme au plus bas jusqu’au retour du thermostat, et arrêt si ça dure 2 heures (Réglages › Avancé, seulement plus court). Le retour du thermostat n’est pas un passage en boost : un poêle arrêté attend le prochain. *Pourquoi : le 25 novembre, la station dehors est restée figée à 12,0 °C une heure ; le thermostat s’est mis en sécurité et Hestia a arrêté le poêle 30 secondes après. Choix de Frank : une sécurité en plus de l’ÉCO Stop pour la sonde de la pièce, pas pour la sonde dehors.*
 - **Les 2 minutes de la maison assez chaude** : au redémarrage de Home Assistant, la condition s’est éteinte 14 secondes, le temps que ses sondes reviennent ; sans délai, le poêle passait en hors gel en pleine chauffe.
 - **La veille** : dans la maison de référence, les sécurités partent sur un changement d’état, qui peut être manqué (un redémarrage, un rechargement) ; une veille repasse toutes les 2 minutes et au démarrage. Hestia décide sur l’état à chaque calcul, pas sur les changements : la veille est faite à chaque calcul.
 

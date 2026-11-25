@@ -10,7 +10,8 @@ from datetime import timedelta
 
 # key: (default, lowest, highest). A default of None is the stove's profile's own figure (its pellets per hour).
 # The limits the brick promises (CLAUDE.md, rule 3: 12 flame orders and 3 starts a day, 3 failures, one fan order every
-# 10 minutes) and the safeties (the reserves of writes, the overheating, the alarm) may only be made stricter.
+# 10 minutes) and the safeties (the reserves of writes, the overheating, the alarm, the thermostat in its own safety)
+# may only be made stricter.
 SPEC: dict[str, tuple[float | None, float, float]] = {
     # The flame, automatic: the thermostat's demand (%) from which the flame is 5, 4, 3 (else 2).
     "palier_5": (85, 50, 100),
@@ -47,6 +48,7 @@ SPEC: dict[str, tuple[float | None, float, float]] = {
     "alarme_min": (2, 1, 2),             # an alarm counts once it lasts this long
     "muet_min": (15, 5, 60),              # a silent stove said after this
     "prise_brule_w": (60, 10, 200),       # a silent stove whose plug draws more still burns
+    "securite_max_min": (120, 15, 120),   # the stove's thermostat in safety for its outdoor probe: stopped after this
     # Counting the pellets.
     "debit_allumage": (None, 0.1, 5),     # kg/h while lighting (None: the profile's)
     "debit_1": (None, 0.1, 5),
@@ -74,7 +76,8 @@ WORDS = {
     "arret_verif_min": "vérifier l’arrêt après", "fumees_froides_c": "fumées froides sous",
     "prise_repos_w": "prise au repos sous", "prise_reponse_min": "attendre avant de couper la prise",
     "surchauffe_c": "couper au-dessus de", "alarme_min": "une alarme compte après", "muet_min": "poêle muet après",
-    "prise_brule_w": "il brûle encore au-dessus de", "debit_allumage": "débit à l’allumage",
+    "prise_brule_w": "il brûle encore au-dessus de", "securite_max_min": "sonde dehors sans nouvelles, au plus",
+    "debit_allumage": "débit à l’allumage",
     "debit_1": "débit en flamme 1", "debit_2": "débit en flamme 2", "debit_3": "débit en flamme 3",
     "debit_4": "débit en flamme 4", "debit_5": "débit en flamme 5", "kwh_kg": "énergie d’un kilo",
     "rendement": "rendement du poêle", "brasier_bientot_kg": "prévenir du brasier",

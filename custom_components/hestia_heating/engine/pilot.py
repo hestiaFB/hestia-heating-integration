@@ -21,6 +21,11 @@ The thermostat of the stove decides how much to heat (its demand, in %); the pil
 - Stop: the thermostat at hors gel (frost), or off for 30 seconds (switched off from a known state with a preset, not
   restored off by a restart), or the house warm enough for 2 minutes (no longer 1 °C under the set point, or not under
   it at all in boost). Checked by the stove's state, its smoke under 60 °C, or its plug under 70 W.
+- The thermostat in its own safety (1.0.0b7: Versatile Thermostat without news of a probe switches itself off). For
+  the outdoor probe alone: not a stop, the flame at its lowest until the thermostat comes back, the stop only when it
+  lasts 2 hours (the room is still watched). For the room's probe, or when the thermostat does not say which: the
+  stop, as for a switch-off (the room is no longer watched). Its way back is not a step up: a stove stopped then waits
+  for the next boost.
 - Safety: an alarm that lasts 2 minutes, or the stove's room over 28 °C while it burns: cut (the thermostat off, then
   the stove). A stove silent for 15 minutes: say so, nothing else.
 - A switch chosen in Réglages (« flamme au plus bas », like a switch that forces flame 1) asks for the lowest flame.
@@ -99,6 +104,29 @@ def _held(mem: dict, key: str, active: bool, since: str | None, now: datetime) -
     return start
 
 
+def _stale_probe(thermostat: dict, now: datetime) -> str | None:
+    """The probe a Versatile Thermostat in safety has no news of: « piece » (its room's, checked first: the stove
+    must not burn blind), « dehors » (the outdoor one alone), or None when it does not say."""
+    delay = timedelta(minutes=float(thermostat.get("securite_delai_min") or 60))
+    room_at, out_at = _iso(thermostat.get("sonde_piece_a")), _iso(thermostat.get("sonde_dehors_a"))
+    if room_at is None or (room_at.tzinfo is None) != (now.tzinfo is None):
+        return None
+    if now - room_at >= delay:
+        return "piece"
+    if out_at is not None and (out_at.tzinfo is None) == (now.tzinfo is None) and now - out_at >= delay:
+        return "dehors"
+    return None
+
+
+def _duration(minutes: float | None) -> str:
+    """« 2 h », « 1 h 30 », « 45 min »."""
+    total = int(minutes or 0)
+    hours, rest = divmod(total, 60)
+    if not hours:
+        return f"{rest} min"
+    return f"{hours} h" + (f" {rest:02d}" if rest else "")
+
+
 def warm_enough(house_c: float | None, target_c: float | None, preset: str | None) -> bool:
     """The house no longer needs the stove: not 1 °C under the set point (not under it at all in boost). An unknown
     house temperature counts as warm, like the house's own rule: no stove on a guess."""
@@ -162,7 +190,30 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
         mem["arret_vrai"] = before_mode not in (None, "unavailable", "unknown") and before_preset is not None
     elif mode != "off":
         mem["arret_vrai"] = None
-    off_since = _held(mem, "arret_a", mode == "off" and bool(mem.get("arret_vrai")), None, now)
+    # The thermostat in its own safety (1.0.0b7): Versatile Thermostat, without news of a probe for its delay (on
+    # 25 November the outdoor station, still for an hour), switches itself off until the probe speaks again. The
+    # outdoor probe alone is not a switch-off: the flame goes to its lowest, and the stove stops only when the safety
+    # lasts. The room's probe, or a safety that does not say which: a switch-off (Frank, 25 November: « si la
+    # température intérieure est figée, il vaut mieux mettre en sécurité »).
+    safety = bool(thermostat.get("securite"))
+    safety_since = _held(mem, "securite_a", safety, None, now)
+    probe = _stale_probe(thermostat, now) if safety else None
+    if not safety:
+        mem["securite_sonde"] = None
+    elif probe == "piece" or mem.get("securite_sonde") == "piece":
+        mem["securite_sonde"] = "piece"
+    elif probe == "dehors" or mem.get("securite_sonde") == "dehors":
+        mem["securite_sonde"] = "dehors"     # kept for the episode: the probe may speak a moment before it comes back
+    else:
+        mem["securite_sonde"] = "inconnue"
+    outdoor_only = mem["securite_sonde"] == "dehors"
+    # Its way back (on, in the preset it had) is not a step up: the stove never relights on its own.
+    seen_safe = _iso(mem.get("securite_vue"))
+    if safety:
+        mem["securite_vue"] = now.isoformat()
+    back_from_safety = not safety and seen_safe is not None and now - seen_safe <= HELD
+    safety_long = bool(outdoor_only and safety_since and now - safety_since >= tuning.minutes("securite_max_min"))
+    off_since = _held(mem, "arret_a", mode == "off" and bool(mem.get("arret_vrai")) and not outdoor_only, None, now)
     # Hors gel stops the burn it finds (1.0.0b5), as the house's own « Arrêt » does: on the step to hors gel while the
     # stove burns, kept while the preset stays and the stove is not yet off. A stove lit later by hand, its thermostat
     # still in hors gel (or back in hors gel after a restart), is not stopped for it: Hestia puts it in boost.
@@ -172,7 +223,8 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     elif preset == "frost" and before_preset not in (None, "frost"):
         mem["gel_vrai"] = True
     lit_in_frost = preset == "frost" and not mem.get("gel_vrai")
-    wants_off = (preset == "frost" and not lit_in_frost) or bool(off_since and now - off_since >= OFF_HELD)
+    wants_off = ((preset == "frost" and not lit_in_frost) or bool(off_since and now - off_since >= OFF_HELD)
+                 or safety_long)
     overheat_c = tuning.get("surchauffe_c")
     overheat = room is not None and room > overheat_c
     # The fire pot, counted by Hestia (engine/granules.py): full, the next start waits for « J'ai nettoyé ».
@@ -191,8 +243,9 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
 
     # The step up to boost (or on to heat, in boost), the stove off or lit by the house in the same moment.
     start = None
-    stepped = (before_preset is not None and before_preset != "boost" and preset == "boost") or (
-        before_mode is not None and before_mode != "heat" and mode == "heat" and preset == "boost")
+    stepped = ((before_preset is not None and before_preset != "boost" and preset == "boost") or (
+        before_mode is not None and before_mode != "heat" and mode == "heat" and preset == "boost")) and not (
+        safety or back_from_safety)
     if stepped and state != "extinction" and (not burning or before_state in ("eteint", "inconnu", "alarme")):
         refusal = None
         if mode == "off":
@@ -249,7 +302,14 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     #    it said counts as burning (the house's stop waits 2 minutes for its state, then sends anyway).
     elif (burning or (silent and known_before in BURNING)) and (
             wants_off or (warm and warm_since and now - warm_since >= tuning.minutes("chaud_min"))):
-        why = ("Le thermostat est passé hors gel." if preset == "frost" else "Le thermostat est éteint." if wants_off
+        why = ("Le thermostat est passé hors gel." if preset == "frost" and not safety_long
+               else f"Le thermostat est en sécurité depuis {_duration(tuning.get('securite_max_min'))} : la sonde "
+                    "dehors ne donne plus de nouvelles." if safety_long
+               else "Le thermostat est en sécurité : la sonde de la pièce ne donne plus de nouvelles."
+               if wants_off and mem["securite_sonde"] == "piece"
+               else "Le thermostat est en sécurité, sans dire quelle sonde ne donne plus de nouvelles : Hestia "
+                    "l’arrête par prudence." if wants_off and mem["securite_sonde"] == "inconnue"
+               else "Le thermostat est éteint." if wants_off
                else f"Assez chaud : {house_text} pour {degrees(target_c)} visés. Le pilote passerait le thermostat "
                     "hors gel.")
         decision = _decision("arreter", "Arrêter le poêle", why + f" Il éteindrait le poêle "
@@ -275,7 +335,7 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
                              "minutes.", flame_set, stove)
     elif burning:
         decision = _flame(stove, now, demand, smooth, target_c, slope, flame_set, flame_since, lo, hi, low,
-                          OVER_C if over_c is None else over_c)
+                          OVER_C if over_c is None else over_c, mem["securite_sonde"])
     else:
         decision = _rest(stove, state, preset, wants_off, silent)
 
@@ -289,14 +349,24 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     if decision["action"] in ACTS and key != before:
         events.insert(0, {"heure": at, "qui": "hestia", "texte": _would(decision), "accord": None})
     mem["dernier"] = key
+    # The probe the stove's thermostat is in safety for (1.0.0b7), for the stove's sentence.
+    decision["securite"] = mem.get("securite_sonde")
     return decision, mem, events
 
 
-def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo, hi, low=None, over_c=OVER_C) -> dict:
-    """The flame, from the stove's current one: the house's modulation, step by step."""
+def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo, hi, low=None, over_c=OVER_C,
+           safety=None) -> dict:
+    """The flame, from the stove's current one: the house's modulation, step by step. `safety`: the probe the stove's
+    thermostat is in safety for (« dehors », « piece », « inconnue »), or None."""
     current = flame_set
     hot, why = False, ""
-    if low:
+    if safety == "dehors":
+        hot, why = True, ("Le thermostat du poêle est en sécurité : la sonde dehors ne donne plus de nouvelles. La "
+                          "pièce reste surveillée : flamme au plus bas jusqu’à son retour ; le poêle s’arrête si ça "
+                          f"dure {_duration(tuning.get('securite_max_min'))}.")
+    elif safety:
+        hot, why = True, "Le thermostat du poêle est en sécurité : flamme au plus bas."
+    elif low:
         hot, why = True, f"« {low} » demande la flamme au plus bas."
     elif room is not None and room > 0 and target_c is not None:
         ahead = tuning.get("avance_min")

@@ -4,7 +4,8 @@ atteinte, le poêle entretient »). Plain Python, the first true of a list, from
 
 Its tone gives the colour: « alert » (red) for an alarm, an overheat, a silent stove whose plug still draws, a stove
 burning with a window open in its room; « act » (orange) for a fire pot to clean, a silent stove, an order that did not
-go through, a start refused or waiting for an answer; « stove » while it burns; « off » otherwise.
+go through, a start refused or waiting for an answer, the stove's thermostat in its own safety; « stove » while it
+burns; « off » otherwise.
 """
 from __future__ import annotations
 
@@ -70,6 +71,15 @@ def sentence(stove: dict, thermostat: dict | None, room: dict | None, now: datet
     fire_pot = (stove.get("conso") or {}).get("brasier") or {}
     if fire_pot.get("a_nettoyer"):
         return _say(f"Brasier à nettoyer : {number(fire_pot.get('kg') or 0, 1)} kg brûlés", "act")
+    safety = bool((thermostat or {}).get("securite"))
+    if burning and safety:
+        # The thermostat in its own safety (1.0.0b7): the outdoor probe alone, the flame at its lowest until it is
+        # back; the room's probe (or unknown), Hestia stops the stove.
+        if pilot.get("securite") == "dehors":
+            return _say("Thermostat en sécurité, la sonde dehors ne répond plus : flamme au plus bas", "act")
+        if pilot.get("securite") == "piece":
+            return _say("Thermostat en sécurité, la sonde de la pièce ne répond plus : arrêt du poêle", "alert")
+        return _say("Thermostat en sécurité : une sonde ne répond plus", "act")
     if state == "allumage":
         return _say("Allumage en cours", "stove")
     if state == "extinction":
@@ -88,6 +98,8 @@ def sentence(stove: dict, thermostat: dict | None, room: dict | None, now: datet
     preset, mode = thermostat.get("preset"), thermostat.get("mode")
     if drive.get("verrou") in LOCKS:
         return _say(f"Éteint : {LOCKS[drive['verrou']]}", "act")
+    if mode == "off" and safety:
+        return _say("Thermostat en sécurité, une sonde ne répond plus : le poêle ne démarrera pas", "act")
     if mode == "off":
         return _say("Thermostat éteint : le poêle ne démarrera pas", "off")
     if drive.get("question"):

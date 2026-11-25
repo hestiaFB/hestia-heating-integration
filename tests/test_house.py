@@ -114,6 +114,18 @@ class House(unittest.TestCase):
         self.assertEqual(read(ema_temp=20.6), 20.6)
         self.assertIsNone(read())
 
+    def test_the_probes_of_a_versatile_thermostat_in_safety(self):
+        # 1.0.0b7: Versatile Thermostat 10 says when each probe last spoke, and its safety's delay.
+        from engine import sources
+        src = sources.read(m.vt("climate.vt_x", "X", "sejour", state="off",
+                                safety_manager={"safety_state": "on", "safety_delay_min": 60},
+                                specific_states={"last_temperature_datetime": "2026-11-25T13:23:39+01:00",
+                                                 "last_ext_temperature_datetime": "2026-11-25T12:27:39+01:00"}))
+        self.assertEqual((src["securite"], src["securite_delai_min"], src["sonde_piece_a"], src["sonde_dehors_a"]),
+                         (True, 60.0, "2026-11-25T13:23:39+01:00", "2026-11-25T12:27:39+01:00"))
+        plain = sources.read(m.vt("climate.vt_y", "Y", "sejour"))
+        self.assertEqual((plain["securite"], plain["sonde_piece_a"], plain["sonde_dehors_a"]), (False, None, None))
+
     def test_the_cold_to_come(self):
         self.assertEqual(self.view["dehors"]["nuit_min"], -3.0)
         self.assertIsNotNone(self.view["dehors"]["demain_max"])
