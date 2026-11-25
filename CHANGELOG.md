@@ -1,5 +1,16 @@
 # Changements
 
+## 1.0.0b10 — Un panneau rangé par pièce et par appareil
+
+### Améliorations
+- **Une page par chose que vous possédez.** Le menu de Chauffage devient : Vue d’ensemble, Pièces, Poêle, Planning, Réglages, Extensions, À propos. Les réglages d’un même appareil ne sont plus éparpillés sur plusieurs écrans.
+- **Pièces** : un tableau de vos pièces (ce qui les chauffe, leur température, leur planning, et si Hestia change leur mode ou regarde seulement). Une pièce a sa page : son planning, « Hestia change son mode », ce qui la chauffe, la montrer ou non, ce que Hestia y lit. Chaque thermostat est dans son cadre : plus de dépliants dont on ne voit pas la fin.
+- **Poêle** : une seule page, en quatre onglets. Maintenant (ce que Hestia lit et a changé aujourd’hui, l’ancienne page cachée), Conduite (la flamme, la ventilation, l’ÉCO Stop, qui allume et éteint), Granulés et brasier, Avancé.
+- **Réglages** ne garde que la maison, sur une seule page. Le prix de l’électricité est repris de Hestia Énergie quand elle est installée : plus rien à saisir.
+- **La vue d’ensemble** : la phrase « Maintenant », ce qui est à régler, puis quatre tuiles (Pièces, Poêle, Planning, Aujourd’hui) qui mènent chacune à leur page. Le guide devient un bouton en haut.
+- **Un seul geste pour qu’un planning règle un thermostat** : le cocher dans le planning suffit. La permission « Hestia change son mode » s’allume avec, et reste sur la page de la pièce pour la retirer.
+- **« Enregistrer » ne garde que les changements de la page ouverte.** Si une autre page en garde encore, une note le dit en haut, avec son lien.
+
 ## 1.0.0b9 — Le poêle ne se bride plus tout seul
 
 ### Corrections

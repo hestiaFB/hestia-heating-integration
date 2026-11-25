@@ -39,16 +39,20 @@ La clim est lue comme un thermostat. Elle est développée sur un thermostat sim
 
 Un onglet **Chauffage** dans le panneau Hestia-FB (adresse `/hestia/chauffage`) et une carte pour les tableaux de bord, sur le socle commun, comme Weather, Confort et Énergie.
 
-Depuis la 1.0.0b3 (maquette « panneau technique » validée par Frank le 24 novembre), l’onglet est technique et simple : il dit si tout marche et ce que Hestia a fait ; la température de chaque pièce vit sur les cartes.
+Depuis la 1.0.0b3 (maquette « panneau technique » validée par Frank le 24 novembre), l’onglet est technique et simple : il dit si tout marche et ce que Hestia a fait ; la température de chaque pièce vit sur les cartes. Depuis la 1.0.0b10 (maquette « nouveau parcours », validée le 25 novembre), chaque chose que l’on possède a sa page : une pièce, le poêle. Un réglage n’existe qu’à un endroit, et « Enregistrer » ne garde que les changements de la page ouverte (une note dit quand une autre page en garde).
 
 | Page | Ce qu’on y voit |
 | --- | --- |
-| Vue d’ensemble | Les thermostats qui répondent, les mesures reçues, les changements faits aujourd’hui ; ce qui est à régler ; vos appareils (par sorte, avec leur dernière nouvelle), ce que Hestia fait pour vous, ce qu’elle a changé aujourd’hui ; le lien vers le guide |
-| Le poêle, côté technique (depuis la vue d’ensemble) | Chaque entité lue, sa valeur et son âge ; ce que Hestia y a changé aujourd’hui ; le journal du jour ; l’essai à blanc et la dernière différence ; la question en attente ; le brasier |
-| Planning | La liste des plannings Hestia (une semaine en couleurs, ses thermostats, En pause ou Actif), un éditeur par planning, et les plannings de Scheduler, lus et repris en un clic |
-| Réglages | Trois onglets : La maison (ce qui chauffe, la température de la maison, la météo, le prix du kWh, le téléphone), Thermostats (pour chacun : le planning change son mode, ce qui chauffe la pièce, le montrer, ses modes, ce qui est lu, sa pièce), Poêle à granulés (son thermostat et sa prise, la flamme, la ventilation, l’ÉCO Stop, allumer et éteindre, les granulés) et son écran Avancé (tous les chiffres du pilote) |
+| Vue d’ensemble | Si tout marche ; la phrase « Maintenant » ; ce qui est à régler ; quatre tuiles (Pièces, Poêle, Planning, Aujourd’hui) qui mènent chacune à leur page ; ce que Hestia a le droit de faire ; ce qu’elle a changé aujourd’hui ; le bouton du guide |
+| Pièces | Un tableau : chaque pièce, ce qui la chauffe, sa température, son planning, et si Hestia change son mode ou regarde ; les thermostats pas montrés |
+| Une pièce | Ses chiffres (température, voulu, chauffe, humidité, fenêtre) ; pour chacun de ses thermostats, dans son cadre : son planning (le même choix que dans Planning), « Hestia change son mode », ce qui chauffe la pièce, le montrer, ses modes, ce qui est lu ; le lien vers le poêle s’il y en a un |
+| Poêle | Une page, quatre onglets : Maintenant (chaque entité lue, sa valeur et son âge, la question en attente, ce que Hestia y a changé, le journal du jour, l’essai à blanc), Conduite (son thermostat et sa prise, la flamme, la ventilation, l’ÉCO Stop, allumer et éteindre), Granulés et brasier (le stock, le prix et le poids d’un sac, le brasier et « J’ai nettoyé »), Avancé (tous les chiffres du pilote) |
+| Planning | La liste des plannings Hestia (une semaine en couleurs, ses thermostats, En pause ou Actif), un éditeur par planning, et les plannings de Scheduler, lus et repris en un clic. Cocher un thermostat dans un planning allume aussi « Hestia change son mode » |
+| Réglages | La maison seulement : ce qui chauffe chez vous, sa température, la météo, les prix (l’électricité reprise de Hestia Énergie quand elle en donne, sinon le prix du kWh ; les granulés renvoient au poêle), le téléphone |
 | Le guide | Cinq étapes, une question à la fois : ce qui chauffe, vos thermostats, le poêle, le planning, les prix |
 | Extensions, À propos | Les intégrations lues ; les versions |
+
+Les anciennes adresses (`reglages/thermostats`, `reglages/poele`, `reglages/poele/avance`, `reglages/maison`) mènent aux nouvelles pages.
 
 **Ce qui part au poêle depuis l’onglet ou la carte**, appuyé par l’utilisateur et envoyé depuis son navigateur comme depuis l’application du poêle (jamais à un poêle recopié : grisé) : la puissance et la température réglée dans le poêle en flamme manuelle, la température réglée dans le poêle pour la flamme automatique (à côté de l’ÉCO Stop, depuis la 1.0.0b9 : gardée aussitôt dans les réglages, et envoyée aussitôt au poêle quand la flamme est automatique), la vitesse de la ventilation en manuel, l’ÉCO Stop et son délai. Revenir à la flamme automatique remet la température réglée dans le poêle à celle de Hestia (28 °C par défaut, 25 °C avant la 1.0.0b9) ; revenir à la ventilation « par le poêle » la remet en AUTO. Le reste (Automatique ou Manuel, qui allume) s’enregistre avec les réglages.
 
@@ -332,7 +336,7 @@ Toute la logique d’affichage vit dans le calcul, la page ne fait que la mettre
 
 ## Les réglages
 
-Ce qui dépend du foyer, avec sa valeur par défaut. Depuis la 1.0.0b3, tous les chiffres du pilote sont dans Réglages › Poêle à granulés › Avancé (`engine/tuning.py`, leurs bornes y sont) : ce qui était « fixe » ci-dessous l’est seulement par défaut.
+Ce qui dépend du foyer, avec sa valeur par défaut. Depuis la 1.0.0b3, tous les chiffres du pilote sont dans Réglages › Poêle à granulés › Avancé (page Poêle, onglet Avancé, depuis la 1.0.0b10) (`engine/tuning.py`, leurs bornes y sont) : ce qui était « fixe » ci-dessous l’est seulement par défaut.
 
 | Réglage | Par défaut | Où |
 | --- | --- | --- |
@@ -394,7 +398,7 @@ Les questions laissées ouvertes par la maison de référence, tranchées par Fr
 
 ## La suite
 
-- Les boutons Allumer et Éteindre de la page technique du poêle (la carte du poêle les a déjà).
+- Les boutons Allumer et Éteindre de la page du poêle (la carte du poêle les a déjà).
 - Les autres profils de poêle (Palazzetti, Fumis, Rika, Edilkamin, MCZ…), un par un.
 - Hestia Énergie qui lit Chauffage pour le bilan en euros.
 - L’onglet et les cartes en anglais.
