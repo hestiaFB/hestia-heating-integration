@@ -178,8 +178,10 @@ class HestiaHeatingCard extends LitElement {
   const c=this._config.card;
   if(c==='piece'){
    const r=this._roomOf(v),tap=r&&this._tapAction(r),clock=r&&!this._config.court;
+   if(clock&&this._config.compacte)return html`<ha-card class=${'clock small '+(this._unfolded()?'open':'folded')} @click=${(e:MouseEvent)=>this._compactClick(e,r)}>${this._room(v)}</ha-card>`;
    return html`<ha-card class=${(tap?'tap ':'')+(clock?'clock':'')} @click=${tap?(e:MouseEvent)=>this._tap(e,r!):nothing}>${this._room(v)}</ha-card>`;
   }
+  if(c==='poele'&&v.poele&&this._config.compacte)return html`<ha-card class=${'clock small '+(this._unfolded()?'open':'folded')} @click=${(e:MouseEvent)=>this._compactClick(e)}>${this._stove(v)}</ha-card>`;
   if(c==='poele')return html`<ha-card class=${v.poele?'clock':''}>${this._stove(v)}</ha-card>`;
   return html`<ha-card>${c==='planning'?this._planning(v):this._house(v)}</ha-card>`;
  }
@@ -196,6 +198,39 @@ class HestiaHeatingCard extends LitElement {
  private _foot(path:string,label:string,word:string){
   return html`<div class="foot" @click=${(e:Event)=>e.stopPropagation()}><button class="nw-badge setb" aria-label=${label} @click=${()=>this._open(path)}>${SLIDERS}${word}</button></div>`;
  }
+ /* The compact cards (1.0.0b9, Frank: « plus large que haute », « comme Confort »): the clock on the left, the sentence,
+    the modes or the buttons and a short legend on its right; a press on the card or on its handle unfolds the rest (the
+    drawers with their figures, the settings' button), as Confort's foldable card does. Frank: the day's figures are
+    more to know, they go in the fold; the fire pot's button stays on the face. */
+ private _unfolded(){return !!this._drawers.carte;}
+ private _fold(){this._drawers={...this._drawers,carte:!this._unfolded()};}
+ private _compactClick(e:Event,r?:Room){
+  const path=e.composedPath(),is=(n:EventTarget,f:(x:Element)=>boolean)=>n instanceof Element&&n!==e.currentTarget&&f(n);
+  if(path.some(n=>is(n,x=>x.tagName==='BUTTON'||x.tagName==='A'||x.classList.contains('unfold'))))return;
+  // A press on the clock is the room's own tap (its thermostat, its page); never a fold.
+  if(path.some(n=>is(n,x=>x.classList.contains('wheel')))){if(r)this._tap(e,r);return;}
+  this._fold();
+ }
+ private _compact(o:{tone:string;head:unknown;clock:unknown;side:unknown;legend:unknown;body:()=>unknown}){
+  const open=this._unfolded();
+  return html`<div class="glow" style=${`--c:var(${o.tone})`} aria-hidden="true"></div>
+   <div class="top compact">${o.head}
+    <div class="pair">${o.clock}<div class="side">${o.side}${o.legend}</div></div>
+   </div>
+   ${open?html`<div class="unfold">${o.body()}</div>`:nothing}
+   <button class="handle" aria-expanded=${open?'true':'false'} aria-label=${open?'Replier la carte':'Déplier la carte'}
+    @click=${(e:Event)=>{e.stopPropagation();this._fold();}}><i></i></button>`;
+ }
+ /** The light at the top of a card, in the colour of what it does now, as on Confort's cards. */
+ private _glow(tone:string){return html`<div class="glow" style=${`--c:var(${tone})`} aria-hidden="true"></div>`;}
+ private _roomTone(r:Room){
+  if(r.badge.ton==='alert')return '--nw-alert';
+  if(r.etat==='chauffe')return r.poele?'--hc-stove':'--nw-heat';
+  if(r.etat==='rafraichit')return '--nw-cold';
+  const t=r.preset&&r.preset!=='none'?MODE_TONE[r.preset]:null;
+  return t==='cold'?'--nw-cold':t==='act'?'--nw-act':t==='heat'?'--nw-heat':'--hc-off';
+ }
+ private _stoveTone(s:Stove){return s.etat==='alarme'?'--nw-alert':s.en_feu?'--hc-stove':'--hc-off';}
  private _drawer(key:string,title:string,say:string,byDefault:boolean,body:()=>unknown,cls=''){
   const open=this._drawers[key]??byDefault;
   // A press in a drawer is never a tap on the card.
@@ -382,18 +417,13 @@ class HestiaHeatingCard extends LitElement {
    label:`Horloge du jour : ${where} à ${deg(t)}, poêle ${state}${stop?`, arrêt prévu à ${isoHm(stop.a)}`:''}.`},
    center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
   const why=this._why(s,room,auto,level);
-  if(this._config.compacte)return html`<div class="top compact">
-   ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
-    `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
-    <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`)}
-   <div class="pair">${clock}<div class="side">${why?html`<p class="why">${why}</p>`:nothing}</div></div>
-   ${this._legend(tones,(series.temperature??[]).length?`température du ${where.toLowerCase()}`:null,sets.some(p=>p[1]!=null),'flame',max)}
-   ${this._stoveButtons(s,auto)}
-  </div>
-  ${this._fireDrawer(v,s,room)}
-  ${this._pelletDrawer(v,s)}
-  ${this._foot('poele','Ouvrir les réglages du poêle','Réglages du poêle')}`;
-  return html`<div class="top">
+  if(this._config.compacte)return this._compact({tone:this._stoveTone(s),
+   head:this._head(this._config.name||s.nom,`Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
+    <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`),clock,
+   side:html`${s.phrase?html`<p class=${'say '+s.phrase.ton}>${s.phrase.texte}</p>`:why?html`<p class="say">${why}</p>`:nothing}${this._stoveButtons(s,auto)}`,
+   legend:this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),'flame',max,true),
+   body:()=>html`${this._fireDrawer(v,s,room)}${this._pelletDrawer(v,s)}${this._foot('poele','Ouvrir les réglages du poêle','Réglages du poêle')}`});
+  return html`${this._glow(this._stoveTone(s))}<div class="top">
    ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
     `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
     <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`)}
@@ -408,8 +438,12 @@ class HestiaHeatingCard extends LitElement {
  /** The clock's legend (1.0.0b8, simpler): the planning's colours, the temperature, the set point, and what one block
      outside the ring is worth. No more « hier, aux heures à venir », « allumage », « arrêt prévu », nor the line that
      asked to hover the wheel. */
- private _legend(tones:string[],temp:string|null,set:boolean,kind:'flame'|'demand'|null,max=5){
+ private _legend(tones:string[],temp:string|null,set:boolean,kind:'flame'|'demand'|null,max=5,mini=false){
   const blocks=()=>html`<i class=${'sw blocks '+kind}>${Array.from({length:3},(_,i)=>html`<b style=${`--p:${Math.round(i/2*100)}%`}></b>`)}</i>`;
+  // The compact cards' legend, beside the clock (1.0.0b9): the same marks, in fewer words.
+  if(mini)return html`<div class="legend mini">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
+   ${temp?html`<span><i class="sw line"></i>${temp}</span>`:nothing}${set?html`<span><i class="sw set"></i>consigne</span>`:nothing}
+   ${kind?html`<span class="wide">${blocks()}${kind==='flame'?'un pavé par palier':'un pavé : 20 % de chauffe'}</span>`:nothing}</div>`;
   return html`<div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
    ${temp?html`<span><i class="sw line"></i>${temp}</span>`:nothing}${set?html`<span><i class="sw set"></i>consigne</span>`:nothing}
    ${kind?html`<span>${blocks()}${kind==='flame'?`flamme : un pavé par palier, ${max} au plus`:'temps de chauffe : un pavé par 20 % de l’heure'}</span>`:nothing}</div>`;
@@ -507,13 +541,19 @@ class HestiaHeatingCard extends LitElement {
     <p class="ctl-say">${ecoSay}</p></div>`:nothing}
   </div>`;
  }
+ /** What the pellets' drawer says when closed, and the compact card in its chips. */
+ private _pelletSay(v:View,s:Stove):string[]{
+  const g=v.granules,c=s.conso,pot=c?.brasier;
+  const until=g?.jours!=null?this._dayIn(g.jours):null;
+  const potPct=pot?.kg!=null&&pot.seuil_kg?Math.round(pot.kg/pot.seuil_kg*100):null;
+  return [until?`granulés jusqu’au ${until}`:null,c?.cout_jour!=null?`${eur(c.cout_jour)} aujourd’hui`:c?`${num(c.kg_jour,1)} kg aujourd’hui`:null,
+   pot?.a_nettoyer?'brasier à nettoyer':pot?.jours!=null?`brasier : ${this._potWhen(pot)}`:
+   potPct!=null?`brasier rempli à ${potPct} %`:pot?'brasier pas encore compté':null].filter((x):x is string=>!!x);
+ }
  private _pelletDrawer(v:View,s:Stove){
   const g=v.granules,c=s.conso,pot=c?.brasier,h=this._hist?.unite==='kg'?this._hist:undefined;
   const until=g?.jours!=null?this._dayIn(g.jours):null;
-  const potPct=pot?.kg!=null&&pot.seuil_kg?Math.round(pot.kg/pot.seuil_kg*100):null;
-  const say=[until?`jusqu’au ${until}`:null,c?.cout_jour!=null?`${eur(c.cout_jour)} aujourd’hui`:c?`${num(c.kg_jour,1)} kg aujourd’hui`:null,
-   pot?.a_nettoyer?'brasier à nettoyer':pot?.jours!=null?`brasier : ${this._potWhen(pot)}`:
-   potPct!=null?`brasier rempli à ${potPct} %`:pot?'brasier pas encore compté':null].filter(Boolean).join(' · ');
+  const say=this._pelletSay(v,s).join(' · ');
   const TABS:[string,string][]=[['granules','Granulés'],['argent','Argent'],['entretien','Entretien']];
   return this._drawer('granules','Granulés · Argent · Entretien',say,false,()=>{
    const tab=this._tab('poele',TABS);
@@ -621,15 +661,12 @@ class HestiaHeatingCard extends LitElement {
    ...this._picker(),tight:!!this._config.compacte,tap:tap?{label:what,run:(e:Event)=>this._tap(e,r)}:undefined,
    label:`Horloge du jour : ${r.nom} à ${deg(r.temperature)}${r.consigne!=null?`, consigne ${deg(r.consigne)}`:''}${next?`, ${this._next(next,v)}`:''}.`},
    center(art,r.temperature!=null?`${num(r.temperature)}°`:'—',sub));
-  if(this._config.compacte)return html`<div class="top compact">
-   ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}`)}
-   <div class="pair">${clock}<div class="side">${r.raison?html`<p class="say">${r.raison}</p>`:nothing}${this._modeButtons(r)?nothing:this._modePill(r)}</div></div>
-   ${this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),demand?'demand':null)}
-   ${this._modes(r)}
-  </div>
-  ${this._roomDrawer(v,r)}
-  ${this._foot('pieces/'+r.id,`Ouvrir les réglages de ${r.nom}`,'Réglages de la pièce')}`;
-  return html`<div class="top">
+  if(this._config.compacte)return this._compact({tone:this._roomTone(r),
+   head:this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}`),clock,
+   side:html`${r.raison?html`<p class="say">${r.raison}</p>`:nothing}${this._modeButtons(r)?this._modes(r):this._modePill(r)}`,
+   legend:this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),demand?'demand':null,5,true),
+   body:()=>html`${this._roomDrawer(v,r,true)}${this._foot('pieces/'+r.id,`Ouvrir les réglages de ${r.nom}`,'Réglages de la pièce')}`});
+  return html`${this._glow(this._roomTone(r))}<div class="top">
    ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}${this._modeButtons(r)?nothing:this._modePill(r)}`)}
    ${clock}
    ${this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),demand?'demand':null)}
@@ -655,17 +692,25 @@ class HestiaHeatingCard extends LitElement {
   if(!word)return nothing;
   return html`<span class=${'pill '+(preset?MODE_TONE[preset]??'heat':'calm')}><i class="dot"></i>${word.toLowerCase()}${r.planning?' · planning':''}</span>`;
  }
- private _roomDrawer(v:View,r:Room){
+ /** What the room's drawer says when closed, and the compact card in its chips. */
+ private _roomSay(v:View,r:Room):string[]{
   const h=this._hist?.unite==='kWh'?this._hist:undefined,price=v.prix_kwh??null,today=h?.stat?h.jours.at(-1)?.valeur??null:null,heat=this._heatToday(r);
   const euros=h?.energie?h.energie.euros.at(-1)?.total??null:today!=null&&price!=null?today*price:null;
-  const say=[euros!=null?`${eur(euros)} aujourd’hui`:null,today!=null?`${num(today)} kWh`:heat?`${heat.time} de chauffe`:null,
-   r.humidite!=null?`humidité ${num(r.humidite,0)} %`:null].filter(Boolean).join(' · ');
+  return [euros!=null?`${eur(euros)} aujourd’hui`:null,today!=null?`${num(today)} kWh`:heat?`${heat.time} de chauffe`:null,
+   r.humidite!=null?`humidité ${num(r.humidite,0)} %`:null].filter((x):x is string=>!!x);
+ }
+ private _roomDrawer(v:View,r:Room,open=false){
+  const h=this._hist?.unite==='kWh'?this._hist:undefined,price=v.prix_kwh??null,heat=this._heatToday(r);
+  const say=this._roomSay(v,r).join(' · ');
   const TABS:[string,string][]=[['argent','Argent'],['conso','Conso'],['confort','Confort']];
-  return this._drawer('piece','Argent · Conso · Confort',say,false,()=>{
+  const body=()=>{
    const tab=this._tab('piece',TABS);
    return html`${this._tabbar('piece',TABS,'Détails de la pièce')}<div role="tabpanel" class="panel">${
     tab==='argent'?this._roomMoney(h,price):tab==='conso'?this._roomUse(h,heat):this._roomComfort(v,r)}</div>`;
-  });
+  };
+  // The compact card unfolded: its tabs at once, no drawer in the drawer.
+  if(open)return html`<div class="dbox inline" @click=${(e:Event)=>e.stopPropagation()}><div class="dbody">${body()}</div></div>`;
+  return this._drawer('piece','Argent · Conso · Confort',say,false,body);
  }
  /** The heating since midnight, from the thermostat's demand: 50 % for an hour count half an hour. */
  private _heatToday(r:Room){
