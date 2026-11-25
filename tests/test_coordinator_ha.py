@@ -430,6 +430,52 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         self.assertEqual(self.calls, [], "reading sends nothing")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
+    async def test_the_days_wait_for_hestia_energie_while_it_starts(self):
+        """1.0.0b13: a card asked while Hestia Énergie was not ready kept « Donnez le prix du kWh » ten minutes. The
+        days read without its prices are kept one minute only; an hour it cannot price leaves its day without euros
+        instead of losing all its prices."""
+        import time as clock
+        from custom_components.hestia_heating import reader
+        entry, c = await self._setup()
+        start = dt_util.now().replace(minute=0, second=0, microsecond=0) - timedelta(hours=4)
+
+        class Energy:
+            version = 1
+            ready = False
+
+            def tariff(self, at=None):
+                if not self.ready:
+                    return None
+                if at == start + timedelta(hours=1):
+                    raise ValueError("no price for this hour")
+                return {"price": 0.2, "period": "hp", "color": None}
+        api = Energy()
+        self.hass.data[reader.ENERGY_API] = api
+
+        async def totals(hass, stat, unit, first, now):
+            return {now.date().isoformat(): 2.0}
+
+        async def hourly(hass, stat, unit, first, now):
+            return [(start + timedelta(hours=n), 0.5) for n in range(4)]
+        try:
+            with patch.object(reader, "daily_totals", side_effect=totals), \
+                    patch.object(reader, "hourly_totals", side_effect=hourly):
+                waiting = await c.async_history("piece/bureau")
+                self.assertNotIn("energie", waiting)
+                self.assertLessEqual(c._days["histoire/piece/bureau"][0] - clock.monotonic(), 61,
+                                     "read without Énergie's prices: kept a minute only")
+                api.ready = True
+                c._days["histoire/piece/bureau"] = (clock.monotonic() - 1, waiting)
+                priced = await c.async_history("piece/bureau")
+            self.assertIn("energie", priced)
+            self.assertGreater(c._days["histoire/piece/bureau"][0] - clock.monotonic(), 500, "with its prices: ten minutes")
+            prices = reader.energy_prices(self.hass, [start + timedelta(hours=n) for n in range(3)])
+            self.assertEqual([p and p["price"] for p in prices], [0.2, None, 0.2], "one hour without a price, not none")
+            self.assertEqual(self.calls, [], "reading sends nothing")
+        finally:
+            self.hass.data.pop(reader.ENERGY_API, None)
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
     async def test_the_price_of_a_kwh_is_a_setting(self):
         entry, c = await self._setup()
         self.assertIsNone(card_view(c.data)["prix_kwh"])

@@ -1,5 +1,12 @@
 # Changements
 
+## 1.0.0b13 — « Argent » trouve les prix de Hestia Énergie après un redémarrage
+
+### Corrections
+- **L’onglet Argent d’une pièce ne demande plus le prix du kWh quand Hestia Énergie le donne.** Juste après un redémarrage, la carte pouvait lire les derniers jours avant que Hestia Énergie soit prête : elle disait alors « Donnez le prix du kWh dans les réglages » pendant dix minutes. Ces jours sont maintenant relus au bout d’une minute.
+- **En attendant, la carte compte au prix de Hestia Énergie en ce moment**, et le dit, au lieu de ne rien montrer. Même chose pour le poêle face à l’électricité.
+- **Une heure sans prix ne fait plus perdre tous les prix** : seul son jour reste sans euros.
+
 ## 1.0.0b11 — La carte compacte se replie, comme celle de Hestia Confort
 
 ### Améliorations

@@ -440,7 +440,13 @@ def energy_prices(hass: HomeAssistant, hours: list[datetime]) -> list[dict | Non
             return None
         out = []
         for at in hours:
-            t = api.tariff(at)
+            # 1.0.0b13: an hour Hestia Énergie cannot price is an hour without a price (its day without euros), never
+            # the end of all its prices.
+            try:
+                t = api.tariff(at)
+            except Exception as err:  # noqa: BLE001 - another brick's trouble never stops this one
+                _LOGGER.debug("Hestia Énergie has no price for %s: %s", at, err)
+                t = None
             out.append({"price": t.get("price"), "period": t.get("period"), "color": t.get("color")} if t else None)
         return out
     except Exception as err:  # noqa: BLE001 - another brick's trouble never stops this one
