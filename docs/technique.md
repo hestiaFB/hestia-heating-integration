@@ -1,6 +1,6 @@
 # Hestia Chauffage — fonctionnement technique
 
-Version 1.1.0b1. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
+Version 1.1.0b2. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
 
 ## Les fichiers
 

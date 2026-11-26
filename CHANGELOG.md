@@ -1,5 +1,12 @@
 # Changements
 
+## 1.1.0b2 — Choisir une entité avec la recherche
+
+### Améliorations
+- **Les entités se choisissent comme dans Hestia Confort et Hestia Énergie** : avec le sélecteur de Home Assistant et sa recherche, au lieu d’une longue liste. Il ne propose que ce qui convient, sans les réglages ni les diagnostics des autres appareils (le « Flip » d’une caméra), ni les entités masquées. L’entité déjà choisie reste toujours proposée. Sont concernés : la température de la maison, le thermostat du poêle, la prise du poêle, l’interrupteur de sa prise et le bouton « flamme au plus bas ».
+- La croix du sélecteur retire le choix : Hestia revient à ce qu’elle trouve seule (« Trouvé seul », « Moyenne des pièces », « Aucun »).
+- Si le sélecteur de Home Assistant ne se charge pas, la liste simple reste.
+
 ## 1.1.0b1 — La carte maison complète
 
 ### Nouveautés
