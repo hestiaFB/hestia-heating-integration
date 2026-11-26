@@ -461,3 +461,5 @@ ha-card.small.folded { cursor:pointer; }
 @container (min-width:620px) { .small .side .modes { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 .small .side .face, .small .side .legend.mini { max-width:420px; }
 @container (max-width:380px) { .small .pair { grid-template-columns:1fr; } }
+/* 1.0.1b3: a full card stretched wide keeps its clock at a readable size, centred, instead of filling the width. */
+.top:not(.compact) > .wheel { width:100%; max-width:480px; margin:0 auto; }

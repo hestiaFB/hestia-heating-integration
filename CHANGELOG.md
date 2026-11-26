@@ -4,6 +4,7 @@
 
 ### Corrections
 - **Une carte compacte étirée sur toute la largeur reste à sa taille.** L’horloge ne grossit plus au-delà de sa taille habituelle, et les quatre boutons de mode restent sur deux rangées au lieu de devenir quatre grands carrés. La place en plus reste à droite, et les cartes côte à côte gardent la même hauteur.
+- **La carte complète d’une pièce ou du poêle aussi** : étirée, son horloge reste à 480 px au plus, au centre, au lieu de remplir toute la largeur.
 
 ## 1.0.1b2 — Les cartes compactes, toutes de la même hauteur
 
