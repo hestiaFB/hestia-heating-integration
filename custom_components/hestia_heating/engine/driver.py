@@ -18,6 +18,8 @@ cloud's delays, one at a time:
   thermostat goes to hors gel, unless the stove is already on its way (then nothing is cut).
 - A stove lit by hand while its thermostat is in hors gel (1.0.0b5): the thermostat goes to boost, and the stove is
   driven from there. Hors gel stops only the burn it finds, on the step to hors gel, as the house's « Arrêt » does.
+- A stove that burns without Hestia having lit it (by hand, or before a restart; 1.0.1b4): once for each burn, the
+  settings Hestia sends before its own starts (its own set point, ECO Stop), each only if it differs; never the fan.
 - Stop (hors gel, the thermostat off, or the house warm enough for 2 minutes, then hors gel): once the stove's state
   is known (2 minutes at most), up to 3 orders 15 s apart, until it is stopping, off or cleaning; checked again 25
   minutes later (its state, its smoke under 60 °C, its plug under 70 W); else the order again, and 30 s later the
@@ -31,7 +33,8 @@ cloud's delays, one at a time:
   thermostat off gets its thermostat back on, in boost. Nothing is sent to the stove.
 - The front fan (1.0, Réglages « Ventilation »): AUTO, set once before a start (the default); or « flamme + 1 »: at
   its lowest while the smoke is under 110 °C, then the flame + 1 (5 at most), one order at most every 10 minutes and
-  only while more than 6 orders are left; nothing is set before a start then.
+  only while more than 6 orders are left; nothing is set before a start then. The flame set, except while the stove
+  holds itself back (1.0.1b4): then the flame it really burns at.
 
 The simulator (1.0, Réglages, in « Conseil » and « Flamme »): the same sequences « à blanc » (`ctx["blanc"]`), from
 their own memory. Nothing is ever sent, not even a notice; the journal says what Hestia would do (« Hestia allumerait
@@ -45,6 +48,7 @@ from datetime import datetime, timedelta
 
 from . import tuning
 from .phrases import degrees, hour, number
+from .stove_says import bridled
 
 BURNING = ("allumage", "chauffe", "nettoyage")
 STOPPED = ("extinction", "eteint", "nettoyage")       # what a stop order is waiting for
@@ -94,6 +98,7 @@ WOULD = (("Hestia coupe le poêle", "Hestia couperait le poêle"),
          ("Hestia demande votre accord", "Hestia demanderait votre accord"),
          ("Hestia met la ventilation", "Hestia mettrait la ventilation"),
          ("Hestia règle d’abord", "Hestia réglerait d’abord"),
+         ("Hestia règle le poêle", "Hestia réglerait le poêle"),
          ("Hestia allume le poêle", "Hestia allumerait le poêle"),
          ("Hestia éteint le thermostat", "Hestia éteindrait le thermostat"),
          ("Hestia éteint le poêle", "Hestia éteindrait le poêle"),
@@ -267,6 +272,7 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
     # The fan's AUTO goes before a start only when the stove leads it; the ÉCO Stop and the stove's own set point as
     # chosen in Réglages (ctx « reglages_poele »).
     _start(run, mem, stove, thermostat, skip=("ventilation",) if fan != "auto" else ())
+    _burn_settings(run, mem, stove, ctx)
     _fan(run, mem, stove, fan)
     # 3. The fire pot full: said once (the burning goes on, the next start waits for « J'ai nettoyé »).
     fire_pot = ctx.get("brasier") or {}
@@ -315,16 +321,20 @@ def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
             mem["ventilation"] = None
         return
     # The flame set, not the one the stove shows: it dips a moment while the stove modulates, and each dip would cost
-    # an order (1.0.0b6: on 24 November a real flame of 1 for a moment, set at 2, cost two orders).
+    # an order (1.0.0b6: on 24 November a real flame of 1 for a moment, set at 2, cost two orders). But a stove that
+    # holds itself back, its own probe at the temperature set in it, burns at its lowest for as long as its probe
+    # stays there (1.0.1b4: on 26 November, flame 1 with the fan at 5): the fan then follows the flame it burns at.
     smoke = stove.get("fumees")
-    flame = stove.get("flamme_reglee") if stove.get("flamme_reglee") is not None else stove.get("flamme")
+    held = bridled(stove)
+    flame = stove.get("flamme") if held else (
+        stove.get("flamme_reglee") if stove.get("flamme_reglee") is not None else stove.get("flamme"))
     warm = bool(seq.get("chaud")) or (state == "chauffe" and smoke is not None and smoke >= tuning.get("ventil_fumees_c"))
     seq["chaud"] = warm
     mem["ventilation"] = seq
     if warm and flame is not None:
         top = min(int(flame) + 1, FAN_TOP)
         want = max((x for x in levels if int(x) <= top), key=int, default=levels[0])
-        why = f"flamme {int(flame)} + 1"
+        why = f"flamme {int(flame)} + 1" + (", le poêle se bride lui-même" if held else "")
     else:
         want, why = levels[0], f"au plus bas tant que les fumées sont sous {degrees(tuning.get('ventil_fumees_c'))}"
     current = stove.get("ventilation")
@@ -341,6 +351,42 @@ def _fan(run: _Run, mem: dict, stove: dict, fan: str) -> None:
     seq.update(a=run.now.isoformat(), voulu=want)
     run.stove("ventilation", valeur=want)
     run.log(f"Hestia met la ventilation à {want} : {why}.")
+
+
+# --- a stove lit without Hestia ------------------------------------------------------------------------------------
+
+def _burn_settings(run: _Run, mem: dict, stove: dict, ctx: dict) -> None:
+    """A stove that burns without Hestia having lit it (1.0.1b4): by hand, from its application, or lit before Home
+    Assistant restarted. Hestia sends it the settings it sends before its own starts (its own set point and ÉCO Stop,
+    as chosen in Réglages), each only if it differs, once for each burn. On 26 November a stove lit by hand kept the
+    25 °C set in it, and within the hour it held itself back at flame 1. Never the fan, never while Hestia starts or
+    stops the stove, nor in the first minutes after Home Assistant started."""
+    state = stove.get("etat")
+    start, stop = mem.get("allumage") or {}, mem.get("arret") or {}
+    starting = bool(start and not start.get("fin"))
+    if state not in BURNING:
+        # Hestia's own start marks it once it has sent them (they may show on the stove only a while later).
+        if state != "inconnu" and not starting:
+            mem["reglages_feu"] = None
+        return
+    if mem.get("reglages_feu") or starting or (stop and not stop.get("fin")):
+        return
+    started = _iso(ctx.get("ha_depuis"))
+    if started is not None and run.now - started < RESYNC_AFTER:
+        run.again(RESYNC_AFTER, started)
+        return
+    mem["reglages_feu"] = run.now.isoformat()
+    writes, cap = stove.get("ecritures"), stove.get("ecritures_max")
+    left = None if writes is None or not cap else cap - writes
+    names = []
+    for s in stove.get("reglages") or ():
+        if s["role"] == "ventilation":
+            continue
+        if s.get("a_changer") and (not s.get("reserve") or left is None or left > s["reserve"]):
+            run.stove("reglage", role=s["role"], nom=s["nom"])
+            names.append(s["nom"])
+    if names:
+        run.log(f"Hestia règle le poêle allumé sans elle : {', '.join(names)}.")
 
 
 # --- start ---------------------------------------------------------------------------------------------------------
@@ -380,6 +426,8 @@ def _start(run: _Run, mem: dict, stove: dict, thermostat: dict, skip: tuple = ()
                 names.append(s["nom"])
         if run.blank and names:
             run.log(f"Hestia règle d’abord : {', '.join(names)}.")
+        # This burn's settings are sent (1.0.1b4: not again once it burns).
+        mem["reglages_feu"] = now.isoformat()
         seq.update(phase="ordre", depuis=now.isoformat())
         run.again(SETTLE)
         return

@@ -64,6 +64,7 @@ La v0.1 ne commandait rien. Les versions, et la suite proposée :
 
 Le 26 novembre 2026 :
 
+- Le matin, le poêle allumé à la main brûle en flamme 1 avec la ventilation à fond. Il se bride lui-même : sa température interne était restée à 25 °C, Hestia n’envoyant les 28 °C qu’avant ses propres allumages, et sa sonde l’a atteinte en une heure. La ventilation, elle, suivait la flamme réglée (5). Frank a voulu y mettre 28 °C dans le panneau, mais le champ affichait déjà 28 (la valeur de Hestia) : retaper 28 n’envoyait rien. Codé en 1.0.1b4 : un poêle allumé sans Hestia reçoit ses réglages une fois par chauffe, la ventilation suit la vraie flamme quand il se bride, et le panneau dit quand le poêle n’est pas à la température voulue, avec un bouton pour l’envoyer.
 - Frank veut des cartes compactes toutes de la même hauteur. La phrase de la pièce remplace le type de chauffage sous le nom ; la légende garde toujours ses trois lignes ; la consigne de chaque mode est écrite sur son bouton (préréglages de Versatile Thermostat, `consignes` dans la vue) ; la pastille montre l’état en image (et 4/5 pour le poêle), ce qui allège le centre de l’horloge : la température et la consigne à atteindre. Captures sur une maison inventée validées par Frank. Codé en 1.0.1b2.
 
 Le 25 novembre 2026 :
