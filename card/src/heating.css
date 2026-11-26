@@ -431,8 +431,13 @@ ha-card.small.folded { cursor:pointer; }
 .small .compact .say.line.off { font-weight:500; color:var(--nw-fg2); }
 .small .compact .say.line.alert { color:color-mix(in oklab, var(--nw-alert) var(--nw-ink, 60%), var(--nw-fg)); }
 .small .compact .say.line.act { color:color-mix(in oklab, var(--nw-act) var(--nw-ink, 60%), var(--nw-fg)); }
-.pill.art-pill { gap:5px; padding:0 11px 0 9px; height:32px; }
+.pill.art-pill { gap:5px; padding:0 11px 0 9px; height:32px;
+  /* An outline that sets the pill off the card (1.1.0b3, Frank), drawn like the mode buttons' one. */
+  border:1px solid color-mix(in oklab, var(--c) 75%, var(--nw-fg) 10%); }
+.pill.art-pill.off { border-color:color-mix(in srgb, var(--nw-fg) 24%, transparent); }
 .pill.art-pill .art { width:30px; height:auto; overflow:visible; display:block; }
+/* The picture alone (no figure beside it): centred in its pill (1.1.0b3, Frank). */
+.pill.art-pill.solo { padding:0 10px; justify-content:center; }
 .pill.art-pill b { font-weight:700; font-variant-numeric:tabular-nums; }
 .small .side .face { width:100%; height:calc(2 * var(--hc-row) + 6px); display:flex; flex-direction:column; justify-content:center; gap:6px; }
 .small .side { --hc-row:46px; }

@@ -77,7 +77,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.1.0b2';
+const VERSION='1.1.0b3';
 
 let pickerLoad:Promise<string|null>|undefined;
 /** Home Assistant's own entity picker (filtered list with a search), as in Hestia Confort and Hestia Énergie. HA loads
