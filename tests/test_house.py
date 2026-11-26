@@ -51,6 +51,12 @@ class House(unittest.TestCase):
         # The air conditioner offers no preset: no button.
         self.assertEqual(self.rooms["atelier"]["modes"], [])
 
+    def test_each_room_gives_its_modes_set_points(self):
+        # 1.0.1b2: the compact card writes each mode's set point on its button (Versatile Thermostat's presets).
+        bureau = self.rooms["bureau"]
+        self.assertEqual(bureau["consignes"], {"eco": 17.0, "comfort": 19.0, "boost": 21.0, "frost": 7.0})
+        self.assertEqual(self.rooms["atelier"]["consignes"], {})
+
     def test_a_copied_thermostat_greys_out_the_card_s_modes(self):
         # A lab copies the home: a press on a mode would reach the other house.
         view = house.build(m.snapshot(copies=["climate.vt_bureau"]))

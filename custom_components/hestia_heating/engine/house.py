@@ -390,6 +390,8 @@ def _room(room: dict, stove: dict | None, stove_thermostat: dict | None, lines: 
         "preset": preset,
         # The presets its main thermostat offers (the card's mode buttons), as the thermostat names them.
         "modes": list((main or {}).get("prereglages_dispo") or []),
+        # Each mode's set point, as Versatile Thermostat gives it (1.0.1b2: written on the compact card's buttons).
+        "consignes": dict((main or {}).get("prereglages") or {}),
         "demande_pct": (main or {}).get("demande_pct") if main is not stove_src else (
             heating[0]["demande_pct"] if heating else (main or {}).get("demande_pct")),
         "puissance_w": round(watts) if heating else 0,

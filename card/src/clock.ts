@@ -270,3 +270,9 @@ export function heaterArt(type:string|null,state:string){
 export function center(art:TemplateResult,temp:string,sub:string){
  return html`<svg class="art" viewBox="0 0 64 52" aria-hidden="true">${art}</svg><div class="ct">${temp}</div>${sub?html`<div class="cs">${sub}</div>`:nothing}`;
 }
+/** The compact cards' middle (1.0.1b2, Frank: « alléger le cercle »): the temperature, and under it the set point it
+    goes to; the picture moved to the pill at the top. */
+export function bare(temp:number|null,target:number|null){
+ const n=(v:number)=>v.toLocaleString('fr-FR',{maximumFractionDigits:1}).replace('-','−');
+ return html`<div class="ct">${temp!=null?`${n(temp)}°`:'—'}</div>${target!=null?html`<div class="to"><span>consigne</span><b>${n(target)}°</b></div>`:nothing}`;
+}
