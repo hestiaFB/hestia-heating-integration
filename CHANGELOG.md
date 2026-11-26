@@ -1,5 +1,16 @@
 # Changements
 
+## 1.0.1b2 — Les cartes compactes, toutes de la même hauteur
+
+### Améliorations
+- **Toutes les cartes compactes ont la même hauteur**, qu’une pièce chauffe ou non, côte à côte comme sur un téléphone.
+- **Sous le nom, la phrase de la pièce** (« Éco jusqu’à 17 h, puis confort », « Monte lentement vers 21,5 °C ») remplace le type de chauffage, sur une ligne.
+- **La consigne de chaque mode est écrite sur son bouton** (Éco 17°, Confort 19,5°…), lue dans les préréglages de Versatile Thermostat. Un autre thermostat la montre sur le mode en cours.
+- **La pastille en haut montre l’état en image** : le radiateur, avec ses vagues et la part de chauffe quand il chauffe ; le poêle, avec sa flamme et « 4/5 ». Les mots restent pour ce qu’une image ne dit pas, comme « fenêtre ouverte ».
+- **Le centre de l’horloge est allégé** : la température, et en dessous la consigne à atteindre.
+- **La légende garde toujours ses trois lignes**, « un pavé : 20 % de chauffe » compris, même un jour sans chauffe. Sur la carte complète aussi.
+- Sur la carte du poêle, les boutons tiennent sur deux rangées : Éteindre et Flamme auto, puis le brasier, avec les jours avant le nettoyage.
+
 ## 1.0.1b1 — Le brasier compte de nouveau, « Argent » trouve les prix de Hestia Énergie
 
 Les corrections prévues pour la 1.0.0b12 et la 1.0.0b13 sortent ensemble sous ce numéro, pour que Home Assistant propose bien la mise à jour.
