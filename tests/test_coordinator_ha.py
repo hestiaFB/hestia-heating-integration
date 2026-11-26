@@ -408,6 +408,9 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         self.assertEqual(day["pieces"]["bureau"]["min"][6:8], [60.0, 30.0])
         self.assertEqual(day["dehors"][3], 5.0)
         self.assertEqual(day["kwh"], 0.75 * len(counters))
+        from custom_components.hestia_heating.engine import tuning
+        self.assertAlmostEqual(day["kg"], round(0.75 / tuning.kwh_per_kg(), 3), places=3,
+                               msg="no statistics for the kilos: they come back from the stove's energy (26/11)")
         self.assertEqual(api.cout_chauffage(yesterday.date())["electrique_eur"], round(0.75 * len(counters) * 0.25, 2))
         house = j.house()
         self.assertEqual(set(house), {"maintenant", "aujourdhui", "froid_egal", "maison", "jours", "apprend"})

@@ -1,5 +1,10 @@
 # Changements
 
+## 1.1.0b3 — Les granulés du jour comptés
+
+### Corrections
+- **La carte maison compte de nouveau les granulés** quand Home Assistant n’enregistre pas le capteur « Granulés brûlés » de Hestia, par exemple parce qu’un filtre du recorder le laisse de côté. Les kilos et les euros des granulés restaient alors à 0, alors que le poêle avait chauffé. Hestia les retrouve maintenant à partir de l’énergie du poêle, qui est enregistrée : un kilo, c’est 4,2 kWh. Les 30 derniers jours se recomptent de la même façon.
+
 ## 1.1.0b2 — Choisir une entité avec la recherche
 
 ### Améliorations

@@ -130,19 +130,25 @@ class HouseJournal:
             at = (at + timedelta(hours=1, minutes=5)).replace(minute=0, second=0, microsecond=0)
         index = {h.replace(minute=0, second=0, microsecond=0): i for i, h in enumerate(hours)}
 
-        async def add(stat, unit, into):
+        async def add(stat, unit, into, scale=1.0) -> bool:
             rows = await (reader.hourly_totals(self.hass, stat, unit, start, end) if live else
                           reader.hourly_rows(self.hass, stat, unit, start, end))
             for when, value in rows:
                 i = index.get(when.replace(minute=0, second=0, microsecond=0))
                 if i is not None:
-                    into[i] += value
+                    into[i] += value * scale
+            return bool(rows)
         kwh, kg = [0.0] * len(hours), [0.0] * len(hours)
         for stat in self._counters():
             await add(stat, "kWh", kwh)
-        pellets = self.c._own_entity("sensor", "poele_granules_brules") if self.c.data.get("poele") else None
-        if pellets:
-            await add(pellets, "kg", kg)
+        if self.c.data.get("poele"):
+            pellets = self.c._own_entity("sensor", "poele_granules_brules")
+            if not (pellets and await add(pellets, "kg", kg)):
+                # The kilos have no statistics (the recorder may leave the sensor out): their heat, recorded by the
+                # stove's energy sensor (kilos × kWh per kilo), gives them back.
+                energy = self.c._own_entity("sensor", "poele_energie")
+                if energy:
+                    await add(energy, "kWh", kg, 1 / tuning.kwh_per_kg())
         return hours, kwh, kg
 
     def _money_of(self, hours, kwh, kg, now) -> dict:
