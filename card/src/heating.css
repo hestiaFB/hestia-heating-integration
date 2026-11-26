@@ -421,3 +421,37 @@ ha-card.small.folded { cursor:pointer; }
 .seg:disabled, .step:disabled { opacity:.5; cursor:not-allowed; }
 .ctl-say { flex-basis:100%; margin:0; font-size:var(--nw-fs-small); color:var(--nw-fg2); line-height:1.4; }
 @container (max-width:380px) { .ctl-row { flex-wrap:wrap; } }
+/* 1.0.1b2 (Frank, 26 Nov.): every compact card as high as the others. The name and the state's picture on one row, the
+   sentence on one line under it (where the kind of heating was), two rows of buttons of the same height, three lines of
+   legend; the clock's middle keeps only the temperature and the set point it goes to. */
+.small .compact .chead { grid-template-columns:minmax(0, 1fr) auto; grid-template-rows:auto auto; row-gap:2px; align-items:center; }
+.small .compact .chead .nw-title { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.small .compact .say.line { grid-column:1 / -1; margin:0; height:1.4em; line-height:1.4em; font-size:var(--nw-fs-body, 14px); font-weight:600;
+  color:var(--nw-fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.small .compact .say.line.off { font-weight:500; color:var(--nw-fg2); }
+.small .compact .say.line.alert { color:color-mix(in oklab, var(--nw-alert) var(--nw-ink, 60%), var(--nw-fg)); }
+.small .compact .say.line.act { color:color-mix(in oklab, var(--nw-act) var(--nw-ink, 60%), var(--nw-fg)); }
+.pill.art-pill { gap:5px; padding:0 11px 0 9px; height:32px; }
+.pill.art-pill .art { width:30px; height:auto; overflow:visible; display:block; }
+.pill.art-pill b { font-weight:700; font-variant-numeric:tabular-nums; }
+.small .side .face { width:100%; height:calc(2 * var(--hc-row) + 6px); display:flex; flex-direction:column; justify-content:center; gap:6px; }
+.small .side { --hc-row:46px; }
+.small .side .face .modes { height:100%; grid-auto-rows:1fr; }
+.small .side .mode { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; padding:3px 4px; line-height:1.2; }
+.small .side .mode .mt { font-size:11.5px; font-weight:600; color:var(--nw-fg2); font-variant-numeric:tabular-nums; }
+.small .side .mode.on .mt { color:inherit; }
+.mode .mt { margin-left:6px; font-weight:500; opacity:.75; font-variant-numeric:tabular-nums; }
+.small .side .mode .mt { margin-left:0; opacity:1; }
+.small .side .face .btns { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); grid-auto-rows:var(--hc-row); }
+.small .side .face .btn { height:auto; }
+.small .side .face .btn.pot { grid-column:1 / -1; min-height:0; padding:4px 14px; }
+.small .side .face .btn.pot .pot-say small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+.small .side .face .btns > .btn:only-child, .small .side .face .btns > .btn.auto:nth-child(1) { grid-column:1 / -1; }
+.legend.mini { display:flex; flex-direction:column; gap:5px; }
+.legend.mini > div { display:flex; gap:16px; height:16px; align-items:center; white-space:nowrap; overflow:hidden; }
+.compact .mid .to { display:flex; flex-direction:column; align-items:center; margin-top:1.5cqi; padding-top:1.5cqi; border-top:1px solid var(--nw-line);
+  line-height:1.15; min-width:50%; }
+.compact .mid .to span { font-size:max(9px, 4.6cqi); font-weight:600; color:var(--nw-fg2); }
+.compact .mid .to b { font-size:max(11px, 6.6cqi); font-weight:700; color:color-mix(in oklab, var(--hc-set) 80%, var(--nw-fg)); font-variant-numeric:tabular-nums; }
+.compact .mid .ct { font-size:max(18px, 10.5cqi); }
+.compact .mid .to { margin-top:1cqi; padding-top:1cqi; }

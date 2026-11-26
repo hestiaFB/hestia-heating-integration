@@ -62,6 +62,10 @@ La v0.1 ne commandait rien. Les versions, et la suite proposée :
 
 ## Décisions prises
 
+Le 26 novembre 2026 :
+
+- Frank veut des cartes compactes toutes de la même hauteur. La phrase de la pièce remplace le type de chauffage sous le nom ; la légende garde toujours ses trois lignes ; la consigne de chaque mode est écrite sur son bouton (préréglages de Versatile Thermostat, `consignes` dans la vue) ; la pastille montre l’état en image (et 4/5 pour le poêle), ce qui allège le centre de l’horloge : la température et la consigne à atteindre. Captures sur une maison inventée validées par Frank. Codé en 1.0.1b2.
+
 Le 25 novembre 2026 :
 
 - L’après-midi, le poêle allumé « Par Hestia » s’arrête au bout de dix minutes. La station dehors était restée figée une heure : le thermostat du poêle (Versatile Thermostat) s’est mis en sécurité et s’est éteint, et Hestia l’a pris pour un vrai arrêt. Choix de Frank : une sécurité en plus de l’ÉCO Stop quand la sonde de la pièce est figée (le poêle s’arrête), pas pour la sonde dehors seule (flamme au plus bas, arrêt au bout de 2 heures). Codé en 1.0.0b7.

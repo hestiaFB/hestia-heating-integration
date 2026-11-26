@@ -3,7 +3,7 @@ import charte from './ui/hestia-charte.css';
 import heating from './heating.css';
 import './editor';
 import {follow,type Connection} from './stream';
-import {wheel,hours,center,heaterArt,stoveArt,sample,type Pt,type Mark,type Hour,type Detail,type Span} from './clock';
+import {wheel,hours,center,bare,heaterArt,stoveArt,sample,type Pt,type Mark,type Hour,type Detail,type Span} from './clock';
 
 /* Hestia Chauffage's card, after the cards' mock-up validated by Frank on 20 Nov. 2026, and the clock of 24 Nov. 2026:
    1 · la maison: the house in one sentence, every room, the night's cold (card: maison, by default)
@@ -25,7 +25,9 @@ type Badge={texte:string;ton:string};
 type Next={a:string;texte:string;ton?:string|null};
 type Room={id:string;nom:string;temperature:number|null;consigne:number|null;etat:string;poele:boolean;demande_pct:number|null;puissance_w:number;
  pente:number|null;fenetre:boolean;fenetre_depuis?:string|null;humidite?:number|null;badge:Badge;raison:string|null;planning:string|null;
- prochain:Next|null;type:string|null;principal:string|null;preset:string|null;modes?:string[];recopie?:boolean;appoint?:number|null};
+ prochain:Next|null;type:string|null;principal:string|null;preset:string|null;modes?:string[];recopie?:boolean;appoint?:number|null;
+ /** Each mode's set point (1.0.1b2), from Versatile Thermostat's presets: written on the mode buttons. */
+ consignes?:Record<string,number>};
 type Order={service:string;entity_id:string;donnees?:Record<string,unknown>};
 type FirePot={kg:number|null;seuil_kg:number;a_nettoyer:boolean;bientot?:boolean;texte:string;jours?:number|null};
 type Use={debit_kg_h:number;kg_jour:number;kg_saison:number;prix_kg:number|null;cout_jour:number|null;cout_heure:number|null;brasier?:FirePot};
@@ -220,15 +222,36 @@ class HestiaHeatingCard extends LitElement {
   if(path.some(n=>is(n,x=>x.classList.contains('wheel')))){if(r)this._tap(e,r);return;}
   this._fold();
  }
- private _compact(o:{tone:string;head:unknown;clock:unknown;side:unknown;legend:unknown;body:()=>unknown}){
+ /* 1.0.1b2 (Frank, 26 Nov.: « toutes la même taille verticalement »): every compact card has the same rows, whatever it
+    says: its name and its state's picture, its sentence on one line where the kind of heating was, the clock beside two
+    rows of buttons and a legend of three lines, always all of them. */
+ private _compact(o:{tone:string;title:string;say:{texte:string;ton?:string}|null;pill:unknown;clock:unknown;side:unknown;legend:unknown;body:()=>unknown}){
   const open=this._unfolded();
   return html`<div class="glow" style=${`--c:var(${o.tone})`} aria-hidden="true"></div>
-   <div class="top compact">${o.head}
-    <div class="pair">${o.clock}<div class="side">${o.side}${o.legend}</div></div>
+   <div class="top compact"><div class="chead"><h2 class="nw-title">${o.title}</h2><div class="pills">${o.pill}</div>
+     <p class=${'say line '+(o.say?.ton??'')} title=${o.say?.texte??''}>${o.say?.texte??''}</p></div>
+    <div class="pair">${o.clock}<div class="side"><div class="face">${o.side}</div>${o.legend}</div></div>
    </div>
    ${open?html`<div class="unfold">${o.body()}</div>`:nothing}
    <button class="handle" aria-expanded=${open?'true':'false'} aria-label=${open?'Replier la carte':'Déplier la carte'}
     @click=${(e:Event)=>{e.stopPropagation();this._fold();}}><i></i></button>`;
+ }
+ /** The compact cards' pill (1.0.1b2, Frank): the state's picture rather than words, which leaves the clock's middle to
+     the temperatures; a figure beside it (the stove's flame, a room's demand), and the words only for what a picture
+     cannot say (a window open, a load shed, an alarm). */
+ private _artPill(art:TemplateResult,tone:string,label:string,figure:string){
+  return html`<span class=${'pill art-pill '+tone} role="img" aria-label=${label} title=${label}><svg class="art" viewBox="0 -2 64 54" aria-hidden="true">${art}</svg>${
+   figure?html`<b>${figure}</b>`:nothing}</span>`;
+ }
+ private _roomArtPill(r:Room,art:TemplateResult){
+  const text=r.badge.ton==='alert'||r.badge.ton==='act'||r.etat==='arret'||r.etat==='inconnu';
+  if(text)return this._artPill(art,r.badge.ton==='alert'||r.badge.ton==='act'?r.badge.ton:'off',r.badge.texte,r.badge.texte);
+  if(r.etat==='chauffe'&&r.poele)return this._artPill(art,'stove',`Chauffe par le poêle`,'');
+  if(r.etat==='chauffe'||r.etat==='rafraichit'){
+   const cool=r.etat==='rafraichit',pct=r.demande_pct,word=cool?'Rafraîchit':'Chauffe';
+   return this._artPill(art,cool?'cold':'heat',pct!=null?`${word}, demande ${pct} %`:word,pct!=null?`${pct} %`:'');
+  }
+  return this._artPill(art,'off','Ne chauffe pas','');
  }
  /** The light at the top of a card, in the colour of what it does now, as on Confort's cards. */
  private _glow(tone:string){return html`<div class="glow" style=${`--c:var(${tone})`} aria-hidden="true"></div>`;}
@@ -294,10 +317,14 @@ class HestiaHeatingCard extends LitElement {
   if(!modes.length||!r.principal)return nothing;
   const p=this._pending,pending=p&&p.id===r.principal&&Date.now()-p.at<PENDING_MS&&r.preset!==p.mode?p.mode:null,on=pending??r.preset;
   const locked=!!r.recopie;
+  // 1.0.1b2 (Frank: « il manque la consigne à atteindre »): each mode's set point on its button; a thermostat that does
+  // not give them shows its set point now on the mode it is on.
+  const at=(m:string)=>r.consignes?.[m]??(m===r.preset&&!pending?r.consigne:null);
   // A press here, even on a greyed button, is never a tap on the card.
   return html`<div class="modes" role="group" aria-label="Mode du thermostat" style=${`--n:${Math.min(modes.length,4)}`} @click=${(e:Event)=>e.stopPropagation()}>
    ${modes.map(m=>html`<button type="button" class=${'mode '+(MODE_TONE[m]??'heat')+(m===on?' on':'')} aria-pressed=${m===on} ?disabled=${locked}
-     title=${locked?'Thermostat recopié d’une autre maison : rien ne lui est envoyé.':''} @click=${()=>this._setMode(r,m)}>${MODE_WORD[m]??m}</button>`)}</div>
+     title=${locked?'Thermostat recopié d’une autre maison : rien ne lui est envoyé.':''} @click=${()=>this._setMode(r,m)}><span class="mw">${MODE_WORD[m]??m}</span>${
+     at(m)!=null?html`<span class="mt">${num(at(m)!)}°</span>`:nothing}</button>`)}</div>
    ${locked?html`<p class="note">Thermostat recopié d’une autre maison : les modes se choisissent là-bas.</p>`:this._refused?html`<p class="note bad">${this._refused}</p>`:nothing}`;
  }
  private async _setMode(r:Room,mode:string){
@@ -424,13 +451,14 @@ class HestiaHeatingCard extends LitElement {
   };
   const clock=wheel({span,segments,series:series_,hours:hrs,kind:'flame',max,marks,say,...this._picker(),tight:!!this._config.compacte,
    label:`Horloge du jour : ${where} à ${deg(t)}, poêle ${state}${stop?`, arrêt prévu à ${isoHm(stop.a)}`:''}.`},
-   center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
+   this._config.compacte?bare(t,s.en_feu?s.consigne??null:null):center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
   const why=this._why(s,room,auto,level);
-  if(this._config.compacte)return this._compact({tone:this._stoveTone(s),
-   head:this._head(this._config.name||s.nom,`Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
-    <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`),clock,
-   side:html`${s.phrase?html`<p class=${'say '+s.phrase.ton}>${s.phrase.texte}</p>`:why?html`<p class="say">${why}</p>`:nothing}${this._stoveButtons(s,auto)}`,
-   legend:this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),'flame',max,true),
+  if(this._config.compacte)return this._compact({tone:this._stoveTone(s),title:this._config.name||s.nom,
+   say:s.phrase??(why?{texte:why}:null),
+   pill:this._artPill(stoveArt(level,max,s.en_feu),s.etat==='alarme'?'alert':s.en_feu?'stove':'off',`Poêle : ${state}`,
+    s.etat==='alarme'?'alarme':s.en_feu&&level?`${level}/${max}`:''),clock,
+   side:this._stoveButtons(s,auto,true),
+   legend:this._legend(tones,'température',true,'flame',max,true),
    body:()=>html`${this._fireDrawer(v,s,room)}${this._pelletDrawer(v,s)}${this._foot('poele','Ouvrir les réglages du poêle','Réglages du poêle')}`});
   return html`${this._glow(this._stoveTone(s))}<div class="top">
    ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
@@ -450,9 +478,10 @@ class HestiaHeatingCard extends LitElement {
  private _legend(tones:string[],temp:string|null,set:boolean,kind:'flame'|'demand'|null,max=5,mini=false){
   const blocks=()=>html`<i class=${'sw blocks '+kind}>${Array.from({length:3},(_,i)=>html`<b style=${`--p:${Math.round(i/2*100)}%`}></b>`)}</i>`;
   // The compact cards' legend, beside the clock (1.0.0b9): the same marks, in fewer words.
-  if(mini)return html`<div class="legend mini">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
-   ${temp?html`<span><i class="sw line"></i>${temp}</span>`:nothing}${set?html`<span><i class="sw set"></i>consigne</span>`:nothing}
-   ${kind?html`<span class="wide">${blocks()}${kind==='flame'?'un pavé par palier':'un pavé : 20 % de chauffe'}</span>`:nothing}</div>`;
+  // 1.0.1b2: always three lines (the planning's colours, the curves, the blocks), so that every compact card is as high.
+  if(mini)return html`<div class="legend mini"><div>${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}</div>
+   <div>${temp?html`<span><i class="sw line"></i>${temp}</span>`:nothing}${set?html`<span><i class="sw set"></i>consigne</span>`:nothing}</div>
+   <div>${kind?html`<span>${blocks()}${kind==='flame'?'un pavé par palier':'un pavé : 20 % de chauffe'}</span>`:nothing}</div></div>`;
   return html`<div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
    ${temp?html`<span><i class="sw line"></i>${temp}</span>`:nothing}${set?html`<span><i class="sw set"></i>consigne</span>`:nothing}
    ${kind?html`<span>${blocks()}${kind==='flame'?`flamme : un pavé par palier, ${max} au plus`:'temps de chauffe : un pavé par 20 % de l’heure'}</span>`:nothing}</div>`;
@@ -469,7 +498,7 @@ class HestiaHeatingCard extends LitElement {
  /* « Éteindre » or « Allumer » (the profile's own orders), « Flamme auto » (Hestia sets the flame, « Gestion auto »
     before 1.0.0b3), « J’ai nettoyé » (Hestia's count only). The first two and « J’ai nettoyé » ask again before they are
     sent; nothing is sent to a stove copied from another house. */
- private _stoveButtons(s:Stove,auto:boolean){
+ private _stoveButtons(s:Stove,auto:boolean,short=false){
   const lit=s.allume??(s.en_feu||s.etat==='allumage'),order=s.boutons?.[lit?'eteindre':'allumer'];
   const locked=!!s.copie,pot=s.conso?.brasier,ask=this._confirm,why=locked?'Poêle recopié d’une autre maison : rien ne lui est envoyé.':'';
   return html`<div class="btns" @click=${(e:Event)=>e.stopPropagation()}>
@@ -479,20 +508,20 @@ class HestiaHeatingCard extends LitElement {
      @click=${()=>this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:!auto}))}><span class="switch"><i></i></span>Flamme auto</button>
    ${pot?html`<button class=${'btn pot'+(pot.a_nettoyer?' due':pot.bientot?' soon':'')+(ask==='clean'?' ask':'')} ?disabled=${this._busy==='clean'}
      style=${`--fill:${this._potFill(pot)}%`} aria-label=${`${this._potWord(pot)}. J’ai nettoyé le brasier`} title=${pot.texte}
-     @click=${()=>this._press('clean',()=>this._hass!.callWS({type:'hestia_heating/brasier_nettoye'}),true)}>${BRUSH}<span class="pot-say"><b>${this._potWord(pot)}</b>
-     <small>${ask==='clean'?'Remettre à zéro ?':'J’ai nettoyé'}</small></span></button>`:nothing}
+     @click=${()=>this._press('clean',()=>this._hass!.callWS({type:'hestia_heating/brasier_nettoye'}),true)}>${BRUSH}<span class="pot-say"><b>${short?this._potWord(pot,false):this._potWord(pot)}</b>
+     <small>${ask==='clean'?'Remettre à zéro ?':short&&this._potWhen(pot)?`J’ai nettoyé · ${this._potWhen(pot).replace('nettoyage ','')}`:'J’ai nettoyé'}</small></span></button>`:nothing}
   </div>
   ${locked?html`<p class="note">Poêle recopié d’une autre maison : ses boutons sont grisés, rien ne lui est envoyé.</p>`:this._refused?html`<p class="note bad">${this._refused}</p>`:nothing}`;
  }
  /* The fire pot on the card's face (1.0.0b6): how full it is, and the days left at the pace since its cleaning; the
     button that says it is also « J’ai nettoyé ». */
  private _potFill(pot:FirePot){return pot.a_nettoyer?100:pot.kg!=null&&pot.seuil_kg?Math.max(0,Math.min(100,Math.round(pot.kg/pot.seuil_kg*100))):0;}
- private _potWord(pot:FirePot){
+ private _potWord(pot:FirePot,withWhen=true){
   if(pot.a_nettoyer)return 'Brasier à nettoyer';
   if(pot.kg==null)return 'Brasier pas encore compté';
   // 1.0.0b8: « Brasier 0 % » read as a pot at 0 % of clean. It says how full it is, and when to clean it.
   const fill=this._potFill(pot),when=this._potWhen(pot);
-  return `${fill<5?'Brasier propre':`Brasier rempli à ${fill} %`}${when?` · ${when}`:''}`;
+  return `${fill<5?'Brasier propre':`Brasier rempli à ${fill} %`}${when&&withWhen?` · ${when}`:''}`;
  }
  /** When the pot is to be cleaned, at the pace since its last cleaning: « nettoyage dans 12 jours ». */
  private _potWhen(pot:FirePot){
@@ -669,16 +698,16 @@ class HestiaHeatingCard extends LitElement {
   const clock=wheel({span,segments,series:series_,hours:hrs,kind:'demand',marks:[],say,
    ...this._picker(),tight:!!this._config.compacte,tap:tap?{label:what,run:(e:Event)=>this._tap(e,r)}:undefined,
    label:`Horloge du jour : ${r.nom} à ${deg(r.temperature)}${r.consigne!=null?`, consigne ${deg(r.consigne)}`:''}${next?`, ${this._next(next,v)}`:''}.`},
-   center(art,r.temperature!=null?`${num(r.temperature)}°`:'—',sub));
-  if(this._config.compacte)return this._compact({tone:this._roomTone(r),
-   head:this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}`),clock,
-   side:html`${r.raison?html`<p class="say">${r.raison}</p>`:nothing}${this._modeButtons(r)?this._modes(r):this._modePill(r)}`,
-   legend:this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),demand?'demand':null,5,true),
+   this._config.compacte?bare(r.temperature,r.consigne):center(art,r.temperature!=null?`${num(r.temperature)}°`:'—',sub));
+  if(this._config.compacte)return this._compact({tone:this._roomTone(r),title:name,
+   say:r.raison?{texte:r.raison,ton:r.badge.ton==='alert'?'alert':''}:null,pill:this._roomArtPill(r,art),clock,
+   side:this._modeButtons(r)?this._modes(r):this._modePill(r),
+   legend:this._legend(tones,'température',true,r.poele?null:'demand',5,true),
    body:()=>html`${this._roomDrawer(v,r,true)}${this._foot('pieces/'+r.id,`Ouvrir les réglages de ${r.nom}`,'Réglages de la pièce')}`});
   return html`${this._glow(this._roomTone(r))}<div class="top">
    ${this._head(name,TYPE_WORD[r.type??'']??'',html`${this._heatPill(r)}${this._modeButtons(r)?nothing:this._modePill(r)}`)}
    ${clock}
-   ${this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),demand?'demand':null)}
+   ${this._legend(tones,(series.temperature??[]).length?'température':null,sets.some(p=>p[1]!=null),r.poele?null:'demand')}
    ${this._modes(r)}
   </div>
   ${this._roomDrawer(v,r)}
