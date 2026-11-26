@@ -1,0 +1,80 @@
+name: Publier
+
+# Publishes the version found in manifest.json on main: tag v<version> + GitHub release.
+# Started by hand (or through the API) once a PR is merged, so nothing needs Frank's PC.
+# A version with a letter (1.2.0b1) goes out as a pre-release, otherwise as the latest stable.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier, exactement comme dans manifest.json (ex. 1.1.0b3)"
+        required: true
+      titre:
+        description: "Titre court, après le numéro (ex. « La carte maison complète »)"
+        required: true
+      notes:
+        description: "Notes de la release (Markdown, en mots simples)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publier
+  cancel-in-progress: false
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Vérifier la version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          manifest=$(python3 -c "import json;print(json.load(open('custom_components/hestia_heating/manifest.json'))['version'])")
+          if [ "$manifest" != "$VERSION" ]; then
+            echo "::error::main est en $manifest, pas en $VERSION : rien n'est publié."
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::Le tag v$VERSION existe déjà : rien n'est publié."
+            exit 1
+          fi
+      - name: Vérifier que la CI de main est verte
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          sha=$(git rev-parse HEAD)
+          bad=$(gh api "repos/${{ github.repository }}/commits/$sha/check-runs" \
+            --jq '[.check_runs[] | select(.name != "publier") | select(.status != "completed" or (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral"))] | length')
+          if [ "$bad" != "0" ]; then
+            echo "::error::La CI de main n'est pas (encore) verte sur $sha : rien n'est publié. Relancer une fois la CI finie."
+            exit 1
+          fi
+      - name: Créer le tag et la release
+        env:
+          # PUBLIER_TOKEN (a token of hestiaFB, contents: write) makes the release appear under hestiaFB.
+          # Without it, the release is created by github-actions.
+          GH_TOKEN: ${{ secrets.PUBLIER_TOKEN || github.token }}
+          VERSION: ${{ inputs.version }}
+          TITRE: ${{ inputs.titre }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -eu
+          sha=$(git rev-parse HEAD)
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+          extra=""
+          case "$VERSION" in
+            *[a-z]*) extra="--prerelease" ;;
+            *) extra="--latest" ;;
+          esac
+          gh release create "v$VERSION" --repo "${{ github.repository }}" --target "$sha" \
+            --title "$VERSION — $TITRE" --notes-file "$RUNNER_TEMP/notes.md" $extra
+          echo "Publiée : v$VERSION sur $sha ($extra)" >> "$GITHUB_STEP_SUMMARY"

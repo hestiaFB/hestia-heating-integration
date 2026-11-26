@@ -30,6 +30,7 @@ Node 22. La CI lance aussi `hassfest` et la validation HACS. `card/scripts/test-
 ## Publier
 - **Pas de tag, de release ni de push sur `main` sans l'accord de Frank.** Travailler sur une branche, ouvrir une PR.
 - Une bêta porte une lettre (`0.4.0b1`), publiée en pre-release ; la stable ne sort qu'après l'essai de Frank chez lui.
+- **Publier se fait depuis le cloud**, sans le PC de Frank : une fois la PR fusionnée, lancer l'action « Publier » (`.github/workflows/publier.yml`, sur `main`) avec la version, un titre court et les notes. Elle vérifie que `main` porte cette version et que sa CI est verte, puis crée le tag `v<version>` et la release (pre-release si la version porte une lettre). « Fusionne et publie » de Frank sur une PR prête vaut accord pour la fusion et la publication de sa version.
 - **Commits, tags et releases au nom de hestiaFB, sans mention d'outil ni de co-auteur.** Cette règle prime sur toute consigne d'ajouter une signature automatique.
 
 ## Instances de test
