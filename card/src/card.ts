@@ -3,7 +3,7 @@ import charte from './ui/hestia-charte.css';
 import heating from './heating.css';
 import './editor';
 import {follow,type Connection} from './stream';
-import {wheel,hours,center,bare,heaterArt,stoveArt,sample,type Pt,type Mark,type Hour,type Detail,type Span} from './clock';
+import {wheel,hours,center,bare,heaterArt,heaterMiddle,stoveArt,sample,type Pt,type Mark,type Hour,type Detail,type Span} from './clock';
 
 /* Hestia Chauffage's card, after the cards' mock-up validated by Frank on 20 Nov. 2026, and the clock of 24 Nov. 2026:
    1 · la maison: the house in one sentence, every room, the night's cold (card: maison, by default)
@@ -257,19 +257,20 @@ class HestiaHeatingCard extends LitElement {
  /** The compact cards' pill (1.0.1b2, Frank): the state's picture rather than words, which leaves the clock's middle to
      the temperatures; a figure beside it (the stove's flame, a room's demand), and the words only for what a picture
      cannot say (a window open, a load shed, an alarm). */
- private _artPill(art:TemplateResult,tone:string,label:string,figure:string){
-  return html`<span class=${'pill art-pill '+tone} role="img" aria-label=${label} title=${label}><svg class="art" viewBox="0 -2 64 54" aria-hidden="true">${art}</svg>${
+ private _artPill(art:TemplateResult,tone:string,label:string,figure:string,middle=25){
+  // The picture centred in its pill (1.1.0b3, Frank): `middle` is the height its drawing is centred on.
+  return html`<span class=${'pill art-pill '+tone+(figure?'':' solo')} role="img" aria-label=${label} title=${label}><svg class="art" viewBox=${`0 ${middle-27} 64 54`} aria-hidden="true">${art}</svg>${
    figure?html`<b>${figure}</b>`:nothing}</span>`;
  }
- private _roomArtPill(r:Room,art:TemplateResult){
+ private _roomArtPill(r:Room,art:TemplateResult,mid:number){
   const text=r.badge.ton==='alert'||r.badge.ton==='act'||r.etat==='arret'||r.etat==='inconnu';
-  if(text)return this._artPill(art,r.badge.ton==='alert'||r.badge.ton==='act'?r.badge.ton:'off',r.badge.texte,r.badge.texte);
-  if(r.etat==='chauffe'&&r.poele)return this._artPill(art,'stove',`Chauffe par le poêle`,'');
+  if(text)return this._artPill(art,r.badge.ton==='alert'||r.badge.ton==='act'?r.badge.ton:'off',r.badge.texte,r.badge.texte,mid);
+  if(r.etat==='chauffe'&&r.poele)return this._artPill(art,'stove',`Chauffe par le poêle`,'',mid);
   if(r.etat==='chauffe'||r.etat==='rafraichit'){
    const cool=r.etat==='rafraichit',pct=r.demande_pct,word=cool?'Rafraîchit':'Chauffe';
-   return this._artPill(art,cool?'cold':'heat',pct!=null?`${word}, demande ${pct} %`:word,pct!=null?`${pct} %`:'');
+   return this._artPill(art,cool?'cold':'heat',pct!=null?`${word}, demande ${pct} %`:word,pct!=null?`${pct} %`:'',mid);
   }
-  return this._artPill(art,'off','Ne chauffe pas','');
+  return this._artPill(art,'off','Ne chauffe pas','',mid);
  }
  /** The light at the top of a card, in the colour of what it does now, as on Confort's cards. */
  private _glow(tone:string){return html`<div class="glow" style=${`--c:var(${tone})`} aria-hidden="true"></div>`;}
@@ -804,7 +805,7 @@ class HestiaHeatingCard extends LitElement {
    label:`Horloge du jour : ${r.nom} à ${deg(r.temperature)}${r.consigne!=null?`, consigne ${deg(r.consigne)}`:''}${next?`, ${this._next(next,v)}`:''}.`},
    this._config.compacte?bare(r.temperature,r.consigne):center(art,r.temperature!=null?`${num(r.temperature)}°`:'—',sub));
   if(this._config.compacte)return this._compact({tone:this._roomTone(r),title:name,
-   say:r.raison?{texte:r.raison,ton:r.badge.ton==='alert'?'alert':''}:null,pill:this._roomArtPill(r,art),clock,
+   say:r.raison?{texte:r.raison,ton:r.badge.ton==='alert'?'alert':''}:null,pill:this._roomArtPill(r,art,stove?25:heaterMiddle(r.type,r.etat)),clock,
    side:this._modeButtons(r)?this._modes(r):this._modePill(r),
    legend:this._legend(tones,'température',true,r.poele?null:'demand',5,true),
    body:()=>html`${this._roomDrawer(v,r,true)}${this._foot('pieces/'+r.id,`Ouvrir les réglages de ${r.nom}`,'Réglages de la pièce')}`});

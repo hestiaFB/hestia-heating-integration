@@ -433,6 +433,8 @@ ha-card.small.folded { cursor:pointer; }
 .small .compact .say.line.act { color:color-mix(in oklab, var(--nw-act) var(--nw-ink, 60%), var(--nw-fg)); }
 .pill.art-pill { gap:5px; padding:0 11px 0 9px; height:32px; }
 .pill.art-pill .art { width:30px; height:auto; overflow:visible; display:block; }
+/* The picture alone (no figure beside it): centred in its pill (1.1.0b3, Frank). */
+.pill.art-pill.solo { padding:0 10px; justify-content:center; }
 .pill.art-pill b { font-weight:700; font-variant-numeric:tabular-nums; }
 .small .side .face { width:100%; height:calc(2 * var(--hc-row) + 6px); display:flex; flex-direction:column; justify-content:center; gap:6px; }
 .small .side { --hc-row:46px; }

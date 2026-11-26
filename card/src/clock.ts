@@ -267,6 +267,14 @@ export function heaterArt(type:string|null,state:string){
  if(type==='clim'||type==='pac')return split(on?'heat':state==='rafraichit'?'cool':null);
  return electric(on);
 }
+/** The middle (height) of what heaterArt draws: without its waves, a radiator sits low in its picture, so the
+    compact cards' pill centres it on this (1.1.0b3, Frank). */
+export function heaterMiddle(type:string|null,state:string){
+ const on=state==='chauffe';
+ if(type==='vanne')return on?24:30;
+ if(type==='clim'||type==='pac')return on||state==='rafraichit'?29.5:20;
+ return on?23.5:32.5;
+}
 export function center(art:TemplateResult,temp:string,sub:string){
  return html`<svg class="art" viewBox="0 0 64 52" aria-hidden="true">${art}</svg><div class="ct">${temp}</div>${sub?html`<div class="cs">${sub}</div>`:nothing}`;
 }
