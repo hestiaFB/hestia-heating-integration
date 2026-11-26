@@ -1,4 +1,5 @@
 import {LitElement,html,nothing,css,type TemplateResult} from 'lit';
+import {live} from 'lit/directives/live.js';
 import {customElement,property,state} from 'lit/decorators.js';
 import {hubStyles,modernStyles,pageStyles,listSection,listRow,saveBar,toggle,aboutPage,kpis,noteBox,moreRow,segmented,tabBar,numberField,helpTip,SOCLE} from './socle/ui';
 
@@ -14,7 +15,8 @@ import {hubStyles,modernStyles,pageStyles,listSection,listRow,saveBar,toggle,abo
    Everything shown comes from the integration (hestia_heating/view, settings). */
 
 type Hass={callWS:<T>(msg:Record<string,unknown>)=>Promise<T>;callService:(domain:string,service:string,data:Record<string,unknown>)=>Promise<unknown>;
- states:Record<string,{state:string;attributes:Record<string,unknown>}>;language?:string;themes?:{darkMode?:boolean}};
+ states:Record<string,{state:string;attributes:Record<string,unknown>}>;language?:string;themes?:{darkMode?:boolean};
+ entities?:Record<string,{entity_category?:string|null;hidden?:boolean}>};
 type Badge={texte:string;ton:string};
 type Next={a:string;texte:string;ton:string};
 type Room={id:string;nom:string;temperature:number|null;consigne:number|null;etat:string;poele:boolean;sources:string[];planning:string|null;prochain:Next|null;
@@ -75,7 +77,23 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.1.0b1';
+const VERSION='1.1.0b2';
+
+let pickerLoad:Promise<string|null>|undefined;
+/** Home Assistant's own entity picker (filtered list with a search), as in Hestia Confort and Hestia Énergie. HA loads
+    it lazily: a card editor makes it available to this page. Without it, a plain list remains. */
+function loadPicker():Promise<string|null>{
+ pickerLoad??=(async()=>{
+  const tag=()=>customElements.get('ha-selector')?'ha-selector':customElements.get('ha-entity-picker')?'ha-entity-picker':null;
+  if(tag())return tag();
+  try{const helpers=await (window as unknown as {loadCardHelpers?:()=>Promise<{createCardElement:(c:object)=>Promise<HTMLElement>}>}).loadCardHelpers?.();
+   if(helpers)for(const config of [{type:'tile',entity:'sun.sun'},{type:'entities',entities:['sun.sun']}]){const card=await helpers.createCardElement(config);await (card.constructor as unknown as {getConfigElement?:()=>Promise<unknown>}).getConfigElement?.();if(tag())break;}}
+  catch{/* the plain list remains */}
+  for(let i=0;i<30&&!tag();i++)await new Promise(r=>setTimeout(r,100));
+  return tag();
+ })();
+ return pickerLoad;
+}
 // The whole pilot's answers, as on the phone.
 const ANSWER:Record<string,string>={oui:'Oui, allumer',non:'Non',couper:'Couper la prise',ignorer:'Ignorer',nettoye:'J’ai nettoyé'};
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
@@ -359,9 +377,10 @@ export class HestiaHeatingSetup extends LitElement {
  /** « J'ai nettoyé » asks once more before the fire pot's count starts again. */
  @state() private cleaning=false;
  @state() private answering=false;
+ @state() private pickerTag:string|null=null;
  private timer=0;
 
- connectedCallback(){super.connectedCallback();void this.load();this.timer=window.setInterval(()=>{if(!this.count())void this.load();},30000);}
+ connectedCallback(){super.connectedCallback();void this.load();void loadPicker().then(tag=>{this.pickerTag=tag;});this.timer=window.setInterval(()=>{if(!this.count())void this.load();},30000);}
  disconnectedCallback(){super.disconnectedCallback();window.clearInterval(this.timer);}
  // A new `hass` comes at every change of state in the home: the tab redraws only for its own data, or a new theme.
  private drawnTheme?:boolean;
@@ -823,6 +842,17 @@ export class HestiaHeatingSetup extends LitElement {
     value:toggle(name,kit.includes(key),on=>this.set('equipements',on?KIT.map(k=>k[0]).filter(k=>k===key||kit.includes(k)):kit.filter(x=>x!==key)))});
   });
  }
+ /** An entity to choose: Home Assistant's picker with its search, limited to the entities that fit (never another
+     device's settings or diagnostics, nor a hidden entity); the one already chosen always stays. Its cross clears the
+     choice, the empty choice's words show while nothing is chosen. Without the picker, the plain list. */
+ private entity(label:string,value:string|null|undefined,options:[string,string][],empty:string,set:(x:string|null)=>void){
+  const usable=(id:string)=>{const e=this.hass?.entities?.[id];return !e||(!e.entity_category&&!e.hidden);};
+  const list=options.filter(([id])=>id===value||usable(id)),ids=[...new Set([...(value?[value]:[]),...list.map(([id])=>id)])];
+  const changed=(e:CustomEvent)=>{const x=e.detail?.value;set(typeof x==='string'&&x?x:null);};
+  if(this.pickerTag==='ha-selector')return html`<ha-selector .hass=${this.hass} .selector=${{entity:{include_entities:ids}}} .value=${live(value??'')} .required=${false} .label=${''} .placeholder=${empty} @value-changed=${changed}></ha-selector>`;
+  if(this.pickerTag==='ha-entity-picker')return html`<ha-entity-picker .hass=${this.hass} .includeEntities=${ids} .value=${live(value??'')} .required=${false} .label=${''} .placeholder=${empty} @value-changed=${changed}></ha-entity-picker>`;
+  return this.select(label,value,list,empty,set);
+ }
  private select(label:string,value:string|null|undefined,options:[string,string][],empty:string|null,set:(x:string|null)=>void,disabled=false){
   return html`<select aria-label=${label} ?disabled=${disabled} @change=${(e:Event)=>{const x=(e.target as HTMLSelectElement).value;set(x||null);}}>
    ${empty!=null?html`<option value="" ?selected=${!value}>${empty}</option>`:nothing}${options.map(([id,n])=>html`<option value=${id} ?selected=${value===id}>${n}</option>`)}
@@ -842,7 +872,7 @@ export class HestiaHeatingSetup extends LitElement {
   return html`${listSection('Ce qui chauffe chez vous',this.kitRows(v,s),{help:'Trouvé seul dans Home Assistant. Un appareil manque ? Hestia voit tout thermostat qui donne une température. Pour un poêle, elle doit connaître sa marque : Micronova aujourd’hui, d’autres ensuite.'})}
    ${listSection('La maison',[
     listRow({label:'La température de la maison',control:true,sub:`La moyenne de vos pièces, ou un thermomètre que vous choisissez. Hestia la compare à ce que vous voulez pour savoir s’il faut chauffer plus ou moins.${house?'':' Par défaut : la moyenne des pièces.'}`,
-     value:this.select('Température de la maison',house,(f.thermometres??[]).map(t=>[t.id,t.nom]),'Moyenne des pièces',x=>this.set('pilote_thermometre',x))}),
+     value:this.entity('Température de la maison',house,(f.thermometres??[]).map(t=>[t.id,t.nom]),'Moyenne des pièces',x=>this.set('pilote_thermometre',x))}),
     listRow({label:'La météo',sub:f.meteo.etat==='oui'?'Hestia Weather, pour savoir s’il fera froid cette nuit et demain. Son lieu se choisit dans Extensions.':'Sans Hestia Weather, Hestia ne sait pas le froid à venir.',
      value:f.meteo.etat==='oui'?`Hestia Weather${f.meteo.nom?` · ${f.meteo.nom}`:''}`:'Pas reliée',go:()=>this.go('extensions')}),
    ])}
@@ -990,9 +1020,9 @@ export class HestiaHeatingSetup extends LitElement {
   return html`${locked?noteBox('Recopié','Ce poêle est recopié d’une autre maison : ses commandes sont grisées, Hestia ne lui envoie rien.'):nothing}
    ${listSection('Les appareils du poêle',[
     listRow({label:'Le thermostat du poêle',control:true,sub:`Celui qui dit au poêle de chauffer, et combien. ${thermo?'Choisi par vous.':f.poele_thermostat?'Trouvé seul : le thermostat Versatile relié au poêle.':'Aucun trouvé seul : choisissez-le.'}`,
-     level:!thermo&&!f.poele_thermostat?'todo':undefined,value:this.select('Thermostat du poêle',thermo,f.thermostats.map(t=>[t.id,t.nom]),'Trouvé seul',x=>this.set('poele_thermostat',x))}),
+     level:!thermo&&!f.poele_thermostat?'todo':undefined,value:this.entity('Thermostat du poêle',thermo,f.thermostats.map(t=>[t.id,t.nom]),'Trouvé seul',x=>this.set('poele_thermostat',x))}),
     listRow({label:'La prise du poêle',control:true,sub:`Facultative. Sa consommation dit si le poêle tourne vraiment, même quand son application ne répond plus.${plug?' Choisie par vous.':f.prise?' Trouvée seule, d’après son nom.':''}`,
-     value:this.select('Prise du poêle',plug,[...f.prises.filter(x=>x.poele),...f.prises.filter(x=>!x.poele)].map(x=>[x.id,x.nom]),f.prise?'Trouvée seule':'Aucune',x=>this.set('poele_prise',x))}),
+     value:this.entity('Prise du poêle',plug,[...f.prises.filter(x=>x.poele),...f.prises.filter(x=>!x.poele)].map(x=>[x.id,x.nom]),f.prise?'Trouvée seule':'Aucune',x=>this.set('poele_prise',x))}),
    ])}
    ${listSection('La flamme et la ventilation',[
     this.flameChoice(v,s),
@@ -1048,7 +1078,7 @@ export class HestiaHeatingSetup extends LitElement {
      value:numberField({label:'Écart avant la flamme 1',value:over,unit:'°C',dflt:2,step:0.5,min:0.5,max:5,set:x=>this.set('trop_chaud_ecart',x===undefined||x===2?null:x)})}),
     fig('avance_min','Regarder la pièce en avance de','min','Hestia prolonge la courbe de la pièce de ce temps, pour la voir dépasser sa consigne avant que ça arrive.'),
     listRow({label:'Un bouton « flamme au plus bas »',control:true,sub:low?'Quand cet interrupteur est allumé, la flamme est au plus bas.':'Facultatif : un interrupteur de Home Assistant qui demande la flamme au plus bas.',
-     value:this.select('Flamme au plus bas',low,(f.interrupteurs??[]).map(t=>[t.id,t.nom]),'Aucun',x=>this.set('pilote_flamme_basse',x))}),
+     value:this.entity('Flamme au plus bas',low,(f.interrupteurs??[]).map(t=>[t.id,t.nom]),'Aucun',x=>this.set('pilote_flamme_basse',x))}),
     fig('ventil_fumees_c','Ventilation au plus bas sous','°C','Avec la ventilation par Hestia : au plus bas tant que les fumées sont sous cette température, pour ne pas souffler d’air froid.'),
     fig('ventil_rythme_min','Changer la ventilation au plus toutes les','min','Chaque changement coûte une écriture dans la mémoire du poêle.'),
    ],{help:'Quand la flamme est sur Automatique : Hestia lit la part du temps où le thermostat du poêle voudrait chauffer, et en tire la flamme.'})}
@@ -1080,7 +1110,7 @@ export class HestiaHeatingSetup extends LitElement {
     listRow({label:'Couper la prise sans réponse',control:true,sub:'En dernier recours : le poêle chauffe encore après l’arrêt et deux ordres. Sans réponse, Hestia coupe la prise.',
      value:toggle('Couper la prise sans réponse',this.val<boolean>('couper_prise')!==false,on=>this.set('couper_prise',on))}),
     listRow({label:'L’interrupteur de sa prise',control:true,sub:cut?'Choisi par vous.':f.coupure?'Trouvé seul, d’après la prise mesurée.':'Aucun trouvé : en dernier recours, Hestia vous dira de couper le poêle vous-même.',
-     value:this.select('Interrupteur de la prise du poêle',cut,(f.coupures??[]).map(x=>[x.id,x.nom]),f.coupure?'Trouvé seul':'Aucun',x=>this.set('poele_prise_switch',x))}),
+     value:this.entity('Interrupteur de la prise du poêle',cut,(f.coupures??[]).map(x=>[x.id,x.nom]),f.coupure?'Trouvé seul':'Aucun',x=>this.set('poele_prise_switch',x))}),
     always('Thermostat du poêle qui passe en Hors gel, ou éteint 30 secondes : le poêle s’arrête. Éteint par sa propre sécurité, il compte aussi, sauf pour la sonde dehors seule : flamme au plus bas jusqu’à son retour. Un poêle allumé à la main, son thermostat en Hors gel, n’est pas arrêté : Hestia met son thermostat en Boost. Hestia n’éteint jamais un thermostat, sauf celui du poêle pour un verrou de sécurité.'),
    ])}
    ${listSection('Les sécurités',[
