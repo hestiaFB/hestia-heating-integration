@@ -4,7 +4,7 @@
 
 ### Corrections
 - **La carte maison compte de nouveau les granulés** quand Home Assistant n’enregistre pas le capteur « Granulés brûlés » de Hestia, par exemple parce qu’un filtre du recorder le laisse de côté. Les kilos et les euros des granulés restaient alors à 0, alors que le poêle avait chauffé. Hestia les retrouve maintenant à partir de l’énergie du poêle, qui est enregistrée : un kilo, c’est 4,2 kWh. Les 30 derniers jours se recomptent de la même façon.
-- **Le dessin de la pastille, en haut à droite des cartes compactes, est centré.** Un radiateur qui ne chauffe pas était dessiné trop bas et un peu à gauche.
+- **Le dessin de la pastille, en haut à droite des cartes compactes, est centré.** Un radiateur qui ne chauffe pas était dessiné trop bas et un peu à gauche. Elle a aussi un contour, comme les boutons de mode, pour se détacher de la carte.
 
 ## 1.1.0b2 — Choisir une entité avec la recherche
 
