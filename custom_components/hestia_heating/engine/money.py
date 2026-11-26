@@ -62,3 +62,44 @@ def seen(prices: list[dict | None]) -> dict | None:
     for p in known:
         by[p.get("period") if p.get("period") in PERIODS else "base"] = p["price"]
     return {"prix": {k: by[k] for k in PERIODS if k in by}, "couleur": known[-1].get("color")}
+
+
+def heating_day(hours: list[datetime], kwh: list[float], kg: list[float], prices: list[dict | None] | None,
+                now: datetime, kwh_price: float | None, kg_price: float | None, kwh_per_kg: float) -> dict:
+    """What a day of heating cost (1.1.0b1, the house card and Hestia Énergie's « un seul coût »): its electricity at
+    each hour's price, its pellets at their price, and what the pellets saved against the same heat bought as
+    electricity. `prices`: Hestia Énergie's (reader.energy_prices), None without it: then the price of Réglages.
+    A part with an hour that used energy at an unknown price is None; with Hestia Énergie, the kWh of each period."""
+    today_tempo = tempo_day(now)
+    elec = pellets_as_elec = 0.0
+    elec_known = saved_known = True
+    hc = with_period = 0.0
+    for i, at in enumerate(hours):
+        used, burnt = kwh[i] if i < len(kwh) else 0.0, kg[i] if i < len(kg) else 0.0
+        if prices is None:
+            price = kwh_price
+        else:
+            p = prices[i] if i < len(prices) else None
+            ok = p is not None and p.get("price") is not None and (p.get("color") is None or tempo_day(at) == today_tempo)
+            price = p["price"] if ok else None
+            if p is not None and p.get("period") in ("hc", "hp") and used:
+                with_period += used
+                hc += used if p["period"] == "hc" else 0.0
+        if used:
+            if price is None:
+                elec_known = False
+            else:
+                elec += used * price
+        if burnt:
+            if price is None:
+                saved_known = False
+            else:
+                pellets_as_elec += burnt * kwh_per_kg * price
+    total_kg = sum(kg)
+    pellets = None if kg_price is None and total_kg else round(total_kg * (kg_price or 0.0), 2)
+    out = {"electrique": round(elec, 2) if elec_known else None, "granules": pellets,
+           "gagne": round(pellets_as_elec - pellets, 2) if saved_known and pellets is not None and total_kg else None,
+           "prix": "energie" if prices is not None else "reglages" if kwh_price is not None else None}
+    if with_period:
+        out.update(kwh_hc=round(hc, 2), kwh_periode=round(with_period, 2))
+    return out

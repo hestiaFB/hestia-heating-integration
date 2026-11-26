@@ -1,5 +1,21 @@
 # Changements
 
+## 1.1.0b1 — La carte maison complète
+
+### Nouveautés
+- **La carte maison devient une vraie carte de la maison.** En haut, trois chiffres : la maison en moyenne (et la consigne moyenne), dehors (maintenant, cette nuit, demain), le coût du chauffage en ce moment, en euros par heure. Puis qui chauffe, en une barre : le poêle et l’électrique, en pourcentage et en kW.
+- **Chaque pièce dit combien de temps elle a chauffé aujourd’hui**, à côté de sa température et de sa consigne.
+- **Aujourd’hui en euros** : l’électrique, les granulés, et ce que les granulés ont fait gagner face au tout électrique. Aux prix de Hestia Énergie, heure par heure, ou au prix des réglages.
+- **À froid égal** : le coût du jour ramené au froid du jour (les degrés-jours), comparé à hier et à la semaine passée. Un jour plus froid n’est pas compté comme une dépense de plus.
+- **« Votre maison, sur 14 jours »**, repliée : l’inertie (ce que la maison perd par heure quand tout s’arrête, et en combien d’heures elle perd la moitié de sa chaleur), le besoin de chauffe (kWh par degré-jour, et la quinzaine d’avant), la montée en température de chaque pièce, le temps de chauffe par jour, la part du temps où la consigne est tenue, la part du poêle dans la chaleur de la saison, et la part des heures creuses.
+- **« 30 derniers jours »**, repliée : l’électrique et les granulés de chaque jour, avec le froid du dehors en pointillé.
+- **Un seul coût pour Hestia Énergie** : l’interface de Chauffage donne maintenant le coût du chauffage du jour (`cout_chauffage`), pour qu’Énergie montre le même chiffre au lieu de le recompter. Ajout compatible : rien ne change pour une version d’Énergie qui ne le lit pas encore.
+
+### Comment ça marche
+- Hestia tient un **journal de la maison, heure par heure** : la température et la consigne de chaque pièce, ses minutes de chauffe, le froid dehors, les minutes du poêle allumé, les kWh, les kilos et les euros. Aujourd’hui se remplit en direct ; les 30 jours d’avant sont relus une seule fois dans l’historique de Home Assistant, un jour à la fois, puis la veille chaque nuit vers 3 h 10.
+- Rien n’est affiché tant qu’il n’y a pas assez d’heures utiles : une statistique dit « pas encore » plutôt qu’un chiffre tiré de deux heures.
+- Hestia ne fait que lire : aucun ordre n’est envoyé pour ces chiffres.
+
 ## 1.0.1b4 — Le poêle allumé à la main ne se bride plus
 
 ### Corrections

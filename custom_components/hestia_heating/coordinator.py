@@ -21,6 +21,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from . import reader
+from .house_journal import HouseJournal
 from .const import API_KEY, DOMAIN, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
 from .engine import driver, granules, home_planning, house, money, phrases, pilot, profiles, sources, tuning
 
@@ -124,6 +125,8 @@ class HeatingCoordinator:
         self._discover_pending = None
         self._days: dict[str, tuple[float, dict]] = {}
         self.last_build_ms: float | None = None
+        # The house's journal, hour by hour (1.1.0b1): the house card's figures and the day's cost for Hestia Énergie.
+        self.house_journal = HouseJournal(self)
 
     # --- listeners -----------------------------------------------------------------------------------------------
 
@@ -173,6 +176,7 @@ class HeatingCoordinator:
         # The rate seen before the stop is not carried over it: the time Home Assistant was stopped counts nothing.
         pellets = state.get("granules")
         self.pellets_memory = {**pellets, "debit": 0.0} if isinstance(pellets, dict) else {}
+        await self.house_journal.async_load()
         folder = Path(__file__).parent / "profiles"
         self.profiles = await self.hass.async_add_executor_job(profiles.load_all, folder)
         self._discover()
@@ -188,10 +192,12 @@ class HeatingCoordinator:
             # The stove's integration or Versatile Thermostat may load after this brick: walked again once all is up.
             self._unsubs.append(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._ha_started))
         self._listen()
+        self.house_journal.start()
 
     async def async_stop(self) -> None:
         # Reloaded: the count of the last minutes is written now, before the new brick reads it.
         await self.state_store.async_save(self._state())
+        await self.house_journal.async_stop()
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
@@ -313,6 +319,10 @@ class HeatingCoordinator:
         view["extensions"] = self._extensions()
         view["changements"] = self._changes(today)
         self.data = view
+        try:
+            self.house_journal.observe(view, snap["now"], hourly, snap["climates"])
+        except Exception:  # noqa: BLE001 - the journal never stops the brick
+            _LOGGER.exception("Hestia Chauffage n'a pas pu tenir le journal de la maison")
         self.last_build_ms = round((time.perf_counter() - started) * 1000, 2)
         self._notify()
 

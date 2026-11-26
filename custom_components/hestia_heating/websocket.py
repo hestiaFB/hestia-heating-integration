@@ -29,7 +29,7 @@ def _coordinator(hass):
 
 
 def async_setup_websocket(hass) -> None:
-    for command in (ws_view, ws_subscribe, ws_day, ws_history, ws_settings, ws_set_settings, ws_fire_pot_cleaned,
+    for command in (ws_view, ws_subscribe, ws_day, ws_history, ws_house, ws_settings, ws_set_settings, ws_fire_pot_cleaned,
                     ws_answer, ws_auto):
         websocket_api.async_register_command(hass, command)
 
@@ -122,6 +122,18 @@ async def ws_history(hass, connection, msg):
         connection.send_error(msg["id"], "not_ready", "Hestia Chauffage n'est pas activée.")
         return
     connection.send_result(msg["id"], await c.async_history(msg["cible"]))
+
+
+@websocket_api.websocket_command({vol.Required("type"): "hestia_heating/maison"})
+@callback
+def ws_house(hass, connection, msg):
+    """The house card's figures (1.1.0b1): today's money and heating, at equal cold, the house over 14 days, the season
+    and the last thirty days, from the house's journal."""
+    c = _coordinator(hass)
+    if c is None:
+        connection.send_error(msg["id"], "not_ready", "Hestia Chauffage n'est pas activée.")
+        return
+    connection.send_result(msg["id"], c.house_journal.house())
 
 
 @websocket_api.websocket_command({vol.Required("type"): "hestia_heating/settings"})
