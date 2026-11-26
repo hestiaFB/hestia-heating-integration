@@ -455,3 +455,9 @@ ha-card.small.folded { cursor:pointer; }
 .compact .mid .to b { font-size:max(11px, 6.6cqi); font-weight:700; color:color-mix(in oklab, var(--hc-set) 80%, var(--nw-fg)); font-variant-numeric:tabular-nums; }
 .compact .mid .ct { font-size:max(18px, 10.5cqi); }
 .compact .mid .to { margin-top:1cqi; padding-top:1cqi; }
+/* 1.0.1b3 (Frank: « bien étirable »): a compact card stretched wide keeps its clock and its buttons at their size, and
+   the room left goes to the side; the modes stay in two rows so that every card keeps the same height. */
+.small .pair { grid-template-columns:minmax(140px, min(42%, 250px)) minmax(0, 1fr); }
+@container (min-width:620px) { .small .side .modes { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+.small .side .face, .small .side .legend.mini { max-width:420px; }
+@container (max-width:380px) { .small .pair { grid-template-columns:1fr; } }

@@ -1,5 +1,10 @@
 # Changements
 
+## 1.0.1b3 — La carte compacte s’étire bien
+
+### Corrections
+- **Une carte compacte étirée sur toute la largeur reste à sa taille.** L’horloge ne grossit plus au-delà de sa taille habituelle, et les quatre boutons de mode restent sur deux rangées au lieu de devenir quatre grands carrés. La place en plus reste à droite, et les cartes côte à côte gardent la même hauteur.
+
 ## 1.0.1b2 — Les cartes compactes, toutes de la même hauteur
 
 ### Améliorations
