@@ -57,6 +57,17 @@ type History={unite:string|null;stat:string|null;aujourdhui:string;jours:{jour:s
      null where a price is unknown; the prices seen and today's Tempo colour. */
  energie?:{euros:Euros[];prix:Record<string,number>;couleur:string|null}};
 type Euros={jour:string;total:number|null;hc?:number;hp?:number;base?:number};
+/** The house card's figures (1.1.0b1), from the house's journal: now, today, at equal cold, the house over 14 days,
+    the last thirty days. Every figure is null until enough hours are known. */
+type Money={electrique?:number|null;granules?:number|null;gagne?:number|null;prix?:string|null};
+type HouseFig={maintenant:{cout_h:number|null;periode:string|null;couleur:string|null;poele_kw:number;electrique_kw:number;dehors:number|null;consigne_moyenne:number|null};
+ aujourdhui:{jusqua:string;kwh:number|null;kg:number|null;argent:Money|null;poele_min:number;autres_min:number;pieces:Record<string,number>};
+ froid_egal:{base:'eur'|'kwh';vs_hier:number|null;vs_semaine:number|null;hier_vs_semaine:number|null;dehors_vs_hier:number|null}|null;
+ maison:{inertie:{a_15:number;demi_vie_h:number;heures:number}|null;besoin:{kwh_dj:number;avant:number|null;jours:number}|null;
+  montee:{id:string;nom:string;min_par_degre:number;poele:boolean}[];temps:{poele_min:number;autres_min:number;jours:number}|null;
+  tenue:{pct:number}|null;creuses:{pct:number;kwh:number}|null;saison:{pct_poele:number;poele_kwh:number;electrique_kwh:number;saison:string|null}|null;jours:number};
+ jours:{jour:string;kwh:number|null;kg:number|null;eur_elec:number|null;eur_gran:number|null;chaleur_kwh:number|null;dehors:number|null;dj:number|null}[];
+ apprend:boolean};
 type Config={type:string;card?:string;piece?:string;court?:boolean;compacte?:boolean;name?:string;tap_action?:string};
 const CARDS=['maison','poele','piece','planning'];
 /** A tap on a room's card: its thermostat (Home Assistant's own window, by default), its page in the tab, or nothing. */
@@ -67,6 +78,8 @@ const deg=(v:number|null|undefined)=>v==null?'—':`${num(v)} °C`;
 const watts=(w:number|null|undefined)=>w==null?'—':w>=500?`${num(w/1000)} kW`:`${num(w,0)} W`;
 const eur=(v:number)=>v>=100?`${num(v,0)} €`:`${v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} €`;
 const cap=(t:string)=>t?t[0].toUpperCase()+t.slice(1):t;
+/** A length of time: « 35 min », « 4 h 10 ». */
+const dur=(m:number)=>{const r=Math.round(m);return r<60?`${r} min`:`${Math.floor(r/60)} h${r%60?` ${String(r%60).padStart(2,'0')}`:''}`;};
 const hm=(d:Date)=>d.getMinutes()?`${d.getHours()} h ${String(d.getMinutes()).padStart(2,'0')}`:`${d.getHours()} h`;
 const DAYS=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
 const DAY_SHORT=['di','lu','ma','me','je','ve','sa'];
@@ -116,8 +129,8 @@ const RELAY=svg`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7v10M8 7
 class HestiaHeatingCard extends LitElement {
  static styles=[unsafeCSS(charte),unsafeCSS(heating)];
  static properties={_view:{state:true},_day:{state:true},_hist:{state:true},_error:{state:true},_pending:{state:true},_refused:{state:true},
-  _drawers:{state:true},_tabs:{state:true},_confirm:{state:true},_busy:{state:true},_hover:{state:true},_pin:{state:true}};
- declare _view?:View;declare _day?:Day;declare _hist?:History;declare _error?:string;
+  _drawers:{state:true},_tabs:{state:true},_fig:{state:true},_confirm:{state:true},_busy:{state:true},_hover:{state:true},_pin:{state:true}};
+ declare _view?:View;declare _day?:Day;declare _hist?:History;declare _error?:string;declare _fig?:HouseFig;
  /** The mode just pressed, until the thermostat says it; what went wrong with the last press. */
  declare _pending?:{id:string;mode:string;at:number};declare _refused?:string;
  /** The drawers opened or closed and the tab shown in each (this card only), the press waiting for its second tap,
@@ -126,7 +139,7 @@ class HestiaHeatingCard extends LitElement {
  /** The clock's hour under the pointer (or the keyboard's focus), the one pinned by a tap, the last one shown. */
  declare _hover?:number;declare _pin?:number;private _last?:number;
  private _hass?:Hass;private _config:Config={type:'custom:hestia-heating-card',card:'maison'};private _stop?:()=>void;private _again?:number;
- private _dayAt=0;private _dayFor='';private _histAt=0;private _histFor='';
+ private _dayAt=0;private _dayFor='';private _histAt=0;private _histFor='';private _figAt=0;
  constructor(){super();this._drawers={};this._tabs={};}
 
  static getStubConfig(){return {card:'maison'};}
@@ -160,6 +173,11 @@ class HestiaHeatingCard extends LitElement {
      days every ten minutes at most. */
  private _maybeDay(){
   const c=this._config,v=this._view,room=c.card==='piece'&&!c.court&&v?this._roomOf(v):undefined;
+  // The house card's figures (1.1.0b1): asked when it shows, then every two minutes at most.
+  if(c.card==='maison'&&this._hass&&Date.now()-this._figAt>=120_000){
+   this._figAt=Date.now();
+   this._hass.callWS<HouseFig>({type:'hestia_heating/maison'}).then(f=>{this._fig=f;}).catch(()=>{/* an older integration: the card without them */});
+  }
   const target=c.card==='poele'?'poele':room?`piece/${room.id}`:'';
   if(!target||!this._hass)return;
   // Another room or the stove: never show the last one's day in the meantime.
@@ -335,18 +353,104 @@ class HestiaHeatingCard extends LitElement {
   catch(e){this._pending=undefined;this._refused=`Le thermostat n’a pas pris « ${MODE_WORD[mode]??mode} » : ${(e as {message?:string}).message??'pas de réponse'}.`;}
  }
 
- /* 1 · La maison */
+ /* 1 · La maison (1.1.0b1, Frank: « pas assez carte complète », the old « Poêle et appoint » card as model): now in
+    three figures, who heats, each room with its heating of the day, what today cost, the day at equal cold, then two
+    folds, the house over 14 days (inertia, heat needed, warming up, heating time, the season) and the last 30 days. */
  private _house(v:View){
-  const h=v.maison,out=v.dehors,next=v.planning.prochains,now=new Date(),g=v.granules;
-  const line=html`${h.temperature!=null?html`La maison est à <b>${deg(h.temperature)}</b>. `:nothing}${out?.nuit_min!=null?html`Cette nuit <b>${deg(out.nuit_min)}</b> dehors. `:nothing}${next.length?html`Ensuite : ${next.slice(0,2).map(n=>`${n.texte} ${when(n.a)}`).join(', ')}.`:nothing}`;
+  const h=v.maison,out=v.dehors,next=v.planning.prochains,now=new Date(),f=this._fig;
+  const line=html`${out?.nuit_min!=null?html`Cette nuit <b>${deg(out.nuit_min)}</b> dehors. `:nothing}${next.length?html`Ensuite : ${next.slice(0,2).map(n=>`${n.texte} ${when(n.a)}`).join(', ')}.`:nothing}`;
   return html`<div class="head"><h2 class="nw-title">${this._config.name||'Chauffage'}</h2>${this._info('','Ouvrir l’onglet Chauffage')}</div>
    <div class=${'nw-band nw-glass band '+h.etat}><div class="nw-band-text"><p class="nw-band-kicker">Maintenant <i>${hm(now)}</i></p>
-    <p class="nw-band-title">${h.titre}</p><p class="nw-band-line">${line}</p></div></div>
-   <div class="rooms">${v.pieces.map(r=>html`<button class="room" @click=${()=>this._open('pieces/'+r.id)}><span class="n">${r.nom}</span>
-    ${r.etat==='chauffe'&&!r.poele&&r.demande_pct!=null&&!r.fenetre?html`<span class="demand" role="img" aria-label=${`Demande ${r.demande_pct} %`}><i style=${`width:${r.demande_pct}%`}></i></span>`:this._chip(r.badge)}
-    <span class="t">${r.temperature!=null?num(r.temperature):'—'}${r.consigne!=null?html` <small>/ ${num(r.consigne)}</small>`:nothing}</span></button>`)}</div>
-   <div class="nw-stats"><div><span>En chauffe</span><b>${h.en_chauffe} sur ${h.pieces}</b></div><div><span>Électrique</span><b>${watts(h.electrique_w)}</b></div>
-    ${g?.jours!=null?html`<div><span>Granulés</span><b>${g.jours} jours</b></div>`:out?.demain_max!=null?html`<div><span>Demain après-midi</span><b>${deg(out.demain_max)}</b></div>`:html`<div><span>Pièces</span><b>${h.pieces}</b></div>`}</div>`;
+    <p class="nw-band-title">${h.titre}</p>${line.values.some(x=>x!==nothing)?html`<p class="nw-band-line">${line}</p>`:nothing}</div></div>
+   ${this._houseNow(v,f)}${this._whoHeats(v,f)}
+   ${f?html`<div class="rhead" aria-hidden="true"><span>Pièce</span><span>a chauffé</span><span>temp. / consigne</span></div>`:nothing}
+   <div class="rooms" role="list">${v.pieces.map(r=>this._houseRoom(r,f))}</div>
+   ${f?html`${this._today(v,f)}${this._equalCold(f)}${this._houseFold(f)}${this._monthFold(f)}`:nothing}`;
+ }
+ private _houseNow(v:View,f?:HouseFig){
+  const h=v.maison,out=v.dehors,n=f?.maintenant,soon=[out?.nuit_min!=null?`${num(out.nuit_min)} cette nuit`:'',out?.demain_max!=null?`${num(out.demain_max)} demain`:''].filter(Boolean).join(' · ');
+  const tile=(k:string,value:string,sub:string)=>html`<div class="tile"><span class="k">${k}</span><b class="v">${value}</b><span class="k">${sub}</span></div>`;
+  const price=n?.cout_h!=null?tile('Coût, en ce moment',`${num(n.cout_h,2)} €/h`,n.periode?PERIOD_WORD[n.periode]??n.periode:'au prix des réglages')
+   :tile('Électrique',watts(h.electrique_w),`${h.en_chauffe} pièce${h.en_chauffe>1?'s':''} sur ${h.pieces} en chauffe`);
+  return html`<div class="tiles house-now">
+   ${tile('Maison, en moyenne',deg(h.temperature),n?.consigne_moyenne!=null?`consigne ${num(n.consigne_moyenne)}`:`${h.pieces} pièces`)}
+   ${tile('Dehors',deg(n?.dehors??null),soon||'—')}${price}</div>`;
+ }
+ /** Who heats now: the stove's kW (its kilos an hour as heat) and the electricity's, as one bar and two lines. */
+ private _whoHeats(v:View,f?:HouseFig){
+  const st=f?.maintenant.poele_kw??0,el=f?.maintenant.electrique_kw??v.maison.electrique_w/1000,total=st+el;
+  if(total<=0.05)return html`<p class="who quiet">Rien ne chauffe en ce moment.</p>`;
+  const sp=Math.round(st/total*100),heating=v.pieces.filter(r=>r.etat==='chauffe'&&!r.poele&&r.puissance_w>0).map(r=>r.nom);
+  return html`<div class="who" role="img" aria-label=${`Poêle ${sp} %, électrique ${100-sp} %`}>
+   <div class="whobar">${st>0?html`<i class="st" style=${`flex:${st}`}></i>`:nothing}${el>0?html`<i class="el" style=${`flex:${el}`}></i>`:nothing}</div>
+   <div class="wholines">${st>0?html`<span><i class="sw st"></i><b>Poêle ${sp} %</b> · ${num(st)} kW</span>`:nothing}
+    ${el>0?html`<span><i class="sw el"></i><b>Électrique ${100-sp} %</b> · ${num(el)} kW${heating.length?` · ${heating.slice(0,3).join(', ')}`:''}</span>`:nothing}</div></div>`;
+ }
+ private _houseRoom(r:Room,f?:HouseFig){
+  const mins=f?.aujourdhui.pieces?.[r.id];
+  return html`<button class="room" role="listitem" @click=${()=>this._open('pieces/'+r.id)}><span class="n">${r.nom}</span>
+   ${r.etat==='chauffe'&&!r.poele&&r.demande_pct!=null&&!r.fenetre?html`<span class="demand" role="img" aria-label=${`Demande ${r.demande_pct} %`}><i style=${`width:${r.demande_pct}%`}></i></span>`:this._chip(r.badge)}
+   ${f?html`<span class="day" title="Temps de chauffe aujourd’hui">${mins!=null?dur(mins):'—'}</span>`:nothing}
+   <span class="t">${r.temperature!=null?num(r.temperature):'—'}${r.consigne!=null?html` <small>/ ${num(r.consigne)}</small>`:nothing}</span></button>`;
+ }
+ /** Today so far: electricity and pellets in euros (else in kWh and kilos), what the pellets saved. */
+ private _today(v:View,f:HouseFig){
+  const t=f.aujourdhui,m=t.argent??{},hasStove=!!v.poele,until=t.jusqua.replace(/^0/,'').replace(':',' h ').replace(/ h 00$/,' h');
+  const euros=m.electrique!=null||m.granules!=null,total=(m.electrique??0)+(hasStove?m.granules??0:0);
+  const cell=(k:string,value:string,sub:string,cls='')=>html`<div class=${'cell '+cls}><span class="k">${k}</span><b>${value}</b><span class="k">${sub}</span></div>`;
+  return html`<section class="hsec today-cost"><div class="hsech"><span class="nw-label">Aujourd’hui, jusqu’à ${until}</span>${euros?html`<b class="big">${eur(total)}</b>`:nothing}</div>
+   <div class="cells">${cell('Électrique',m.electrique!=null?eur(m.electrique):t.kwh!=null?`${num(t.kwh)} kWh`:'—',[m.electrique!=null&&t.kwh!=null?`${num(t.kwh)} kWh`:'',dur(t.autres_min)].filter(Boolean).join(' · '),'el')}
+    ${hasStove?cell('Granulés',m.granules!=null?eur(m.granules):t.kg!=null?`${num(t.kg)} kg`:'—',[m.granules!=null&&t.kg!=null?`${num(t.kg)} kg`:'',dur(t.poele_min)].filter(Boolean).join(' · '),'st'):nothing}
+    ${hasStove&&m.gagne!=null?cell(m.gagne>=0?'Gagné':'Perdu',eur(Math.abs(m.gagne)),'face au tout électrique','ok'):nothing}</div>
+   ${!euros?html`<p class="note">Donnez le prix du kWh dans Réglages (ou installez Hestia Énergie) pour lire ces chiffres en euros.</p>`:nothing}</section>`;
+ }
+ /** The day's cost (or its heat) for each degree-day, against yesterday and the week before. */
+ private _equalCold(f:HouseFig){
+  const c=f.froid_egal,pct=(x:number|null)=>x==null?'pas encore':x===0?'pareil':`${x<0?'−':'+'} ${Math.abs(x)} %`;
+  const tone=(x:number|null)=>x==null?'':x<0?'good':x>0?'bad':'';
+  const what=c?.base==='kwh'?'La chaleur':'Le coût';
+  return html`<section class="hsec"><div class="hsech"><span class="nw-label">À froid égal</span></div>
+   ${c?html`<div class="cmp">
+    <span>Face à hier${c.dehors_vs_hier!=null&&Math.abs(c.dehors_vs_hier)>=0.3?` (${num(Math.abs(c.dehors_vs_hier))} °C de ${c.dehors_vs_hier>0?'plus':'moins'} dehors)`:''}</span><b class=${tone(c.vs_hier)}>${pct(c.vs_hier)}</b>
+    <span>Face à la semaine passée</span><b class=${tone(c.vs_semaine)}>${pct(c.vs_semaine)}</b>
+    <span>Face au même jour l’an dernier</span><b class="later">pas encore</b></div>
+    <p class="note">${what} de chaque jour ramené au froid du jour (les degrés-jours) : un jour plus froid n’est pas compté comme une dépense de plus.</p>`
+   :html`<p class="note">${f.apprend?'Hestia relit les jours passés de la maison : les comparaisons arrivent dans quelques minutes.':'Pas encore assez de jours froids pour comparer.'}</p>`}</section>`;
+ }
+ /** « Votre maison, sur 14 jours » (folded, Frank: « oui replier »): what the house is, learnt from its days. */
+ private _houseFold(f:HouseFig){
+  const m=f.maison,i=m.inertie,b=m.besoin,t=m.temps,s=m.saison;
+  const say=[i?`Inertie − ${num(i.a_15)} °C/h`:'',b?`${num(b.kwh_dj)} kWh par degré-jour`:'',s?`poêle ${s.pct_poele} % de la saison`:''].filter(Boolean).join(' · ')
+   ||(f.apprend?'Hestia relit les jours passés…':`${m.jours} jour${m.jours>1?'s':''} connu${m.jours>1?'s':''}`);
+  const stat=(k:string,value:string|null,sub:string)=>html`<div class="stat"><span class="k">${k}</span><b>${value??'pas encore'}</b><span class="k">${sub}</span></div>`;
+  const best=m.montee[0],others=m.montee.slice(1,3);
+  const trend=b?.avant!=null?` ${num(b.avant)} la quinzaine d’avant : ${b.kwh_dj<b.avant*0.97?'mieux':b.kwh_dj>b.avant*1.03?'moins bien':'pareil'}.`:'';
+  return this._drawer('maison',`Votre maison, sur ${Math.max(m.jours,1)} jour${m.jours>1?'s':''}`,say,false,()=>html`<div class="stats">
+   ${stat('Inertie',i?`− ${num(i.a_15)} °C/h`:null,i?`quand tout s’arrête, à 15 °C d’écart avec dehors. Elle garde la moitié de sa chaleur en ${i.demi_vie_h} h.`:'les heures où rien ne chauffe, quand il y en a assez.')}
+   ${stat('Besoin de chauffe',b?`${num(b.kwh_dj)} kWh par degré-jour`:null,b?`poêle compté en chaleur.${trend}`:'la chaleur du jour pour chaque degré de froid.')}
+   ${stat('Montée en température',best?`+ 1 °C en ${dur(best.min_par_degre)}`:null,best?`${best.nom}${best.poele?', poêle allumé':''}.${others.map(o=>` ${o.nom} : + 1 °C en ${dur(o.min_par_degre)}.`).join('')}`:'les heures de pleine chauffe.')}
+   ${stat('Temps de chauffe',t?`${dur(t.poele_min+t.autres_min)} par jour`:null,t?`${t.poele_min?`poêle ${dur(t.poele_min)}, `:''}radiateurs ${dur(t.autres_min)} en tout.${m.tenue?` Consigne tenue ${m.tenue.pct} % du temps.`:''}`:'en moyenne, pièces additionnées.')}
+   ${s?stat('Part du poêle',`${s.pct_poele} %`,`de la chaleur de la saison${s.saison?` ${s.saison.replace('-','–')}`:''} : ${num(s.poele_kwh,0)} kWh de granulés, ${num(s.electrique_kwh,0)} kWh d’électricité.`):nothing}
+   ${m.creuses?stat('Heures creuses',`${m.creuses.pct} %`,`de l’électricité du chauffage, sur ${num(m.creuses.kwh,0)} kWh (prix de Hestia Énergie).`):nothing}</div>`,'hfold');
+ }
+ /** « 30 derniers jours » (folded): each day's electricity and pellets, the cold outside as a dotted line. */
+ private _monthFold(f:HouseFig){
+  const days=f.jours;
+  if(!days.length)return nothing;
+  const euros=days.every(d=>(d.kwh==null||d.eur_elec!=null)&&(d.kg==null||d.eur_gran!=null));
+  const el=(d:HouseFig['jours'][0])=>(euros?d.eur_elec:d.kwh)??0,gr=(d:HouseFig['jours'][0])=>(euros?d.eur_gran:(d.chaleur_kwh??0)-(d.kwh??0))??0;
+  const sumE=days.reduce((a,d)=>a+el(d),0),sumG=days.reduce((a,d)=>a+gr(d),0),max=Math.max(0.01,...days.map(d=>el(d)+gr(d)));
+  const fmt=(x:number)=>euros?eur(x):`${num(x,0)} kWh`;
+  const say=`${fmt(sumE+sumG)}${sumG?` · ${fmt(sumE)} électrique · ${fmt(sumG)} granulés`:''}`;
+  const dj=days.map(d=>d.dj),djMax=Math.max(1,...dj.map(x=>x??0)),n=days.length;
+  const pts=dj.map((x,i)=>x==null?null:`${((i+.5)/n*100).toFixed(2)},${(100-x/djMax*92).toFixed(2)}`);
+  const line=pts.filter(Boolean).join(' ');
+  return this._drawer('mois',`${n} dernier${n>1?'s':''} jour${n>1?'s':''}`,say,false,()=>html`<div class="month" role="img" aria-label=${`${n} jours : ${say}`}>
+   <div class="mcols" style=${`--n:${n}`}>${days.map((d,i)=>html`<span class=${i===n-1?'today':''} title=${`${d.jour.slice(8)}/${d.jour.slice(5,7)} : ${fmt(el(d)+gr(d))}${d.dehors!=null?`, ${num(d.dehors)} °C dehors`:''}`}
+     style=${`height:${Math.round((el(d)+gr(d))/max*100)}%`}>${gr(d)>0?html`<i class="st" style=${`flex:${gr(d)}`}></i>`:nothing}${el(d)>0?html`<i class="el" style=${`flex:${el(d)}`}></i>`:nothing}</span>`)}
+    ${line?svg`<svg class="cold" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points=${line} fill="none" vector-effect="non-scaling-stroke"></polyline></svg>`:nothing}</div>
+   <div class="mlegend">${sumG?html`<span><i class="sw st"></i>granulés</span>`:nothing}<span><i class="sw el"></i>électrique</span><span><i class="sw cold"></i>froid dehors</span></div>
+   ${!euros?html`<p class="note">En kWh de chaleur : sans le prix de chaque jour, les euros ne sont pas comptés.</p>`:nothing}</div>`,'hfold');
  }
 
  /* The clock's window (the last 24 hours, cached two minutes): where its minutes start, its length, now, its series.

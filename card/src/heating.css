@@ -463,3 +463,59 @@ ha-card.small.folded { cursor:pointer; }
 @container (max-width:380px) { .small .pair { grid-template-columns:1fr; } }
 /* 1.0.1b3: a full card stretched wide keeps its clock at a readable size, centred, instead of filling the width. */
 .top:not(.compact) > .wheel { width:100%; max-width:480px; margin:0 auto; }
+
+/* 1.1.0b1, the house card made whole (Frank, 26 Nov.: « pas assez carte complète »): three figures of now, who heats,
+   the rooms with their heating of the day, today's money, the day at equal cold, and two folds. */
+.house-now .tile { gap:3px; }
+.house-now .tile .v { font-size:var(--nw-fs-case); font-weight:650; letter-spacing:-.015em; }
+.who { display:flex; flex-direction:column; gap:8px; }
+.who.quiet { margin:0; font-size:var(--nw-fs-small); color:var(--nw-fg2); }
+.whobar { display:flex; gap:2px; height:10px; border-radius:5px; overflow:hidden; background:color-mix(in srgb, var(--nw-fg) 8%, transparent); }
+.whobar i { display:block; min-width:4px; }
+.whobar .st, .sw.st, .mcols .st { background:var(--hc-stove); }
+.whobar .el, .sw.el, .mcols .el { background:color-mix(in oklab, var(--nw-heat) 78%, var(--nw-bg)); }
+.wholines { display:flex; flex-wrap:wrap; gap:4px 16px; font-size:var(--nw-fs-small); color:var(--nw-fg2); }
+.wholines span { display:inline-flex; align-items:center; gap:6px; min-width:0; }
+.wholines b { color:var(--nw-fg); font-weight:650; }
+.rooms .room:has(.day) { grid-template-columns:minmax(0, 1fr) auto 72px 88px; }
+.room .day { font-size:var(--nw-fs-small); color:var(--nw-fg2); font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+.hsec { display:flex; flex-direction:column; gap:10px; padding-top:12px; border-top:1px solid var(--nw-line-soft); }
+.hsech { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.hsech .big { font-size:var(--nw-fs-case); font-weight:700; font-variant-numeric:tabular-nums; }
+.cells { display:grid; grid-template-columns:repeat(auto-fit, minmax(92px, 1fr)); gap:8px; }
+.cell, .stat { display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:14px; background:var(--hc-raised); min-width:0; }
+.cell b { font-size:var(--nw-fs-title); font-weight:700; font-variant-numeric:tabular-nums; }
+.cell .k, .stat .k { font-size:var(--nw-fs-small); color:var(--nw-fg2); }
+.cell.el { box-shadow:inset 3px 0 0 color-mix(in oklab, var(--nw-heat) 78%, var(--nw-bg)); }
+.cell.st { box-shadow:inset 3px 0 0 var(--hc-stove); }
+.cell.ok b { color:color-mix(in oklab, var(--nw-calm) 75%, var(--nw-fg)); }
+.cmp { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:6px 12px; font-size:var(--nw-fs-text); }
+.cmp b { font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+.cmp b.good { color:color-mix(in oklab, var(--nw-calm) 75%, var(--nw-fg)); }
+.cmp b.bad { color:color-mix(in oklab, var(--nw-alert) 70%, var(--nw-fg)); }
+.cmp b.later { color:var(--nw-fg2); font-weight:500; }
+.hsec .note, .hfold .note { margin:0; text-align:left; font-size:var(--nw-fs-small); color:var(--nw-fg2); }
+.dbox.hfold { padding:0 0 4px; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:8px; }
+.stat b { font-size:var(--nw-fs-title); font-weight:700; }
+.stat .k:first-child { font-size:var(--nw-fs-label); font-weight:650; letter-spacing:.08em; text-transform:uppercase; }
+.month { display:flex; flex-direction:column; gap:8px; }
+.mcols { position:relative; display:grid; grid-template-columns:repeat(var(--n), minmax(0, 1fr)); gap:clamp(1px, .6cqi, 4px); height:120px; align-items:end;
+  padding:10px 10px 6px; border-radius:14px; background:var(--hc-raised); }
+.mcols > span { display:flex; flex-direction:column-reverse; gap:1px; min-height:2px; border-radius:3px 3px 1px 1px; overflow:hidden; }
+.mcols > span i { display:block; min-height:0; }
+.mcols > span.today { outline:1.5px solid color-mix(in srgb, var(--nw-fg) 55%, transparent); outline-offset:1px; }
+.mcols .cold { position:absolute; inset:10px 10px 6px; width:calc(100% - 20px); height:calc(100% - 16px); pointer-events:none; }
+.mcols .cold polyline { stroke:color-mix(in srgb, var(--nw-fg) 55%, transparent); stroke-width:1.5; stroke-dasharray:3 4; }
+.mlegend { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:var(--nw-fs-small); color:var(--nw-fg2); }
+.mlegend span { display:inline-flex; align-items:center; gap:6px; }
+.sw.cold { height:0; border-top:1.5px dashed color-mix(in srgb, var(--nw-fg) 55%, transparent); background:none; }
+@container (max-width:420px) {
+  .tiles.house-now { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .tiles.house-now .tile:last-child { grid-column:1 / -1; }
+  .rooms .room:has(.day) { grid-template-columns:minmax(0, 1fr) auto 50px 76px; gap:6px; }
+  .room:has(.day) .t { font-size:var(--nw-fs-small); }
+}
+.rhead { display:grid; grid-template-columns:minmax(0, 1fr) 72px 88px; gap:10px; padding:0 2px 2px; font-size:var(--nw-fs-label); color:var(--nw-fg2); white-space:nowrap; }
+.rhead span:not(:first-child) { text-align:right; }
+@container (max-width:420px) { .rhead { grid-template-columns:minmax(0, 1fr) 50px 76px; gap:6px; font-size:10px; } }

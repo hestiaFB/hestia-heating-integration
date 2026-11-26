@@ -118,3 +118,19 @@ class HestiaHeatingApi:
         stove = data.get("poele")
         house["poele"] = None if not stove else {"etat": stove["etat"], "flamme": stove.get("flamme")}
         return house
+
+    def cout_chauffage(self, jour=None) -> dict | None:
+        """What the heating cost on a day (added in 1.1.0b1, « un seul coût » : Hestia Énergie shows this figure as it
+        is, counted once): today so far when `jour` is None, else that day (a date or « 2026-11-25 », the last thirty
+        days). `jour`, `electrique_kwh` (the thermostats' counters), `electrique_eur` (at each hour's price of Hestia
+        Énergie, else the price of Réglages), `granules_kg` and `granules_eur` (Hestia's count of the stove, at the
+        price of its bags), `chauffage_eur` (both), `gagne_eur` (what the pellets saved against the same heat bought
+        as electricity), `prix` (« energie », « reglages » or None). A part without a known price is None; None
+        without the day."""
+        c = self.coordinator
+        if c is None or not self._data:
+            return None
+        day = jour.isoformat() if hasattr(jour, "isoformat") else jour
+        if day is None:
+            return c.house_journal.today_cost()
+        return c.house_journal.day_cost(str(day))

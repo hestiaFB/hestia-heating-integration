@@ -599,3 +599,63 @@ async def hourly_totals(hass: HomeAssistant, stat: str, unit: str, start: dateti
         if following <= now:
             rows.append((following, moved))
     return rows
+
+
+# --- A past day of the house, for its journal (1.1.0b1) -----------------------------------------------------------
+
+def _climate_values(state) -> dict:
+    """What the journal keeps of one recorded state of a thermostat: its temperature, its set point (none while off),
+    whether it heats, and the cold outside it knows (Versatile Thermostat)."""
+    attrs = state.attributes or {}
+    specific = attrs.get("specific_states") if isinstance(attrs.get("specific_states"), dict) else {}
+
+    def number(value):
+        try:
+            return None if value is None else float(value)
+        except (TypeError, ValueError):
+            return None
+    off = state.state in ("off", "unavailable", "unknown")
+    action = attrs.get("hvac_action")
+    if action is None:
+        demand = number(attrs.get("power_percent"))
+        heats = bool(demand and demand > 0)
+    else:
+        heats = action == "heating"
+    return {"t": number(attrs.get("current_temperature")), "c": None if off else number(attrs.get("temperature")),
+            "chauffe": heats and not off,
+            "dehors": number(specific.get("ext_current_temperature", attrs.get("ext_current_temperature")))}
+
+
+async def past_day(hass: HomeAssistant, start: datetime, end: datetime, climates: list[str],
+                   texts: list[str]) -> tuple[dict[str, list[tuple[datetime, dict]]], dict[str, list[tuple[datetime, str]]]]:
+    """One day of the thermostats (their values at each recorded state, the state before `start` first) and of a few
+    text entities (the stove's state), read in the recorder's executor one entity at a time; only what the journal
+    keeps is held. Empty when there is no recorder."""
+    from homeassistant.components.recorder import get_instance, history
+
+    def read():
+        values: dict[str, list[tuple[datetime, dict]]] = {}
+        words: dict[str, list[tuple[datetime, str]]] = {}
+        for entity_id in climates:
+            states = history.get_significant_states(hass, start, end, [entity_id], None, True, False, False, False)
+            values[entity_id] = [(dt_util.as_local(s.last_updated), _climate_values(s))
+                                 for s in states.get(entity_id, [])]
+            del states
+        for entity_id in texts:
+            states = history.get_significant_states(hass, start, end, [entity_id], None, True, False, False, True)
+            words[entity_id] = [(dt_util.as_local(s.last_changed), s.state) for s in states.get(entity_id, [])]
+            del states
+        return values, words
+
+    try:
+        return await get_instance(hass).async_add_executor_job(read)
+    except Exception as err:  # noqa: BLE001 - no recorder, or a database hiccup: no day, never an error
+        _LOGGER.debug("Past day unavailable: %s", err)
+        return {}, {}
+
+
+async def hourly_rows(hass: HomeAssistant, stat: str, unit: str, start: datetime,
+                      end: datetime) -> list[tuple[datetime, float]]:
+    """A counter's hourly statistics between `start` and `end` (a past day): no « since the last statistic »."""
+    rows, _ = await _counter(hass, stat, unit, start, end, "hour")
+    return rows

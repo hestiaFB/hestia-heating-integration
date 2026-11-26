@@ -353,6 +353,69 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         self.assertEqual(api.sources(), [])
         self.assertIsNone(api.poele())
 
+    async def test_the_house_s_journal_and_the_day_s_cost(self):
+        """1.1.0b1: the house card's figures. Today is counted look by look (each room's minutes of heating, the stove's
+        burning), its kWh, kilos and euros read from the hourly statistics; a past day is read once from the recorder;
+        Hestia Énergie gets the day's cost by the interface (`cout_chauffage`). Reading sends nothing."""
+        from custom_components.hestia_heating import reader
+        entry, c = await self._setup()
+        await c.async_set_settings({"prix_kwh": 0.25})
+        j = c.house_journal
+        now = dt_util.now().replace(minute=20, second=0, microsecond=0)
+        if now > dt_util.now():
+            now -= timedelta(hours=1)
+        j.today = None
+        j.observe(c.data, now - timedelta(minutes=4), None, [])
+        j.observe(c.data, now, None, [])
+        bureau = j.today["pieces"]["bureau"]
+        heats = next(r for r in c.data["pieces"] if r["id"] == "bureau")["etat"] == "chauffe"
+        self.assertAlmostEqual(sum(bureau["min"]), 4.0 if heats else 0.0, places=3)
+        self.assertAlmostEqual(sum(j.today["poele_min"]), 4.0, places=3, msg="the stove burns in the made-up house")
+
+        async def hours(hass, stat, unit, first, end):
+            begin = end.replace(minute=0, second=0, microsecond=0)
+            return [(begin, 0.5 if unit == "kWh" else 1.0)]
+
+        async def days(hass, stat, unit, first, end):
+            return {end.date().isoformat(): 3.0}
+        with patch.object(reader, "hourly_totals", side_effect=hours), patch.object(reader, "daily_totals", side_effect=days):
+            await j.async_refresh()
+        api = self.hass.data[API_KEY]
+        cost = api.cout_chauffage()
+        counters = j._counters()
+        self.assertNotIn("sensor.vt_poele_energy", counters, "the stove's thermostat counts no electricity")
+        self.assertEqual(cost["electrique_kwh"], 0.5 * len(counters))
+        self.assertEqual(cost["electrique_eur"], round(0.5 * len(counters) * 0.25, 2))
+        self.assertEqual(cost["granules_kg"], 1.0)
+        self.assertEqual(cost["prix"], "reglages")
+        self.assertEqual(api.cout_chauffage(dt_util.now().date()), cost)
+        self.assertIsNone(api.cout_chauffage("2001-01-01"))
+        # A past day, read from the recorder: the bureau heated from 6 h to 7 h 30.
+        yesterday = (dt_util.now() - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        async def past(hass, start, end, climates, texts):
+            points = {i: [(start, {"t": 18.0, "c": 19.0, "chauffe": False, "dehors": 5.0}),
+                          (start + timedelta(hours=6), {"t": 18.0, "c": 19.0, "chauffe": True, "dehors": 5.0}),
+                          (start + timedelta(hours=7, minutes=30), {"t": 19.0, "c": 19.0, "chauffe": False, "dehors": 5.0})]
+                      for i in climates}
+            return points, {t: [(start, "off")] for t in texts}
+
+        async def rows(hass, stat, unit, first, end):
+            return [(first + timedelta(hours=6), 0.75)] if unit == "kWh" else []
+        with patch.object(reader, "past_day", side_effect=past), patch.object(reader, "hourly_rows", side_effect=rows):
+            await j._learn_day(yesterday.date().isoformat())
+        day = j.days[yesterday.date().isoformat()]
+        self.assertEqual(day["pieces"]["bureau"]["min"][6:8], [60.0, 30.0])
+        self.assertEqual(day["dehors"][3], 5.0)
+        self.assertEqual(day["kwh"], 0.75 * len(counters))
+        self.assertEqual(api.cout_chauffage(yesterday.date())["electrique_eur"], round(0.75 * len(counters) * 0.25, 2))
+        house = j.house()
+        self.assertEqual(set(house), {"maintenant", "aujourdhui", "froid_egal", "maison", "jours", "apprend"})
+        self.assertEqual(house["jours"][-1]["jour"], dt_util.now().date().isoformat())
+        self.assertEqual(self.calls, [], "the journal only reads")
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+        self.assertIsNone(api.cout_chauffage())
+
     async def test_the_cards_view_is_lighter(self):
         entry, c = await self._setup()
         view = card_view(c.data)
