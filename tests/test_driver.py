@@ -13,6 +13,7 @@ COLD, MILD = 17.5, 18.5                          # the house: cold enough to sta
 SETTINGS = [{"nom": "Consigne interne à 25 °C", "role": "thermostat", "reserve": None, "a_changer": False},
             {"nom": "ECO Stop", "role": "eco_stop", "reserve": None, "a_changer": True},
             {"nom": "Ventilation en AUTO", "role": "ventilation", "reserve": 6, "a_changer": True}]
+SETTLED = [{**s, "a_changer": False} for s in SETTINGS]   # a stove already set as Réglages want it
 
 
 def stove(etat="eteint", flamme=None, **more):
@@ -212,7 +213,7 @@ class MildSeason(unittest.TestCase):
         orders = p.look(stove(), thermostat("boost"), timedelta(minutes=15), house_c=MILD)
         self.assertEqual(gestures(orders), ["effacer:saison", "thermostat:set_preset_mode"])
         p = self.ask()
-        orders = p.look(stove("allumage", 2), thermostat("boost"), timedelta(minutes=15), house_c=MILD)
+        orders = p.look(stove("allumage", 2, reglages=SETTLED), thermostat("boost"), timedelta(minutes=15), house_c=MILD)
         self.assertEqual(gestures(orders), ["effacer:saison"])
 
     def test_the_thermostat_leaving_boost_is_a_no_without_order(self):
@@ -314,11 +315,12 @@ class ByHand(unittest.TestCase):
         frost = thermostat("frost", demand=0, target=14.0)
         p.look(stove(), frost, house_c=20.2)
         orders = p.look(stove("allumage", 3, **HOT), frost, timedelta(hours=2), house_c=20.2)
-        self.assertEqual(gestures(orders), ["thermostat:set_preset_mode"])
+        # With it (1.0.1b4), the settings Hestia sends before its own starts, here the ÉCO Stop.
+        self.assertEqual(gestures(orders), ["thermostat:set_preset_mode", "reglage:eco_stop"])
         self.assertEqual(orders[0]["donnees"], {"preset_mode": "boost"})
         self.assertEqual([e["texte"] for e in p.events if e["qui"] == "hestia"],
                          ["Le poêle a été allumé sans Hestia : Hestia passe le thermostat du poêle en boost pour le "
-                          "conduire."])
+                          "conduire.", "Hestia règle le poêle allumé sans elle : ECO Stop."])
         # Once for this lighting, and its thermostat in boost is not a start (no order to light).
         self.assertEqual(p.look(stove("allumage", 3, **HOT), frost, timedelta(seconds=10), house_c=20.2), [])
         boost = thermostat("boost", demand=50, target=21.0)
@@ -333,7 +335,44 @@ class ByHand(unittest.TestCase):
         p.look(stove("eteint", fumees=40.0, prise_w=3.0), frost, timedelta(minutes=25), house_c=20.2)
         self.assertEqual(p.run["arret"]["fin"], "ok")
         orders = p.look(stove("allumage", 3, **HOT), frost, timedelta(hours=1), house_c=20.2)
-        self.assertEqual(gestures(orders), ["thermostat:set_preset_mode"])
+        self.assertEqual(gestures(orders), ["thermostat:set_preset_mode", "reglage:eco_stop"])
+
+    def test_its_own_set_point_once_for_each_burn_never_the_fan(self):
+        # 1.0.1b4: on 26 November a stove lit by hand kept the 25 °C set in it, Réglages wanting 28 °C, and held
+        # itself back at flame 1 within the hour. Hestia now sends what it sends before its own starts, but the fan.
+        wrong = [{**SETTINGS[0], "nom": "Consigne interne à 28 °C", "a_changer": True}, *SETTINGS[1:]]
+        p = Pilot()
+        boost = thermostat("boost", demand=50)
+        p.look(stove(reglages=wrong), boost)
+        orders = p.look(stove("allumage", 1, reglages=wrong), boost, timedelta(hours=1))
+        self.assertEqual(gestures(orders), ["reglage:thermostat", "reglage:eco_stop"])
+        self.assertIn("Hestia règle le poêle allumé sans elle : Consigne interne à 28 °C, ECO Stop.",
+                      [e["texte"] for e in p.events])
+        # Once for this burn, even while the stove still shows its old values.
+        self.assertEqual(p.look(stove("chauffe", 3, reglages=wrong, **HOT), boost, timedelta(minutes=5)), [])
+        # Set as Réglages want it: nothing.
+        p = Pilot()
+        p.look(stove(reglages=SETTLED), boost)
+        self.assertEqual(p.look(stove("chauffe", 3, reglages=SETTLED), boost, timedelta(hours=1)), [])
+
+    def test_not_in_the_first_minutes_after_a_restart_nor_while_hestia_stops_it(self):
+        p = Pilot(ha_depuis=NOW.isoformat())
+        burning = stove("chauffe", 3, **HOT)
+        self.assertEqual(p.look(burning, thermostat("boost")), [])
+        self.assertEqual(gestures(p.look(burning, thermostat("boost"), timedelta(minutes=3))), ["reglage:eco_stop"])
+        # Hestia stopping it (hors gel): no settings for a stove on its way out.
+        p = Pilot()
+        p.look(stove("chauffe", 3, reglages=SETTLED, **HOT), thermostat("boost"))
+        orders = p.look(burning, thermostat("frost"), timedelta(minutes=1))
+        self.assertNotIn("reglage:eco_stop", gestures(orders))
+
+    def test_a_stove_hestia_lit_itself_is_not_set_twice(self):
+        p = Pilot()
+        self.assertEqual(gestures(boosted(p)), ["reglage:eco_stop", "reglage:ventilation"])
+        p.look(stove(), thermostat("boost"), timedelta(seconds=3))
+        orders = p.look(stove("allumage", 1), thermostat("boost"), timedelta(minutes=1))
+        orders += p.look(stove("chauffe", 3, **HOT), thermostat("boost"), timedelta(minutes=20))
+        self.assertNotIn("reglage:eco_stop", gestures(orders))
 
     def test_not_while_hestia_stops_it_nor_with_its_thermostat_off(self):
         # Hestia's own stop on hors gel: never undone by a boost.
@@ -353,8 +392,10 @@ class ByHand(unittest.TestCase):
         frost = thermostat("frost", demand=0, target=14.0)
         p.look(stove(), frost, house_c=20.2)
         self.assertEqual(p.look(stove("allumage", 3, **HOT), frost, timedelta(hours=2), house_c=20.2), [])
+        said = [(e["qui"], e["texte"]) for e in p.events]
         self.assertIn(("hestia", "Le poêle a été allumé sans Hestia : Hestia passerait le thermostat du poêle en boost "
-                                 "pour le conduire."), [(e["qui"], e["texte"]) for e in p.events])
+                                 "pour le conduire."), said)
+        self.assertIn(("hestia", "Hestia réglerait le poêle allumé sans elle : ECO Stop."), said)
 
 
 def safe(p: "Pilot", after=timedelta(0), piece_min=5, dehors_min=61, **more):
@@ -434,21 +475,22 @@ class Safety(unittest.TestCase):
         orders = p.look(silent, thermostat("boost"), timedelta(minutes=1), reponses={"couper": p.now.isoformat()})
         self.assertEqual(gestures(orders), ["prise"])
         # Back: the notice goes.
-        orders = p.look(stove("chauffe", 3), thermostat("boost"), timedelta(minutes=1))
+        orders = p.look(stove("chauffe", 3, reglages=SETTLED), thermostat("boost"), timedelta(minutes=1))
         self.assertEqual(gestures(orders), ["effacer:muet"])
 
     def test_the_fire_pot_full_while_it_burns_is_said_once(self):
         full = {"a_nettoyer": True, "kg": 15.1, "texte": "Brasier à nettoyer."}
         p = Pilot()
-        orders = p.look(stove("chauffe", 3), thermostat("boost"), brasier=full)
+        orders = p.look(stove("chauffe", 3, reglages=SETTLED), thermostat("boost"), brasier=full)
         self.assertEqual(gestures(orders), ["notifier:nettoyage"])
-        self.assertEqual(p.look(stove("chauffe", 3), thermostat("boost"), timedelta(minutes=1), brasier=full), [])
+        self.assertEqual(p.look(stove("chauffe", 3, reglages=SETTLED), thermostat("boost"), timedelta(minutes=1),
+                                brasier=full), [])
 
 
 class Restart(unittest.TestCase):
     def test_a_stove_burning_with_its_thermostat_off_gets_it_back_in_boost(self):
         p = Pilot(ha_depuis=NOW.isoformat())
-        burning = stove("chauffe", 3)
+        burning = stove("chauffe", 3, reglages=SETTLED)
         self.assertEqual(p.look(burning, thermostat("boost", mode="off")), [])
         self.assertEqual(p.wake, 180.0)
         orders = p.look(burning, thermostat("boost", mode="off"), timedelta(minutes=3))
@@ -524,6 +566,29 @@ class Fan(unittest.TestCase):
         p.look(stove(**self.LEVELS), thermostat("eco"))
         dip = {**stove("chauffe", 2, ventilation="3", **HOT, **self.LEVELS), "flamme": 1}
         self.assertEqual(self.fans(p.look(dip, boost, timedelta(minutes=30))), [])
+
+    def test_a_stove_holding_back_by_itself_gets_the_fan_of_its_real_flame(self):
+        # 1.0.1b4: on 26 November the stove's own probe reached the 25 °C set in it; it burnt at flame 1 for as long as
+        # it stayed there, set at 5, with the fan at 5.
+        p = Pilot(ventilation="flamme")
+        boost = thermostat("boost")
+        p.look(stove(**self.LEVELS), thermostat("eco"))
+        held = {**stove("chauffe", 5, ventilation="5", air=24.5, consigne_poele=25.0, reglages=SETTLED, **HOT,
+                        **self.LEVELS), "flamme": 1}
+        self.assertEqual(self.fans(p.look(held, boost, timedelta(minutes=30))), ["2"])
+        self.assertIn("Hestia met la ventilation à 2 : flamme 1 + 1, le poêle se bride lui-même.",
+                      [e["texte"] for e in p.events])
+        # Its probe down again, its flame back: the fan follows, ten minutes after its last order at the earliest.
+        back = stove("chauffe", 5, ventilation="2", air=23.5, consigne_poele=25.0, reglages=SETTLED, **HOT,
+                     **self.LEVELS)
+        self.assertEqual(self.fans(p.look(back, boost, timedelta(minutes=5))), [])
+        self.assertEqual(self.fans(p.look(back, boost, timedelta(minutes=5))), ["5"])
+        # A flame still climbing, its probe far under: the flame set counts.
+        p = Pilot(ventilation="flamme")
+        p.look(stove(**self.LEVELS), thermostat("eco"))
+        climbing = {**stove("chauffe", 5, ventilation="5", air=19.0, consigne_poele=25.0, reglages=SETTLED, **HOT,
+                             **self.LEVELS), "flamme": 3}
+        self.assertEqual(self.fans(p.look(climbing, boost, timedelta(minutes=30))), [])
 
     def test_auto_or_a_fan_without_levels_is_left_alone(self):
         for ctx, more in (({}, self.LEVELS), ({"ventilation": "flamme"}, {})):

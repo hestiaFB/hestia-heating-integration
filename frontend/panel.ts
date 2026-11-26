@@ -75,7 +75,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.0.1b3';
+const VERSION='1.0.1b4';
 // The whole pilot's answers, as on the phone.
 const ANSWER:Record<string,string>={oui:'Oui, allumer',non:'Non',couper:'Couper la prise',ignorer:'Ignorer',nettoye:'J’ai nettoyé'};
 const num=(v:number,d=1)=>v.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:d}).replace('-','−');
@@ -984,6 +984,9 @@ export class HestiaHeatingSetup extends LitElement {
   const changedFigs=Object.keys(this.val<Record<string,number>>('avance')??{}).filter(k=>k!=='consigne_poele').length,figs=Object.keys(f.avance??{}).length+7;
   const g=v.granules;
   const [tempD,tempLo,tempHi]=f.avance?.consigne_poele??[28,15,35],tempDflt=tempD??28,temp=this.fig('consigne_poele');
+  // The stove still at another temperature than Réglages want (1.0.1b4: lit by hand, it kept 25 °C; typing 28 again
+  // over the 28 shown sent nothing): said, with a button that sends it.
+  const behind=auto&&!!st&&!st.copie&&st.consigne_poele!=null&&st.consigne_poele!==temp;
   return html`${locked?noteBox('Recopié','Ce poêle est recopié d’une autre maison : ses commandes sont grisées, Hestia ne lui envoie rien.'):nothing}
    ${listSection('Les appareils du poêle',[
     listRow({label:'Le thermostat du poêle',control:true,sub:`Celui qui dit au poêle de chauffer, et combien. ${thermo?'Choisi par vous.':f.poele_thermostat?'Trouvé seul : le thermostat Versatile relié au poêle.':'Aucun trouvé seul : choisissez-le.'}`,
@@ -1003,9 +1006,9 @@ export class HestiaHeatingSetup extends LitElement {
     ...(ids.ventilation?[this.fanChoice(v),...(fan==='manuel'?[listRow({label:'La vitesse',control:true,sub:'Part au poêle dès que vous la touchez.',
       value:this.steps('Vitesse de la ventilation',st?.ventilation_niveaux??[],st?.ventilation,n=>void this.act('fan','climate','set_fan_mode',{entity_id:ids.ventilation,fan_mode:n}),locked||busy)})]:[])]:[]),
     ...(ids.eco_stop&&st?[listRow({label:'ÉCO Stop',control:true,sub:'La sécurité du poêle lui-même.',value:toggle('ÉCO Stop',st.eco_stop===true,on=>void this.ecoStop(st,on),locked||busy||st.eco_stop==null)}),
-     ...(ids.thermostat?[listRow({label:'Température réglée dans le poêle',control:true,sub:`Celle que surveille l’ÉCO Stop, avec la flamme automatique. ${num(tempDflt)}\u00a0°C conseillés.${auto?' Part au poêle dès que vous la changez.':' En manuel, c’est la température choisie plus haut qui compte.'}`,
+     ...(ids.thermostat?[listRow({label:'Température réglée dans le poêle',control:true,sub:html`Celle que surveille l’ÉCO Stop, avec la flamme automatique. ${num(tempDflt)}\u00a0°C conseillés.${auto?' Part au poêle dès que vous la changez.':' En manuel, c’est la température choisie plus haut qui compte.'}${behind?html` <b>Le poêle est encore à ${num(st.consigne_poele!)}\u00a0°C.</b>`:nothing}`,
       value:html`<input class="num" type="number" inputmode="numeric" aria-label="Température réglée dans le poêle, flamme automatique" min=${tempLo} max=${tempHi} step="1" .value=${String(temp)}
-       ?disabled=${locked||busy} @change=${(e:Event)=>{const n=Number((e.target as HTMLInputElement).value.replace(',','.'));void this.stoveTemp(st,n);}}> °C`})]:[]),
+       ?disabled=${locked||busy} @change=${(e:Event)=>{const n=Number((e.target as HTMLInputElement).value.replace(',','.'));void this.stoveTemp(st,n);}}> °C${behind?html` <button type="button" class="primary" ?disabled=${locked||busy} @click=${()=>void this.stoveTemp(st,temp)}>Envoyer ${num(temp)}\u00a0°C</button>`:nothing}`})]:[]),
      ...(ids.eco_stop_delai?[listRow({label:'Attendre avant de s’éteindre',control:true,sub:'Le délai ÉCO Stop du poêle, de 0 à 30 minutes. Lu dans le poêle.',
       value:html`<input class="num" type="number" inputmode="numeric" aria-label="Délai ÉCO Stop" min="0" max="30" step="1" .value=${st.eco_stop_delai!=null?String(st.eco_stop_delai):''}
        ?disabled=${locked||busy} @change=${(e:Event)=>{const n=Number((e.target as HTMLInputElement).value);if(Number.isFinite(n))void this.act('delai','number','set_value',{entity_id:ids.eco_stop_delai,value:n});}}> min`})]:[]),

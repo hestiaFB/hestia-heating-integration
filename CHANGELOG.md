@@ -1,5 +1,12 @@
 # Changements
 
+## 1.0.1b4 — Le poêle allumé à la main ne se bride plus
+
+### Corrections
+- **Un poêle allumé à la main reçoit les 28 °C.** Hestia n’envoyait la température réglée dans le poêle qu’avant ses propres allumages. Allumé depuis son application, le poêle gardait ses 25 °C : sa sonde les atteignait en une heure, et il descendait seul en flamme 1. Maintenant, en mode « Par Hestia », un poêle qui brûle sans que Hestia l’ait allumé reçoit une fois par chauffe la température et l’ÉCO Stop voulus dans Réglages, s’ils diffèrent. C’est aussi vrai pour un poêle allumé avant un redémarrage de Home Assistant. La ventilation n’est jamais touchée par ce réglage.
+- **La ventilation suit la vraie flamme quand le poêle se bride.** Avec « Ventilation par Hestia », elle suivait la flamme demandée : flamme 1 et ventilation à fond. Quand le poêle se bride lui-même, elle suit maintenant la flamme qu’il a vraiment. Une baisse d’un instant ne la change toujours pas.
+- **Le panneau dit quand le poêle n’est pas à la température voulue.** Sous « Température réglée dans le poêle », la page Poêle affiche « Le poêle est encore à 25 °C », avec un bouton « Envoyer 28 °C ». Avant, le champ montrait déjà 28 °C, et retaper 28 n’envoyait rien.
+
 ## 1.0.1b3 — La carte compacte s’étire bien
 
 ### Corrections

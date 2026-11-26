@@ -1,6 +1,6 @@
 # Hestia Chauffage — fonctionnement technique
 
-Version 1.0.1b3. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
+Version 1.0.1b4. Ce document décrit ce que la brique lit, ce qu’elle publie et comment elle tient sur un petit matériel. Le pourquoi est dans le [cahier des charges](CAHIER-DES-CHARGES.md).
 
 ## Les fichiers
 
@@ -178,7 +178,7 @@ Réglage `pilote` = `entier`. La 1.0.0b1 l’avait retiré de Réglages ; depuis
 | --- | --- |
 | `thermostat` | `climate.<service>` sur le thermostat du poêle (le Versatile Thermostat) : `turn_off` (un verrou), `turn_on`, `set_preset_mode` (hors gel, boost ; boost aussi pour un poêle allumé à la main, son thermostat en hors gel, depuis la 1.0.0b5), `set_hvac_mode` (chauffe, à la reprise) |
 | `allumer`, `eteindre` | ceux des `ordres` du profil (Micronova : `climate.set_hvac_mode` `heat` ou `off` sur son thermostat interne). Sur la carte du poêle, avec « Par Hestia » et son thermostat hors du hors gel, « Éteindre » passe ce thermostat en hors gel (`climate.set_preset_mode`, 1.0.0b5) : Hestia fait l’arrêt et le vérifie |
-| `reglage` | un réglage des `ordres` du profil avant un démarrage, seulement s’il a changé (`poele.reglages[].a_changer`) |
+| `reglage` | un réglage des `ordres` du profil avant un démarrage, seulement s’il a changé (`poele.reglages[].a_changer`) ; depuis la 1.0.1b4, aussi une fois par chauffe à un poêle allumé sans Hestia (`driver._burn_settings`, mémoire `reglages_feu`), sauf la ventilation |
 | `recharger` | `homeassistant.reload_config_entry` sur l’entrée de l’intégration du poêle |
 | `prise` | `switch.turn_off` sur l’interrupteur de la prise (`poele_prise_switch`, sinon celui de l’appareil de la prise mesurée, sinon celui qui porte son nom) |
 | `notifier` | `persistent_notification.create` quand elle dure, et le service `pilote_notifier` avec `data.tag` = `hestia_poele_<sujet>` et ses boutons (`data.actions`) |

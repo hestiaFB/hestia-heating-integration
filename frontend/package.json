@@ -1,6 +1,6 @@
 {
   "name": "hestia-heating-configuration",
-  "version": "1.0.1b3",
+  "version": "1.0.1b4",
   "private": true,
   "type": "module",
   "scripts": {
