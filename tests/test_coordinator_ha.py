@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT))
 from custom_components.hestia_heating.const import API_KEY, DOMAIN  # noqa: E402
 from custom_components.hestia_heating.websocket import CARD_KEYS, SETTING_KEYS, card_view  # noqa: E402
 from custom_components.hestia_heating.coordinator import DEFAULTS, _burning_only  # noqa: E402
+from custom_components.hestia_heating.engine import mild  # noqa: E402
 from homeassistant.util import dt as dt_util  # noqa: E402
 
 
@@ -97,7 +98,15 @@ class DrivesTheStove:
     """« Entier » mode (0.7): the stove off, its thermostat steps up to boost in a mild house; Hestia asks first, then
     lights the stove when the phone says yes."""
 
+    def _boost_for_an_hour(self):
+        """The mild season carries the stove's room to the end of the boost (1.1.0b8). The made-up house's planning
+        is read at the hour the tests run: its boost then ends an hour from now, whatever the hour, so that the
+        same room always gives the same answer."""
+        self.enterContext(patch.object(mild, "boost_end", side_effect=lambda line, naive_now, tz, boost:
+                                       (naive_now + timedelta(hours=1)).replace(tzinfo=tz)))
+
     async def _whole_mode(self, status, stove_climate):
+        self._boost_for_an_hour()
         hass = self.hass
         hass.set_state(CoreState.running)
         self.sent = []
@@ -655,6 +664,7 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
 
     async def test_the_stove_pilot_in_the_shade_only_watches(self):
         """0.4: the pilot says what Hestia would do and what the house did; it never calls a service."""
+        self._boost_for_an_hour()
         entry, c = await self._setup()
         self.assertEqual(c.data["poele"]["pilote"]["action"], "garder")
         hass = self.hass
