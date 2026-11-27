@@ -36,7 +36,7 @@ type Use={debit_kg_h:number;kg_jour:number;kg_saison:number;prix_kg:number|null;
 /** A souci of the brick's health (1.1.0b6): an entity that no longer answers, an order not followed… */
 type Trouble={sujet:string;texte:string;depuis:string};
 /** Each souci's label and icon in the announcements, as Hestia Weather's bubble shows a vigilance. */
-const TROUBLE:Record<string,[string,string]>={indisponible:['Ne répond plus','mdi:lan-disconnect'],ventilation:['Ventilation','mdi:fan-alert'],
+const TROUBLE:Record<string,[string,string]>={reservoir:['Réservoir vide ?','mdi:grain'],indisponible:['Ne répond plus','mdi:lan-disconnect'],ventilation:['Ventilation','mdi:fan-alert'],
  sonde:['Sonde de la pièce','mdi:thermometer-alert'],enregistrement:['Recorder','mdi:database-alert'],briques:['Briques Hestia-FB','mdi:link-variant-off']};
 type Stove={nom:string;modele?:string|null;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;
  fumees:number|null;prise:string|null;prise_w:number|null;demande_pct:number|null;consigne?:number|null;ecritures:number|null;ecritures_max:number|null;

@@ -55,6 +55,10 @@ SPEC: dict[str, tuple[float | None, float, float]] = {
     "muet_min": (15, 5, 60),              # a silent stove said after this
     "prise_brule_w": (60, 10, 200),       # a silent stove whose plug draws more still burns
     "securite_max_min": (120, 15, 120),   # the stove's thermostat in safety for its outdoor probe: stopped after this
+    # The tank empty, seen from the smoke (1.1.0b9, engine/tank.py): each stove's own level learnt at each flame.
+    "reservoir_ecart_c": (15, 0, 60),     # the smoke this far under its usual level at the flame: doubt (0: never)
+    "reservoir_chute_c": (10, 3, 40),     # or fallen this much in 10 minutes
+    "reservoir_stable_min": (20, 10, 60), # the flame unchanged this long first
     # Counting the pellets.
     "debit_allumage": (None, 0.1, 5),     # kg/h while lighting (None: the profile's)
     "debit_1": (None, 0.1, 5),
@@ -79,7 +83,9 @@ WORDS = {
     "douce_sans_besoin_c": "pas besoin du poêle à moins de",
     "reponse_min": "attendre votre réponse", "allumage_verif_min": "vérifier l’allumage après",
     "recharge_s": "attendre après le rechargement", "demarrages_max": "allumages par jour",
-    "consigne_poele": "température réglée dans le poêle", "arret_ecart_c": "éteindre à moins de",
+    "consigne_poele": "température réglée dans le poêle",
+    "reservoir_ecart_c": "fumées sous leur niveau habituel de", "reservoir_chute_c": "ou fumées tombées en 10 min de",
+    "reservoir_stable_min": "flamme inchangée depuis", "arret_ecart_c": "éteindre à moins de",
     "chaud_min": "maison assez chaude depuis", "arret_ordres": "ordres d’arrêt",
     "arret_verif_min": "vérifier l’arrêt après", "fumees_froides_c": "fumées froides sous",
     "prise_repos_w": "prise au repos sous", "prise_reponse_min": "attendre avant de couper la prise",

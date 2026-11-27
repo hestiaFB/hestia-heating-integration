@@ -77,7 +77,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.1.0b8';
+const VERSION='1.1.0b9';
 
 let pickerLoad:Promise<string|null>|undefined;
 /** Home Assistant's own entity picker (filtered list with a search), as in Hestia Confort and Hestia Énergie. HA loads
@@ -1140,6 +1140,12 @@ export class HestiaHeatingSetup extends LitElement {
     fig('securite_max_min','Sonde dehors sans nouvelles, au plus','min','Le thermostat du poêle se met en sécurité quand une sonde ne donne plus de nouvelles. Pour la sonde dehors seule, la pièce reste surveillée : Hestia garde le poêle au plus bas, et l’éteint si ça dure plus longtemps que ça.'),
     always('Un allumage refusé pour la pièce trop chaude, le brasier, une alarme ou un poêle muet éteint le thermostat du poêle (un verrou). « J’ai nettoyé » le rallume pour le brasier ; sinon, rallumez-le vous-même. Rien n’est jamais envoyé à un poêle recopié d’une autre maison.'),
    ])}
+   ${listSection('Le réservoir vide, vu par les fumées',[
+    fig('reservoir_ecart_c','Fumées sous leur niveau habituel de','°C','Hestia apprend les fumées de votre poêle à chaque flamme. Le poêle en chauffe, la flamme inchangée, ses fumées tombent de cet écart sous leur niveau habituel : « Réservoir vide ? ». 0 : jamais, pour un poêle dont les fumées ne disent rien de son réservoir.'),
+    fig('reservoir_chute_c','Ou tombées en 10 minutes de','°C','Une chute rapide compte aussi, une fois les fumées déjà un peu sous leur niveau.'),
+    fig('reservoir_stable_min','Flamme inchangée depuis','min','Après un changement de flamme, les fumées mettent du temps à se poser : Hestia attend.'),
+    always('Rien avant qu’Hestia connaisse le niveau d’une flamme : une demi-heure de chauffe à cette flamme. Pendant le doute, les granulés ne sont plus comptés. Le souci part quand les fumées reviennent à leur niveau.'),
+   ],{help:'Sans capteur de niveau, les fumées qui baissent alors que la flamme ne change pas disent qu’il n’y a plus rien à brûler.'})}
    ${listSection('Le comptage des granulés',[
     fig('debit_allumage','Débit à l’allumage','kg/h','Par défaut : celui du profil du poêle.',0.01,rates.allumage),
     ...[1,2,3,4,5].map(n=>fig(`debit_${n}`,`Débit en flamme ${n}`,'kg/h','Par défaut : celui du profil du poêle.',0.01,rates.flammes?.[n-1])),
