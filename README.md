@@ -32,7 +32,7 @@ La carte d’une pièce et celle du poêle sont une **horloge de 24 heures** : l
 
 Sous le nom du poêle, une phrase dit ce qu’il fait, dans la couleur de son état (« Consigne atteinte, le poêle entretient », « 21,5 °C vers 18 h 30 », « Brasier à nettoyer »…) ; la page Poêle commence par elle. Le poêle et une pièce ont aussi une version compacte, environ deux fois moins haute.
 
-La carte d’une pièce a les modes de son thermostat (Hors gel, Éco, Confort, Boost) : c’est vous qui choisissez, la carte les envoie depuis votre navigateur, comme la carte thermostat de Home Assistant. La carte du poêle a trois boutons, Éteindre (ou Allumer), Flamme auto et J’ai nettoyé, et, dans « Le feu et les réglages », la flamme, la ventilation et l’ÉCO Stop, envoyés de la même façon ; ils sont grisés sur un poêle recopié d’une autre maison.
+La carte d’une pièce a les modes de son thermostat (Hors gel, Éco, Confort, Boost) : c’est vous qui choisissez, la carte les envoie depuis votre navigateur, comme la carte thermostat de Home Assistant. La carte du poêle a deux boutons, Éteindre (ou Allumer) et J’ai nettoyé, et, dans « Le feu et les réglages », la flamme (Auto ou une puissance), la ventilation et l’ÉCO Stop, envoyés de la même façon ; ils sont grisés sur un poêle recopié d’une autre maison.
 
 Elle publie aussi quelques entités (l’état de la maison, de chaque pièce et du poêle, la flamme, l’alarme, les jours de granulés, les kilos brûlés, l’énergie du poêle à déclarer dans la page Énergie, le brasier à nettoyer) pour vos automatisations. Le détail est dans [docs/technique.md](docs/technique.md).
 

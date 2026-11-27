@@ -272,8 +272,7 @@ ha-card.small.folded { cursor:pointer; }
 @keyframes hc-flick { 0% { transform:scale(1, 1) skewX(0deg); } 35% { transform:scale(.96, 1.05) skewX(-3deg); } 70% { transform:scale(1.03, .96) skewX(2deg); }
   100% { transform:scale(.99, 1.03) skewX(-1deg); } }
 @keyframes hc-beat { 0%, 100% { opacity:1; } 50% { opacity:.45; } }
-@media (prefers-reduced-motion:reduce) { .rise, .blow, .flick, .flick2, .pill .beat { animation:none; } .switch i { transition:none; } }
-
+@media (prefers-reduced-motion:reduce) { .rise, .blow, .flick, .flick2, .pill .beat { animation:none; } 
 .legend { display:flex; justify-content:center; gap:8px 14px; flex-wrap:wrap; font-size:var(--nw-fs-small); color:var(--nw-fg2); }
 .legend span { display:inline-flex; align-items:center; gap:6px; }
 .legend .sw { width:14px; height:6px; border-radius:3px; background:var(--hc-r-off); }
@@ -307,10 +306,6 @@ ha-card.small.folded { cursor:pointer; }
 .pot-say { display:flex; flex-direction:column; align-items:flex-start; min-width:0; line-height:1.2; }
 .pot-say b, .pot-say small { overflow:hidden; text-overflow:ellipsis; max-width:100%; }
 .pot-say small { font-size:var(--nw-fs-small, 12px); font-weight:600; color:var(--nw-fg2); }
-.btn.auto.on { background:color-mix(in oklab, var(--nw-calm) 22%, var(--nw-bg)); border-color:color-mix(in oklab, var(--nw-calm) 60%, transparent); }
-.switch { position:relative; flex:none; width:30px; height:18px; border-radius:9px; background:color-mix(in srgb, var(--nw-fg) 32%, var(--nw-bg)); }
-.switch i { position:absolute; top:3px; left:3px; width:12px; height:12px; border-radius:50%; background:#fff; transition:left .2s; }
-.btn.auto.on .switch { background:color-mix(in oklab, var(--nw-calm) 80%, #000 12%); } .btn.auto.on .switch i { left:15px; }
 
 /* The drawers, under the card's top; each one closed or open on a tap. */
 /* The drawers (1.0.0b8): the charter's folding section, as Confort's « Détails » : its label in small capitals, its
@@ -451,7 +446,7 @@ ha-card.small.folded { cursor:pointer; }
 .small .side .face .btn { height:auto; }
 .small .side .face .btn.pot { grid-column:1 / -1; min-height:0; padding:4px 14px; }
 .small .side .face .btn.pot .pot-say small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
-.small .side .face .btns > .btn:only-child, .small .side .face .btns > .btn.auto:nth-child(1) { grid-column:1 / -1; }
+.small .side .face .btns > .btn:only-child, .small .side .face .btns > .btn:not(.pot) { grid-column:1 / -1; }
 .legend.mini { display:flex; flex-direction:column; gap:5px; }
 .legend.mini > div { display:flex; gap:16px; height:16px; align-items:center; white-space:nowrap; overflow:hidden; }
 .compact .mid .to { display:flex; flex-direction:column; align-items:center; margin-top:1.5cqi; padding-top:1.5cqi; border-top:1px solid var(--nw-line);

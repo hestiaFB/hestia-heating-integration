@@ -1,5 +1,10 @@
 # Changements
 
+## 1.1.0b4 — La carte du poêle sans « Flamme auto »
+
+### Améliorations
+- **Le bouton « Flamme auto » quitte la face de la carte du poêle.** Il faisait la même chose que « Flamme : Auto » dans le volet de la carte, qui reste. La face garde « Éteindre » (ou « Allumer ») et le brasier ; sur la carte compacte, « Éteindre » prend toute la largeur.
+
 ## 1.1.0b3 — Les granulés du jour comptés
 
 ### Corrections
