@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from homeassistant.core import CoreState, callback
 from homeassistant.helpers.event import async_call_later, async_track_time_change, async_track_time_interval
@@ -316,6 +316,10 @@ class HouseJournal:
         stove = view.get("poele") or {}
         conso = stove.get("conso") or {}
         stove_kwh = None if conso.get("kg_saison") is None else conso["kg_saison"] * kwh_kg
+        # 1.1.0b7: the heating found in the gas (and in the electricity, without measured radiators) since the season's
+        # first day, as the stove's season counts (granules.season_of).
+        season_name = conso.get("saison") or granules.season_of(now.date())
+        energies = self.c.energy_share.summary(now.date(), date(int(season_name[:4]), 9, 1))
         stove_now_kw = round((conso.get("debit_kg_h") or 0.0) * kwh_kg, 2) if stove.get("en_feu") else 0.0
         electric_kw = round((view.get("maison") or {}).get("electrique_w", 0) / 1000, 2)
         price_now = view.get("prix_energie") or ({"kwh": view.get("prix_kwh"), "periode": None, "couleur": None}
@@ -347,10 +351,12 @@ class HouseJournal:
                        "temps": house_stats.heating_time(recent, stove_room),
                        "tenue": house_stats.held(recent, stove_room),
                        "creuses": house_stats.off_peak(past),
-                       "saison": house_stats.season(stove_kwh, self.season_kwh.get("kwh"), self.season_kwh.get("saison")
-                                                    or conso.get("saison")),
+                       "saison": house_stats.season(stove_kwh, self.season_kwh.get("kwh") if self.season_kwh.get("kwh")
+                                                    else _kwh(energies, "electricite"), self.season_kwh.get("saison")
+                                                    or conso.get("saison"), _kwh(energies, "gaz")),
                        "jours": len(recent)},
             "jours": house_stats.month(past + [today], kwh_kg),
+            "energies": energies,
             "apprend": self._missing(now) is not None,
         }
         self._cache = (time.monotonic(), out)
@@ -359,6 +365,11 @@ class HouseJournal:
     def _climates(self) -> list[dict]:
         return [{"attributes": (s.attributes if (s := self.hass.states.get(c["entity_id"])) else {})}
                 for c in self.c.found.climates]
+
+
+def _kwh(energies: dict | None, key: str) -> float | None:
+    part = ((energies or {}).get(key) or {}).get("saison")
+    return None if not part else part["kwh"]
 
 
 def cost_of(day: dict) -> dict:

@@ -22,6 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from . import reader
 from .house_journal import HouseJournal
+from .energy_share import EnergyShare
 from .const import API_KEY, DOMAIN, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
 from .engine import driver, granules, health, home_planning, house, money, phrases, pilot, profiles, sources, tuning
 
@@ -129,6 +130,8 @@ class HeatingCoordinator:
         self.last_build_ms: float | None = None
         # The house's journal, hour by hour (1.1.0b1): the house card's figures and the day's cost for Hestia Énergie.
         self.house_journal = HouseJournal(self)
+        # The heating's share of the gas and the electricity Hestia Énergie counts (1.1.0b7).
+        self.energy_share = EnergyShare(self)
 
     # --- listeners -----------------------------------------------------------------------------------------------
 
@@ -180,6 +183,7 @@ class HeatingCoordinator:
         self.pellets_memory = {**pellets, "debit": 0.0} if isinstance(pellets, dict) else {}
         self.health_memory = state.get("sante") if isinstance(state.get("sante"), dict) else {}
         await self.house_journal.async_load()
+        await self.energy_share.async_load()
         folder = Path(__file__).parent / "profiles"
         self.profiles = await self.hass.async_add_executor_job(profiles.load_all, folder)
         self._discover()
@@ -196,11 +200,13 @@ class HeatingCoordinator:
             self._unsubs.append(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._ha_started))
         self._listen()
         self.house_journal.start()
+        self.energy_share.start()
 
     async def async_stop(self) -> None:
         # Reloaded: the count of the last minutes is written now, before the new brick reads it.
         await self.state_store.async_save(self._state())
         await self.house_journal.async_stop()
+        await self.energy_share.async_stop()
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()

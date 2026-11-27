@@ -1,5 +1,15 @@
 # Changements
 
+## 1.1.0b7 — Le gaz et l’électricité qui chauffent la maison
+
+### Nouveautés
+- **Hestia Chauffage dit maintenant quelle part du gaz sert à chauffer.** Hestia Énergie compte le gaz et l’électricité de chaque jour, sans dire à quoi ils servent. Hestia Chauffage met chaque jour en face du froid (les degrés-jours de Hestia Weather) : ce qui monte avec le froid, c’est le chauffage ; ce qui reste l’été, c’est la cuisine et l’eau chaude. Le gaz se lit trois jours ensemble, car une chaudière est souvent comptée le lendemain.
+- **Pour une maison chauffée à l’électricité sans thermostat dans Home Assistant**, Hestia estime de la même façon l’électricité due au froid. Quand Hestia mesure déjà les radiateurs, c’est la mesure qui compte, jamais les deux.
+- Pas de chiffre avant 60 jours, dont 20 froids, ni quand le froid explique moins de la moitié des écarts d’un jour à l’autre.
+- **La carte maison** dit, sous « Qui chauffe », combien de kWh de gaz (ou d’électricité due au froid) ont chauffé la maison par jour ces 7 derniers jours. La part de la saison compte aussi le gaz.
+- **Le coût du chauffage donné à Hestia Énergie** (`cout_chauffage`) compte aussi le gaz du chauffage (`gaz_kwh`, `gaz_eur`) et l’électricité estimée (`electrique_estime_kwh`, `electrique_estime_eur`), une seule fois. Une maison sans thermostat dans Home Assistant a aussi son coût du jour.
+- Il faut Hestia Énergie 1.0.1b7 (ses jours de gaz et d’électricité) et Hestia Weather (le froid de chaque jour). Le gaz est compté en euros au prix du kWh de gaz de Hestia Énergie ; sans prix, il est dit en kWh.
+
 ## 1.1.0b6 — Hestia surveille le poêle et prévient
 
 ### Nouveautés

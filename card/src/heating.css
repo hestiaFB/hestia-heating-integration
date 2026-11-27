@@ -525,3 +525,8 @@ ha-card.small.folded { cursor:pointer; }
   border:1px solid color-mix(in oklab, var(--c) 32%, transparent); }
 .annonces.act { --c:var(--nw-act); } .annonces.alert { --c:var(--nw-alert); }
 .small .compact .say.line.ticker { overflow:visible; text-overflow:clip; }
+
+/* The gas and the electricity found against the cold (1.1.0b7), under the « who heats » bar. */
+.wholines.daily { margin-top:6px; }
+.wholines.daily small { font-size:var(--nw-fs-label); color:var(--nw-fg2); }
+.sw.gz { background:var(--hc-gaz, color-mix(in oklab, var(--nw-cold) 60%, var(--nw-act))); }

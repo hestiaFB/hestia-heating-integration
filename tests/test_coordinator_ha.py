@@ -413,7 +413,7 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
                                msg="no statistics for the kilos: they come back from the stove's energy (26/11)")
         self.assertEqual(api.cout_chauffage(yesterday.date())["electrique_eur"], round(0.75 * len(counters) * 0.25, 2))
         house = j.house()
-        self.assertEqual(set(house), {"maintenant", "aujourdhui", "froid_egal", "maison", "jours", "apprend"})
+        self.assertEqual(set(house), {"maintenant", "aujourdhui", "froid_egal", "maison", "jours", "apprend", "energies"})
         self.assertEqual(house["jours"][-1]["jour"], dt_util.now().date().isoformat())
         self.assertEqual(self.calls, [], "the journal only reads")
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
@@ -540,6 +540,65 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
             self.assertEqual(self.calls, [], "reading sends nothing")
         finally:
             self.hass.data.pop(reader.ENERGY_API, None)
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_gas_heating_is_read_from_energie_and_weather(self):
+        """1.1.0b7: the gas Hestia Énergie counts each day (`days`), against Hestia Weather's cold: the heating in it
+        goes to the day's cost and to the house card; nothing is sent."""
+        import math
+        from custom_components.hestia_heating import reader
+        entry, c = await self._setup()
+        today = dt_util.now().date()
+        cold = {}
+        for n in range(1, 366):
+            day = today - timedelta(days=n)
+            dju = max(0.0, 7 + 7 * math.cos((day.timetuple().tm_yday - 15) / 365 * 2 * math.pi))
+            cold[day] = round(dju if dju > 2 else 0.0, 1)
+
+        class Energy:
+            version = 1
+
+            def tariff(self, at=None):
+                return None
+
+            def days(self, start, end):
+                return [{"day": d, "electricity_kwh": 9.0, "electricity_complete": True, "gas_kwh": 8 + 6 * v,
+                         "gas_quantity": (8 + 6 * v) / 11.2, "gas_complete": True, "gas_unit": "m³"}
+                        for d, v in cold.items() if start <= d <= end]
+
+            def gas_price(self):
+                return 0.12
+
+        class Weather:
+            version = 1
+            asked = 0
+
+            def places(self):
+                return [{"entry_id": "lieu", "title": "Maison"}]
+
+            async def degree_days(self, day, place):
+                self.asked += 1
+                return {"heating": cold[day]} if day in cold else None
+        weather = Weather()
+        self.hass.data[reader.ENERGY_API] = Energy()
+        self.hass.data[reader.WEATHER_API] = weather
+        try:
+            c.weather = {"etat": "oui", "lieu": "lieu", "nom": "Maison"}
+            await c.energy_share.async_update(dt_util.now())
+            self.assertEqual(c.energy_share.share["gaz"]["etat"], "pret")
+            asked = weather.asked
+            await c.energy_share.async_update(dt_util.now())
+            self.assertEqual(weather.asked, asked, "the past days' cold is asked once")
+            day = today - timedelta(days=330)
+            cost = entry.runtime_data and self.hass.data[API_KEY].cout_chauffage(day)
+            self.assertAlmostEqual(cost["gaz_kwh"], 6 * cold[day], delta=1)
+            self.assertAlmostEqual(cost["gaz_eur"], cost["gaz_kwh"] * 0.12, delta=0.01)
+            self.assertEqual(cost["chauffage_eur"], round((cost.get("electrique_eur") or 0) + (cost.get("granules_eur") or 0)
+                                                          + cost["gaz_eur"], 2))
+            self.assertEqual(self.calls, [], "reading sends nothing")
+        finally:
+            self.hass.data.pop(reader.ENERGY_API, None)
+            self.hass.data.pop(reader.WEATHER_API, None)
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_the_price_of_a_kwh_is_a_setting(self):
