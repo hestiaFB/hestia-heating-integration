@@ -8,7 +8,7 @@
 - Pas de chiffre avant 60 jours, dont 20 froids, ni quand le froid explique moins de la moitié des écarts d’un jour à l’autre.
 - **La carte maison** dit, sous « Qui chauffe », combien de kWh de gaz (ou d’électricité due au froid) ont chauffé la maison par jour ces 7 derniers jours. La part de la saison compte aussi le gaz.
 - **Le coût du chauffage donné à Hestia Énergie** (`cout_chauffage`) compte aussi le gaz du chauffage (`gaz_kwh`, `gaz_eur`) et l’électricité estimée (`electrique_estime_kwh`, `electrique_estime_eur`), une seule fois. Une maison sans thermostat dans Home Assistant a aussi son coût du jour.
-- Il faut Hestia Énergie 1.0.1b7 (ses jours de gaz et d’électricité) et Hestia Weather (le froid de chaque jour). Les euros du gaz arriveront quand Hestia Énergie donnera son prix ; en attendant, le gaz est dit en kWh.
+- Il faut Hestia Énergie 1.0.1b7 (ses jours de gaz et d’électricité) et Hestia Weather (le froid de chaque jour). Le gaz est compté en euros au prix du kWh de gaz de Hestia Énergie ; sans prix, il est dit en kWh.
 
 ## 1.1.0b6 — Hestia surveille le poêle et prévient
 
