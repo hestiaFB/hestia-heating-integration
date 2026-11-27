@@ -6,7 +6,7 @@ from datetime import timedelta
 import unittest
 
 import maison_fictive as m
-from engine import house, pilot
+from engine import house, mild, pilot
 
 NOW = m.NOW                                      # Friday 20 November 2026, 21 h 40
 
@@ -40,8 +40,8 @@ def safe(at, piece=None, dehors=None, preset="boost"):
                       sonde_dehors_a=(dehors or NOW - timedelta(minutes=61)).isoformat())
 
 
-def decide(s, t, mem, now=NOW, house_c=HOUSE_C, over_c=None):
-    return pilot.decide(s, t, mem, now, house_c, over_c=over_c)
+def decide(s, t, mem, now=NOW, house_c=HOUSE_C, over_c=None, outlook=None):
+    return pilot.decide(s, t, mem, now, house_c, over_c=over_c, outlook=outlook)
 
 
 class Flame(unittest.TestCase):
@@ -175,11 +175,14 @@ class StartAndStop(unittest.TestCase):
 
     def test_the_mild_season_asks_first(self):
         s = stove()
-        decision, mem, events = decide(s, thermostat("boost"), seen(s, thermostat("eco")), house_c=18.4)
+        decision, mem, events = decide(s, thermostat("boost", room=20.6), seen(s, thermostat("eco", room=20.6)),
+                                       house_c=18.4)
         self.assertEqual((decision["action"], decision["titre"]), ("demander", "Démarrer ?"))
         self.assertIn("saison douce", decision["texte"])
-        # Without an answer, back to hors gel, but never a stove already on its way.
-        self.assertIn("sauf si le poêle est déjà en route", decision["texte"])
+        # 1.1.0b8: the room carried to the end of the boost; without an answer, the boost is watched.
+        self.assertIn("la pièce du poêle est à 20,6 °C et serait à", decision["texte"])
+        self.assertIn("il garderait le boost et surveillerait la pièce", decision["texte"])
+        self.assertIsNotNone(mem["veille"])
         self.assertEqual(events[0]["texte"], "Hestia demanderait votre accord pour démarrer le poêle (saison douce).")
         self.assertTrue(mem["saison_douce"])
         # Under 18 °C it no longer asks, and it does not ask again until the house reaches 19 °C.
@@ -189,6 +192,49 @@ class StartAndStop(unittest.TestCase):
         self.assertEqual(decision["action"], "demarrer")
         _, mem, _ = decide(s, thermostat("frost"), mem, house_c=19.0)
         self.assertTrue(mem["saison_douce"])
+
+    def test_the_mild_season_reads_the_room_at_the_end_of_the_boost(self):
+        # 27 November, 17 h: the house at 19.5 °C, the stove's room at 21.4 °C for a boost at 21.5 °C until 22 h, a
+        # mild evening. Nothing to heat: no start, no question, the boost watched.
+        s = stove()
+        evening = [{"time": (NOW + timedelta(hours=h)).isoformat(), "temperature": 12.0} for h in range(8)]
+        out = {"fin": NOW + timedelta(hours=1), "heures": evening, "dehors_c": 12.0}
+        decision, mem, _ = decide(s, thermostat("boost", room=21.4, target=21.5),
+                                  seen(s, thermostat("frost", room=21.4)), house_c=19.5, outlook=out)
+        self.assertEqual((decision["action"], decision["titre"]), ("refuser", "Pas besoin du poêle"))
+        self.assertEqual(mem["veille"]["fin"], out["fin"].isoformat())
+        # A room 3 °C under the boost: lit without asking, even in the mild season.
+        decision, mem, _ = decide(s, thermostat("boost", room=18.5, target=21.5),
+                                  seen(s, thermostat("frost", room=18.5)), house_c=19.5, outlook=out)
+        self.assertEqual(decision["action"], "demarrer")
+
+    def test_the_room_s_own_pace(self):
+        # A room that lost 1 °C in 2 hours, 10 °C over outside: it loses 5 % of its gap an hour.
+        rows = [[(NOW - timedelta(hours=2)).isoformat(), 21.0, 10.5], [NOW.isoformat(), 20.0, 10.5]]
+        self.assertAlmostEqual(mild.pace(rows, None), 0.05, places=3)
+        # Warming (the sun), too short, or too close to outside: it does not say.
+        self.assertIsNone(mild.pace([rows[1], [(NOW + timedelta(hours=2)).isoformat(), 20.5, 10.0]], None))
+        self.assertIsNone(mild.pace([rows[0], [(NOW - timedelta(hours=1)).isoformat(), 20.8, 10.5]], None))
+        self.assertIsNone(mild.pace([[rows[0][0], 12.0, 11.0], [rows[1][0], 11.5, 11.0]], None))
+        # Carried 4 hours at 10 °C outside, k 0.05: 20 → about 18.1.
+        self.assertAlmostEqual(mild.carry(20.0, NOW, NOW + timedelta(hours=4),
+                                          [{"time": NOW.isoformat(), "temperature": 10.0}], 0.05), 18.15, places=1)
+        # The readings: one every 10 minutes, over 3 hours, emptied while the stove burns.
+        kept = mild.remember([], NOW, 20.0, 10.0, False)
+        kept = mild.remember(kept, NOW + timedelta(minutes=5), 19.9, 10.0, False)
+        self.assertEqual(len(kept), 1)
+        kept = mild.remember(kept, NOW + timedelta(minutes=10), 19.9, 10.0, False)
+        self.assertEqual(len(kept), 2)
+        self.assertEqual(mild.remember(kept, NOW, 20.0, 10.0, True), [])
+        self.assertEqual(len(mild.remember(kept, NOW + timedelta(hours=3, minutes=5), 19.0, 10.0, False)), 2)
+
+    def test_the_end_of_the_boost_on_the_planning(self):
+        day = NOW.replace(tzinfo=None, hour=0, minute=0)
+        line = [(day.replace(hour=17), "boost", {}), (day.replace(hour=22), "hors_gel", {})]
+        self.assertEqual(mild.boost_end(line, day.replace(hour=17, minute=5), NOW.tzinfo, "boost"),
+                         day.replace(hour=22, tzinfo=NOW.tzinfo))
+        self.assertIsNone(mild.boost_end(line, day.replace(hour=16), NOW.tzinfo, "boost"))
+        self.assertIsNone(mild.boost_end(None, day, NOW.tzinfo, "boost"))
 
     def test_the_house_starts_it_in_the_same_minute(self):
         before = stove()

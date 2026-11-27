@@ -30,7 +30,7 @@ def _coordinator(hass):
 
 def async_setup_websocket(hass) -> None:
     for command in (ws_view, ws_subscribe, ws_day, ws_history, ws_house, ws_settings, ws_set_settings, ws_fire_pot_cleaned,
-                    ws_answer, ws_auto):
+                    ws_answer, ws_auto, ws_test_phone):
         websocket_api.async_register_command(hass, command)
 
 
@@ -163,6 +163,8 @@ def ws_settings(hass, connection, msg):
             "notifieurs": sorted(f"notify.{name}" for name in c.hass.services.async_services().get("notify", {})
                                  if name not in NOT_PHONES),
             "coupures": [{"id": s["entity_id"], "nom": s["nom"], "poele": s["poele"]} for s in found.plug_switches],
+            # The last message sent to the phones (1.1.0b8), and Home Assistant's error when it failed.
+            "dernier_message": c.phone_last,
             "coupure": found.plug_switch,
             "pilotable": bool((c.data.get("poele") or {}).get("pilotable")),
             "poele_copie": bool((found.stove or {}).get("copie")),
@@ -220,6 +222,22 @@ async def ws_auto(hass, connection, msg):
         connection.send_error(msg["id"], "copie", "Poêle recopié d'une autre maison : la gestion auto reste coupée.")
         return
     connection.send_result(msg["id"], {"pilote": await c.async_auto(msg["actif"])})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "hestia_heating/essai_message"})
+@websocket_api.async_response
+async def ws_test_phone(hass, connection, msg):
+    """« Envoyer un message d'essai » (Réglages, 1.1.0b8): the notifier chosen, and what Home Assistant said."""
+    c = _coordinator(hass)
+    if c is None:
+        connection.send_error(msg["id"], "not_ready", "Hestia Chauffage n'est pas activée.")
+        return
+    try:
+        result = await c.async_test_phone()
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command({vol.Required("type"): "hestia_heating/repondre", vol.Required("reponse"): str})

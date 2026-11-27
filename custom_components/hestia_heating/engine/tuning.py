@@ -29,7 +29,9 @@ SPEC: dict[str, tuple[float | None, float, float]] = {
     "verif_min": (5, 2, 15),              # each flame order checked after this
     "echecs": (3, 1, 3),                 # orders not followed in a day before Hestia lets go of the flame
     # Lighting (« Allumer et éteindre : par Hestia »).
-    "saison_douce_c": (18, 14, 22),       # the house at this or more: Hestia asks first
+    "saison_douce_c": (18, 14, 22),       # the house at this or more: the mild season, judged on the need (1.1.0b8)
+    "douce_besoin_c": (1.5, 0.5, 4),      # the stove's room this far under its set point at the end of the boost: lit
+    "douce_sans_besoin_c": (0.5, 0, 2),   # this close to it, or closer: not lit (Hestia watches); between: it asks
     "reponse_min": (15, 5, 60),           # the answer waited this long
     "allumage_verif_min": (3, 1, 10),     # the order to light checked after this
     "recharge_s": (20, 5, 120),           # after reloading the stove's integration
@@ -72,7 +74,9 @@ WORDS = {
     "ventil_fumees_c": "ventilation au plus bas sous", "ventil_rythme_min": "changer la ventilation au plus toutes les",
     "garde": "gardés pour l’éteindre", "garde_ventil": "gardés avant la ventilation",
     "flamme_max_jour": "changements de flamme par jour", "verif_min": "vérifier chaque changement après",
-    "echecs": "rendre la main après", "saison_douce_c": "demander avant d’allumer à partir de",
+    "echecs": "rendre la main après", "saison_douce_c": "saison douce à partir de",
+    "douce_besoin_c": "allumer sans demander sous la consigne de",
+    "douce_sans_besoin_c": "pas besoin du poêle à moins de",
     "reponse_min": "attendre votre réponse", "allumage_verif_min": "vérifier l’allumage après",
     "recharge_s": "attendre après le rechargement", "demarrages_max": "allumages par jour",
     "consigne_poele": "température réglée dans le poêle", "arret_ecart_c": "éteindre à moins de",

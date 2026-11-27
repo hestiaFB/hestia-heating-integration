@@ -9,7 +9,7 @@ import re
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from . import driver, granules, home_planning, phrases, pilot, planning, sources, stove as stove_engine, stove_says
+from . import driver, granules, home_planning, mild, phrases, pilot, planning, sources, stove as stove_engine, stove_says
 from .phrases import degrees, hour
 
 # The tone of each room's chip in the panel and the card (the colours of the charte).
@@ -198,8 +198,13 @@ def build(snap: dict) -> dict:
             # The house's temperature: the sensor chosen in Réglages (the automations' own), else the rooms' average.
             sensor, low = snap.get("house_sensor"), snap.get("flamme_basse")
             house_c = sensor["c"] if sensor else house["temperature"]
+            # What the mild season reads ahead (1.1.0b8): the end of the boost on the planning, the forecast.
+            stove_line = lines.get(stove_thermostat["id"]) if stove_thermostat else None
+            outlook = {"fin": mild.boost_end(stove_line, naive_now, now.tzinfo, planning.BOOST),
+                       "heures": snap.get("hourly"), "dehors_c": mild.outdoor_now(snap.get("hourly"), now)}
             decision, memory, events = pilot.decide(stove, stove_thermostat, snap.get("pilote_memoire"), now, house_c,
-                                                    low["nom"] if low and low["on"] else None, snap.get("trop_chaud"))
+                                                    low["nom"] if low and low["on"] else None, snap.get("trop_chaud"),
+                                                    outlook)
             stove["pilote"].update(decision)
             stove["pilote"].update(maison_c=house_c, thermometre=sensor["nom"] if sensor else None,
                                    thermometre_lu=sensor is None or sensor["c"] is not None,

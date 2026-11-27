@@ -121,6 +121,15 @@ def sentence(stove: dict, thermostat: dict | None, room: dict | None, now: datet
         return _say("Éteint : saison douce, Hestia attend votre accord", "act")
     if preset == "frost":
         return _say("Éteint, en hors gel jusqu’au prochain boost du planning", "off")
+    watch = pilot.get("veille") or {}
+    if preset == "boost" and watch.get("fin"):
+        # The mild season judged on the need (1.1.0b8): no stove for now, the room watched to the end of the boost.
+        try:
+            end = hour(datetime.fromisoformat(watch["fin"]))
+        except (TypeError, ValueError):
+            end = None
+        return _say("Éteint : pas besoin pour l’instant, Hestia surveille la pièce"
+                    + (f" jusqu’à {end}" if end else ""), "off")
     if pilot.get("action") == "refuser":
         reason = (pilot.get("texte") or "").split(", mais ", 1)[-1].rstrip(".")
         return _say(f"Éteint : {reason.replace(' : il éteindrait son thermostat', '')}", "act")
@@ -132,5 +141,5 @@ def sentence(stove: dict, thermostat: dict | None, room: dict | None, now: datet
             return _say(f"Éteint : la maison est déjà à {degrees(house_c)} pour {degrees(target)}", "off")
         return _say("Éteint : le thermostat est déjà en boost, démarrage au prochain passage en boost", "off")
     if pilot.get("mode") == "entier" and pilot.get("maison_c") is not None and pilot["maison_c"] >= tuning.get("saison_douce_c"):
-        return _say("Éteint : saison douce, le prochain démarrage demandera votre accord", "off")
+        return _say("Éteint : saison douce, Hestia jugera du besoin au prochain boost", "off")
     return _say("Éteint, démarrage au prochain passage en boost", "off")

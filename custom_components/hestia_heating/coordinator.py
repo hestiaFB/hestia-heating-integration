@@ -117,6 +117,7 @@ class HeatingCoordinator:
         self.profiles: list[profiles.Profile] = []
         self.found = reader.Found()
         self.weather: dict = {"etat": "non"}
+        self.phone_last: dict | None = None
         self.data: dict = {"pret": False}
         self._listeners: list = []
         self._stop_listeners: list = []
@@ -446,14 +447,52 @@ class HeatingCoordinator:
             for domain, service, data in calls:
                 if not self.hass.services.has_service(domain, service):
                     _LOGGER.warning("Pilote du poêle : le service %s.%s n'existe pas", domain, service)
+                    if domain == "notify":
+                        self._phone_said(service, data, f"le service notify.{service} n'existe pas")
                     continue
                 try:
                     await asyncio.wait_for(self.hass.services.async_call(domain, service, data, blocking=True,
                                                                          context=Context()), GESTURE_TIMEOUT_S)
                 except Exception as err:  # noqa: BLE001 - one gesture that fails does not stop the next ones
                     _LOGGER.warning("Pilote du poêle : %s.%s n'a pas abouti (%s)", domain, service, err)
+                    if domain == "notify":
+                        self._phone_said(service, data, str(err) or type(err).__name__)
+                    continue
+                if domain == "notify":
+                    self._phone_said(service, data, None)
 
         self._gestures = self.hass.async_create_task(run())
+
+    def _phone_said(self, service: str, data: dict, error: str | None) -> None:
+        """The last message sent to the phones (1.1.0b8: on 27 November a question did not reach Frank's phone):
+        when, which, and Home Assistant's error if the call failed. Réglages shows it beside the notifier."""
+        if (data or {}).get("message") == "clear_notification":
+            return
+        self.phone_last = {"a": dt_util.now().isoformat(), "service": f"notify.{service}",
+                           "titre": (data or {}).get("title"), "erreur": error}
+        if error is None:
+            _LOGGER.info("Message envoyé par notify.%s : %s", service, (data or {}).get("title"))
+
+    async def async_test_phone(self) -> dict:
+        """« Envoyer un message d'essai » (Réglages, 1.1.0b8): the notifier chosen, with a button as the questions
+        have, so that a phone that shows no button is seen too. The button answers nothing."""
+        notifier = self._notifier()
+        if not notifier:
+            raise ValueError("Aucun service de notification choisi")
+        data = {"title": f"{health.TITLE} : essai",
+                "message": "Si vous lisez ce message, Hestia peut vous prévenir et vous poser ses questions.",
+                "data": {"tag": TAG + "essai", "actions": [{"action": "HESTIA_ESSAI", "title": "Bien reçu"}]}}
+        if not self.hass.services.has_service("notify", notifier):
+            self._phone_said(notifier, data, f"le service notify.{notifier} n'existe pas")
+            return self.phone_last
+        try:
+            await asyncio.wait_for(self.hass.services.async_call("notify", notifier, data, blocking=True,
+                                                                 context=Context()), GESTURE_TIMEOUT_S)
+        except Exception as err:  # noqa: BLE001 - said in Réglages
+            self._phone_said(notifier, data, str(err) or type(err).__name__)
+        else:
+            self._phone_said(notifier, data, None)
+        return self.phone_last
 
     def _sendable(self, entity_id: str | None) -> bool:
         if not entity_id:

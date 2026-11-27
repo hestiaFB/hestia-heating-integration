@@ -1,5 +1,19 @@
 # Changements
 
+## 1.1.0b8 — La saison douce regarde si le poêle sert vraiment
+
+### Améliorations
+- **En saison douce, Hestia regarde la fin du boost, pas seulement la température du moment.** Quand le planning passe le thermostat du poêle en boost et que la maison est à 18 °C ou plus, Hestia prolonge la température de la pièce du poêle jusqu’à la fin du boost du planning, sans le poêle. Il se sert de la vitesse à laquelle la pièce a refroidi ces dernières heures et des températures dehors prévues par Hestia Weather. Ensuite :
+  - si la pièce finirait à 1,5 °C ou plus sous la consigne, **il allume le poêle sans demander** ;
+  - si elle finirait à 0,5 °C de la consigne ou plus près, **il n’allume pas et vous le dit** (« Pas besoin du poêle : la pièce est à 21,4 °C et serait à 21 °C à 22 h, pour 21,5 °C visés ») ;
+  - entre les deux, il vous demande, comme avant.
+- **Hestia garde le boost et surveille la pièce.** Quand il n’a pas allumé, ou quand personne n’a répondu à la question, il n’abandonne plus le boost : il prolonge la pièce à chaque regard, et allume le poêle si une soirée plus froide que prévu la ferait finir trop bas. Il n’allume plus dans les 45 dernières minutes du boost. Sans réponse, le thermostat ne repasse donc plus hors gel au bout de 15 minutes. « Non » le remet toujours hors gel.
+- Les deux écarts se règlent dans Réglages › Avancé › L’allumage : « Allumer sans demander sous la consigne de » et « Pas besoin du poêle à moins de ». « Demander avant d’allumer à partir de » devient « Saison douce à partir de ».
+- **La question s’affiche aussi sur la carte du poêle**, avec ses boutons « Oui, allumer » et « Non », tant que Hestia attend. Sur la carte compacte, elle prend la ligne de la phrase.
+
+### Nouveautés
+- **Un essai pour les messages, dans Réglages › Les messages de Hestia.** « Envoyer un essai » envoie un message avec un bouton « Bien reçu », comme les questions. La ligne montre aussi le dernier message envoyé, et l’erreur de Home Assistant s’il n’est pas parti. Le 27 novembre, la question de la saison douce n’est pas arrivée sur le téléphone.
+
 ## 1.1.0b7 — Le gaz et l’électricité qui chauffent la maison
 
 ### Nouveautés

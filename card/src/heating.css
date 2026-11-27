@@ -525,6 +525,16 @@ ha-card.small.folded { cursor:pointer; }
   border:1px solid color-mix(in oklab, var(--c) 32%, transparent); }
 .annonces.act { --c:var(--nw-act); } .annonces.alert { --c:var(--nw-alert); }
 .small .compact .say.line.ticker { overflow:visible; text-overflow:clip; }
+/* Hestia's question (1.1.0b8), with its buttons: on the card too, not only on the phone. */
+.annonces.ask { display:grid; gap:6px; }
+.annonces.ask p { margin:0; font-size:var(--nw-fs-body, 14px); line-height:1.4; }
+.annonces.ask small { color:var(--nw-fg2); }
+.ask-btns { display:flex; gap:8px; flex-wrap:wrap; }
+.ask-btns .btn { flex:1 1 100px; height:40px; }
+.ask-btns .btn.yes { border-color:var(--nw-act); background:color-mix(in oklab, var(--nw-act) 18%, var(--hc-raised2)); }
+.ask.line { display:flex; align-items:center; gap:8px; min-width:0; }
+.ask.line .ask-btns { flex-wrap:nowrap; }
+.ask.line .ask-btns .btn { flex:0 0 auto; height:30px; padding:0 12px; }
 
 /* The gas and the electricity found against the cold (1.1.0b7), under the « who heats » bar. */
 .wholines.daily { margin-top:6px; }
