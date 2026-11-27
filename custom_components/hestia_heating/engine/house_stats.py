@@ -223,15 +223,18 @@ def off_peak(days: list[dict]) -> dict | None:
     return {"pct": round(100 * hc / known), "kwh": round(known, 1)}
 
 
-def season(stove_kwh: float | None, electric_kwh: float | None, name: str | None) -> dict | None:
-    """The stove's share of the season's heat."""
-    if stove_kwh is None and electric_kwh is None:
+def season(stove_kwh: float | None, electric_kwh: float | None, name: str | None,
+           gas_kwh: float | None = None) -> dict | None:
+    """Each energy's share of the season's heat: the stove, the electricity, and since 1.1.0b7 the gas (the heating
+    found in it against the cold)."""
+    if stove_kwh is None and electric_kwh is None and gas_kwh is None:
         return None
-    total = (stove_kwh or 0.0) + (electric_kwh or 0.0)
+    total = (stove_kwh or 0.0) + (electric_kwh or 0.0) + (gas_kwh or 0.0)
     if total < 1:
         return None
     return {"pct_poele": round(100 * (stove_kwh or 0.0) / total), "poele_kwh": round(stove_kwh or 0.0),
-            "electrique_kwh": round(electric_kwh or 0.0), "saison": name}
+            "electrique_kwh": round(electric_kwh or 0.0), "saison": name,
+            "pct_gaz": round(100 * (gas_kwh or 0.0) / total), "gaz_kwh": round(gas_kwh or 0.0)}
 
 
 def month(days: list[dict], kwh_per_kg: float) -> list[dict]:

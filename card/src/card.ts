@@ -72,9 +72,12 @@ type HouseFig={maintenant:{cout_h:number|null;periode:string|null;couleur:string
  froid_egal:{base:'eur'|'kwh';vs_hier:number|null;vs_semaine:number|null;hier_vs_semaine:number|null;dehors_vs_hier:number|null}|null;
  maison:{inertie:{a_15:number;demi_vie_h:number;heures:number}|null;besoin:{kwh_dj:number;avant:number|null;jours:number}|null;
   montee:{id:string;nom:string;min_par_degre:number;poele:boolean}[];temps:{poele_min:number;autres_min:number;jours:number}|null;
-  tenue:{pct:number}|null;creuses:{pct:number;kwh:number}|null;saison:{pct_poele:number;poele_kwh:number;electrique_kwh:number;saison:string|null}|null;jours:number};
+  tenue:{pct:number}|null;creuses:{pct:number;kwh:number}|null;saison:{pct_poele:number;poele_kwh:number;electrique_kwh:number;saison:string|null;pct_gaz?:number;gaz_kwh?:number}|null;jours:number};
  jours:{jour:string;kwh:number|null;kg:number|null;eur_elec:number|null;eur_gran:number|null;chaleur_kwh:number|null;dehors:number|null;dj:number|null}[];
- apprend:boolean};
+ apprend:boolean;energies?:Energies|null};
+/** The heating found in the gas and the electricity Hestia Énergie counts, against the cold (1.1.0b7). */
+type EnergyPart={etat:string;semaine:{kwh:number;jours:number}|null;saison:{kwh:number;jours:number}|null;explique_pct:number|null};
+type Energies={gaz:EnergyPart;electricite:EnergyPart};
 type Config={type:string;card?:string;piece?:string;court?:boolean;compacte?:boolean;name?:string;tap_action?:string};
 const CARDS=['maison','poele','piece','planning'];
 /** A tap on a room's card: its thermostat (Home Assistant's own window, by default), its page in the tab, or nothing. */
@@ -387,12 +390,23 @@ class HestiaHeatingCard extends LitElement {
  /** Who heats now: the stove's kW (its kilos an hour as heat) and the electricity's, as one bar and two lines. */
  private _whoHeats(v:View,f?:HouseFig){
   const st=f?.maintenant.poele_kw??0,el=f?.maintenant.electrique_kw??v.maison.electrique_w/1000,total=st+el;
-  if(total<=0.05)return html`<p class="who quiet">Rien ne chauffe en ce moment.</p>`;
+  const daily=this._dailyEnergies(f);
+  if(total<=0.05)return html`<p class="who quiet">Rien ne chauffe en ce moment.</p>${daily}`;
   const sp=Math.round(st/total*100),heating=v.pieces.filter(r=>r.etat==='chauffe'&&!r.poele&&r.puissance_w>0).map(r=>r.nom);
   return html`<div class="who" role="img" aria-label=${`Poêle ${sp} %, électrique ${100-sp} %`}>
    <div class="whobar">${st>0?html`<i class="st" style=${`flex:${st}`}></i>`:nothing}${el>0?html`<i class="el" style=${`flex:${el}`}></i>`:nothing}</div>
    <div class="wholines">${st>0?html`<span><i class="sw st"></i><b>Poêle ${sp} %</b> · ${num(st)} kW</span>`:nothing}
-    ${el>0?html`<span><i class="sw el"></i><b>Électrique ${100-sp} %</b> · ${num(el)} kW${heating.length?` · ${heating.slice(0,3).join(', ')}`:''}</span>`:nothing}</div></div>`;
+    ${el>0?html`<span><i class="sw el"></i><b>Électrique ${100-sp} %</b> · ${num(el)} kW${heating.length?` · ${heating.slice(0,3).join(', ')}`:''}</span>`:nothing}</div></div>${daily}`;
+ }
+ /** The gas and the electricity Hestia does not see live (1.1.0b7): what the cold made them heat, a day on average
+     over the last 7 days, estimated from Hestia Énergie's days. */
+ private _dailyEnergies(f?:HouseFig){
+  const e=f?.energies;
+  if(!e)return nothing;
+  const line=(p:EnergyPart,cls:string,word:string)=>p.etat==='pret'&&p.semaine&&p.semaine.jours?html`<span><i class=${'sw '+cls}></i><b>${word}</b> · environ ${num(p.semaine.kwh/p.semaine.jours,0)} kWh par jour pour chauffer</span>`:nothing;
+  const gas=line(e.gaz,'gz','Gaz'),elec=line(e.electricite,'el','Électricité due au froid');
+  if(gas===nothing&&elec===nothing)return nothing;
+  return html`<div class="wholines daily">${gas}${elec}<small>Ces 7 derniers jours, estimé d’après le froid (Hestia Énergie et Hestia Weather).</small></div>`;
  }
  private _houseRoom(r:Room,f?:HouseFig){
   const mins=f?.aujourdhui.pieces?.[r.id];
@@ -438,7 +452,7 @@ class HestiaHeatingCard extends LitElement {
    ${stat('Besoin de chauffe',b?`${num(b.kwh_dj)} kWh par degré-jour`:null,b?`poêle compté en chaleur.${trend}`:'la chaleur du jour pour chaque degré de froid.')}
    ${stat('Montée en température',best?`+ 1 °C en ${dur(best.min_par_degre)}`:null,best?`${best.nom}${best.poele?', poêle allumé':''}.${others.map(o=>` ${o.nom} : + 1 °C en ${dur(o.min_par_degre)}.`).join('')}`:'les heures de pleine chauffe.')}
    ${stat('Temps de chauffe',t?`${dur(t.poele_min+t.autres_min)} par jour`:null,t?`${t.poele_min?`poêle ${dur(t.poele_min)}, `:''}radiateurs ${dur(t.autres_min)} en tout.${m.tenue?` Consigne tenue ${m.tenue.pct} % du temps.`:''}`:'en moyenne, pièces additionnées.')}
-   ${s?stat('Part du poêle',`${s.pct_poele} %`,`de la chaleur de la saison${s.saison?` ${s.saison.replace('-','–')}`:''} : ${num(s.poele_kwh,0)} kWh de granulés, ${num(s.electrique_kwh,0)} kWh d’électricité.`):nothing}
+   ${s?stat(s.gaz_kwh&&!s.poele_kwh?'Part du gaz':'Part du poêle',`${s.gaz_kwh&&!s.poele_kwh?s.pct_gaz:s.pct_poele} %`,`de la chaleur de la saison${s.saison?` ${s.saison.replace('-','–')}`:''} : ${[s.poele_kwh?`${num(s.poele_kwh,0)} kWh de granulés`:'',`${num(s.electrique_kwh,0)} kWh d’électricité`,s.gaz_kwh?`${num(s.gaz_kwh,0)} kWh de gaz (estimé)`:''].filter(Boolean).join(', ')}.`):nothing}
    ${m.creuses?stat('Heures creuses',`${m.creuses.pct} %`,`de l’électricité du chauffage, sur ${num(m.creuses.kwh,0)} kWh (prix de Hestia Énergie).`):nothing}</div>`,'hfold');
  }
  /** « 30 derniers jours » (folded): each day's electricity and pellets, the cold outside as a dotted line. */

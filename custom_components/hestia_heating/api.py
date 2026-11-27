@@ -6,6 +6,7 @@ when the data is missing: never an invented value. °C, W, %, aware datetimes in
 from __future__ import annotations
 
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
 from .const import API_VERSION, DOMAIN
 
@@ -126,11 +127,32 @@ class HestiaHeatingApi:
         Énergie, else the price of Réglages), `granules_kg` and `granules_eur` (Hestia's count of the stove, at the
         price of its bags), `chauffage_eur` (both), `gagne_eur` (what the pellets saved against the same heat bought
         as electricity), `prix` (« energie », « reglages » or None). A part without a known price is None; None
-        without the day."""
+        without the day. Since 1.1.0b7 (compatible addition): `gaz_kwh` and `gaz_eur`, the heating found in the gas
+        Hestia Énergie counts, and `electrique_estime_kwh` and `electrique_estime_eur`, found in its electricity when
+        Hestia does not measure the radiators; both against the cold (engine/energy_share.py), counted in
+        `chauffage_eur`."""
         c = self.coordinator
         if c is None or not self._data:
             return None
         day = jour.isoformat() if hasattr(jour, "isoformat") else jour
         if day is None:
-            return c.house_journal.today_cost()
-        return c.house_journal.day_cost(str(day))
+            today = c.house_journal.today_cost()
+            day = (today or {}).get("jour") or dt_util.now().date().isoformat()
+            return _with_energies(today, c.energy_share.day(day), day)
+        return _with_energies(c.house_journal.day_cost(str(day)), c.energy_share.day(str(day)), str(day))
+
+
+def _with_energies(base: dict | None, share: dict, day: str) -> dict | None:
+    """1.1.0b7: the heating found in the gas and, for a house whose radiators Hestia does not measure, in the
+    electricity (engine/energy_share.py), added to the day's cost. `gaz_kwh`, `gaz_eur`, `electrique_estime_kwh`,
+    `electrique_estime_eur` (None when unknown); `chauffage_eur` counts them once. A house without any thermostat in
+    Home Assistant gets its cost too. None when nothing at all is known of the day."""
+    if base is None and share.get("gaz_kwh") is None and share.get("electrique_estime_kwh") is None:
+        return None
+    out = dict(base or {"jour": day, "electrique_kwh": None, "electrique_eur": None, "granules_kg": None,
+                        "granules_eur": None, "chauffage_eur": None, "gagne_eur": None, "prix": None})
+    out.update(share)
+    extra = [v for v in (share.get("gaz_eur"), share.get("electrique_estime_eur")) if v is not None]
+    if extra:
+        out["chauffage_eur"] = round((out.get("chauffage_eur") or 0.0) + sum(extra), 2)
+    return out
