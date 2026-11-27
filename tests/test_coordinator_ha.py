@@ -696,6 +696,28 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         await c.async_set_settings({"pilote_ventilation": "flamme"})
         self.assertEqual(c._calls_of({"geste": "ventilation", "valeur": "4"}, c.data["poele"]),
                          [("climate", "set_fan_mode", {"entity_id": "climate.poele_vent_front", "fan_mode": "4"})])
+        # 1.1.0b5: the front fan dead (unavailable after a restart, 26 November) and the main one alive: the order goes to
+        # the main one, and back to the front one once it answers again.
+        registry = er.async_get(self.hass)
+        stove_dev = registry.async_get("climate.poele_vent_front").device_id
+        stove_cfg = registry.async_get("climate.poele_vent_front").config_entry_id
+        registry.async_get_or_create("climate", "aguaiot", "essai_vent_main", suggested_object_id="poele_vent_main",
+                                     device_id=stove_dev, config_entry=self.hass.config_entries.async_get_entry(stove_cfg))
+        self.hass.states.async_set("climate.poele_vent_main", "heat", {"fan_mode": "5",
+                                                                       "fan_modes": ["Off", "1", "2", "3", "4", "5", "Auto"]})
+        self.hass.states.async_set("climate.poele_vent_front", "unavailable", {"restored": True})
+        c._discover()
+        c._build()
+        await self.hass.async_block_till_done()
+        self.assertEqual(c._calls_of({"geste": "ventilation", "valeur": "2"}, c.data["poele"]),
+                         [("climate", "set_fan_mode", {"entity_id": "climate.poele_vent_main", "fan_mode": "2"})])
+        self.assertEqual(c.data["poele"]["ventilation"], "5")
+        self.hass.states.async_set("climate.poele_vent_front", "heat", {"fan_mode": "3",
+                                                                         "fan_modes": ["OFF", "AUTO", "1", "2", "3", "4", "5"]})
+        c._build()
+        await self.hass.async_block_till_done()
+        self.assertEqual(c._calls_of({"geste": "ventilation", "valeur": "2"}, c.data["poele"]),
+                         [("climate", "set_fan_mode", {"entity_id": "climate.poele_vent_front", "fan_mode": "2"})])
         # Réglages can save every setting the tab shows (the card's « Gestion auto » has its own command).
         self.assertEqual(set(DEFAULTS) - set(SETTING_KEYS), {"pilote_auto"})
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))

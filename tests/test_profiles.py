@@ -47,6 +47,23 @@ class Profile(unittest.TestCase):
         self.assertEqual(found["etat"], "sensor.poele_status")
         self.assertNotIn("alarme", found)
 
+    def test_the_fan_falls_back_on_the_main_one_when_the_front_one_is_dead(self):
+        """1.1.0b5: on 26 November the stove's integration stopped giving `_vent_front` after a restart (unavailable)
+        while `_vent_main` answered: the fan's role goes to the first end that answers, the front one first."""
+        entities = [{"entity_id": e} for e in ("climate.poele", "climate.poele_vent_front", "climate.poele_vent_main",
+                                               "sensor.poele_status", "number.poele_power")]
+        self.assertEqual(profiles.match(PROFILE, entities)["ventilation"], "climate.poele_vent_front")
+        both_alive = profiles.match(PROFILE, entities, lambda i: True)
+        self.assertEqual(both_alive["ventilation"], "climate.poele_vent_front")
+        front_dead = profiles.match(PROFILE, entities, lambda i: not i.endswith("_vent_front"))
+        self.assertEqual(front_dead["ventilation"], "climate.poele_vent_main")
+        self.assertEqual(front_dead["thermostat"], "climate.poele")
+        self.assertEqual(profiles.spares(PROFILE, entities),
+                         {"ventilation": ["climate.poele_vent_front", "climate.poele_vent_main"]})
+        only_main = [e for e in entities if not e["entity_id"].endswith("_vent_front")]
+        self.assertEqual(profiles.match(PROFILE, only_main)["ventilation"], "climate.poele_vent_main")
+        self.assertEqual(profiles.spares(PROFILE, only_main), {})
+
 
 if __name__ == "__main__":
     unittest.main()

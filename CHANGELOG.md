@@ -1,5 +1,10 @@
 # Changements
 
+## 1.1.0b5 — La ventilation sur le ventilateur qui répond
+
+### Corrections
+- **« Ventilation par Hestia » marche de nouveau quand le poêle ne donne plus son ventilateur avant.** Après un redémarrage de Home Assistant, l’intégration du poêle (Micronova Agua IOT) peut laisser le ventilateur avant (`…_vent_front`) indisponible, alors que le ventilateur principal (`…_vent_main`) répond. Hestia lisait alors une ventilation inconnue et ne la réglait plus, sans rien dire : flamme 1, ventilation restée à 5. Maintenant, Hestia prend le ventilateur avant quand il répond, et sinon le ventilateur principal ; il revient au ventilateur avant dès qu’il répond de nouveau.
+
 ## 1.1.0b4 — La carte du poêle sans « Flamme auto »
 
 ### Améliorations
