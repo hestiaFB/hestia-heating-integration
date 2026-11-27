@@ -562,7 +562,7 @@ class HestiaHeatingCard extends LitElement {
    say:s.phrase??(why?{texte:why}:null),
    pill:this._artPill(stoveArt(level,max,s.en_feu),s.etat==='alarme'?'alert':s.en_feu?'stove':'off',`Poêle : ${state}`,
     s.etat==='alarme'?'alarme':s.en_feu&&level?`${level}/${max}`:''),clock,
-   side:this._stoveButtons(s,auto,true),
+   side:this._stoveButtons(s,true),
    legend:this._legend(tones,'température',true,'flame',max,true),
    body:()=>html`${this._fireDrawer(v,s,room)}${this._pelletDrawer(v,s)}${this._foot('poele','Ouvrir les réglages du poêle','Réglages du poêle')}`});
   return html`${this._glow(this._stoveTone(s))}<div class="top">
@@ -571,7 +571,7 @@ class HestiaHeatingCard extends LitElement {
     <span class=${'pill '+(s.etat==='alarme'?'alert':s.en_feu?'stove':'off')}>${state}</span>`)}
    ${clock}
    ${this._legend(tones,(series.temperature??[]).length?`température du ${where.toLowerCase()}`:null,sets.some(p=>p[1]!=null),'flame',max)}
-   ${this._stoveButtons(s,auto)}
+   ${this._stoveButtons(s)}
   </div>
   ${this._fireDrawer(v,s,room)}
   ${this._pelletDrawer(v,s)}
@@ -600,17 +600,15 @@ class HestiaHeatingCard extends LitElement {
    `${({eteint:'Poêle éteint',allumage:'Le poêle s’allume',chauffe:'En chauffe',nettoyage:'Le poêle se nettoie',extinction:'Le poêle s’éteint'} as Record<string,string>)[s.etat]??'Le poêle ne dit pas son état'}${since}.`;
   return (s.pilote&&!auto?'Flamme à la main : Hestia ne la change pas. ':'')+now;
  }
- /* « Éteindre » or « Allumer » (the profile's own orders), « Flamme auto » (Hestia sets the flame, « Gestion auto »
-    before 1.0.0b3), « J’ai nettoyé » (Hestia's count only). The first two and « J’ai nettoyé » ask again before they are
+ /* « Éteindre » or « Allumer » (the profile's own orders), « J’ai nettoyé » (Hestia's count only). « Flamme auto » left
+    the face in 1.1.0b4 (Frank): the drawer's « Flamme : Auto » does the same. Both ask again before they are
     sent; nothing is sent to a stove copied from another house. */
- private _stoveButtons(s:Stove,auto:boolean,short=false){
+ private _stoveButtons(s:Stove,short=false){
   const lit=s.allume??(s.en_feu||s.etat==='allumage'),order=s.boutons?.[lit?'eteindre':'allumer'];
   const locked=!!s.copie,pot=s.conso?.brasier,ask=this._confirm,why=locked?'Poêle recopié d’une autre maison : rien ne lui est envoyé.':'';
   return html`<div class="btns" @click=${(e:Event)=>e.stopPropagation()}>
    ${order?html`<button class=${'btn'+(ask==='power'?' ask':'')} ?disabled=${locked||this._busy==='power'} title=${why}
      @click=${()=>this._press('power',()=>this._service(order),true)}>${POWER}${ask==='power'?lit?'Vraiment éteindre ?':'Vraiment allumer ?':lit?'Éteindre':'Allumer'}</button>`:nothing}
-   <button class=${'btn auto'+(auto?' on':'')} aria-pressed=${auto?'true':'false'} ?disabled=${locked||this._busy==='auto'} title=${why}
-     @click=${()=>this._press('auto',()=>this._hass!.callWS({type:'hestia_heating/gestion_auto',actif:!auto}))}><span class="switch"><i></i></span>Flamme auto</button>
    ${pot?html`<button class=${'btn pot'+(pot.a_nettoyer?' due':pot.bientot?' soon':'')+(ask==='clean'?' ask':'')} ?disabled=${this._busy==='clean'}
      style=${`--fill:${this._potFill(pot)}%`} aria-label=${`${this._potWord(pot)}. J’ai nettoyé le brasier`} title=${pot.texte}
      @click=${()=>this._press('clean',()=>this._hass!.callWS({type:'hestia_heating/brasier_nettoye'}),true)}>${BRUSH}<span class="pot-say"><b>${short?this._potWord(pot,false):this._potWord(pot)}</b>
