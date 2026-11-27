@@ -664,7 +664,7 @@ class HeatingCoordinator:
             bricks.append("Hestia Énergie ne répond pas : l’argent est compté au prix réglé ici.")
         return {"pret": hass.state is CoreState.running, "copie": bool(found_stove.get("copie")),
                 "indisponibles": down, "ventilation": fan, "sonde": probe, "non_enregistres": unrecorded,
-                "briques": bricks}
+                "briques": bricks, "reservoir": stove.get("reservoir")}
 
     def _pellet_settings(self) -> dict:
         s = self.settings

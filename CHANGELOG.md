@@ -1,5 +1,15 @@
 # Changements
 
+## 1.1.0b9 — Le réservoir vide, vu par les fumées
+
+### Nouveautés
+- **Hestia remarque quand le réservoir de granulés est peut-être vide**, même sans capteur de niveau. Il apprend les fumées habituelles de votre poêle à chaque flamme. Quand le poêle chauffe, la flamme inchangée depuis 20 minutes, et que ses fumées tombent de 15 °C sous leur niveau habituel (ou de 10 °C en 10 minutes), une annonce « Réservoir vide ? » s’affiche sur la carte du poêle et une notification part, une fois. Le 27 novembre, le poêle disait encore « On » en flamme 1, sans alarme, alors que ses fumées étaient passées de 120 °C à 76 °C.
+- Chaque poêle a ses propres fumées : Hestia ne dit rien pour une flamme qu’il ne connaît pas encore (une demi-heure de chauffe à cette flamme). Les trois chiffres se règlent dans Réglages › Avancé › « Le réservoir vide, vu par les fumées » ; l’écart à 0 coupe cette surveillance.
+- Le souci part tout seul quand le poêle chauffe de nouveau avec des fumées revenues à leur niveau, et les téléphones reçoivent « réglé ».
+
+### Corrections
+- **Les granulés ne sont plus comptés pendant ce doute** : avant, Hestia comptait les kilos d’un poêle qui ne brûlait plus rien.
+
 ## 1.1.0b8 — La saison douce regarde si le poêle sert vraiment
 
 ### Améliorations

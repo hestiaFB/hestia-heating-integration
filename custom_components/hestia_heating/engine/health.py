@@ -3,7 +3,8 @@ mettre des messages sur la carte et envoyer des messages si quelque chose n'est 
 Python. On 26 November the stove's front fan stayed unavailable after a restart, and Hestia, reading no fan, said and
 did nothing for 14 hours; the day before, the recorder did not keep the pellets' sensor and the house card counted 0 kg.
 
-Each look, five checks, each a subject:
+Each look, six checks, each a subject:
+- « reservoir » (1.1.0b9): the pellets' tank perhaps empty, seen from the smoke (engine/tank.py);
 - « indisponible »: an entity the stove is read by (its roles, their spares, its thermostat, its plug) unavailable for
   more than 10 minutes;
 - « ventilation »: the fan by Hestia (flamme + 1) still not at the level Hestia asked 15 minutes after its order;
@@ -26,8 +27,9 @@ DOWN = timedelta(minutes=10)        # an entity unavailable this long, another b
 FAN_LATE = timedelta(minutes=15)    # the fan not at the level asked this long after Hestia's order
 FROZEN = timedelta(hours=2)         # the room's temperature unchanged this long while the stove burns
 TITLE = "Hestia Chauffage"
-SUBJECTS = ("indisponible", "ventilation", "sonde", "enregistrement", "briques")
-RESOLVED = {"indisponible": "Les entités du poêle répondent de nouveau.",
+SUBJECTS = ("reservoir", "indisponible", "ventilation", "sonde", "enregistrement", "briques")
+RESOLVED = {"reservoir": "Les fumées du poêle sont revenues à leur niveau : il a de nouveau des granulés.",
+            "indisponible": "Les entités du poêle répondent de nouveau.",
             "ventilation": "La ventilation suit de nouveau ce que Hestia demande.",
             "sonde": "La température de la pièce du poêle bouge de nouveau.",
             "enregistrement": "Le recorder enregistre de nouveau les capteurs de Hestia.",
@@ -118,7 +120,10 @@ def check(facts: dict, mem: dict | None, now: datetime) -> tuple[list[dict], dic
     mem = dict(mem or {})
     if not facts.get("pret", True):
         return [], mem, []
-    seen = {"indisponible": _down(facts, now), "ventilation": _fan(facts, now), "sonde": _probe(facts, mem, now),
+    tank = facts.get("reservoir") or {}
+    tank_at = _iso(tank.get("depuis"))
+    seen = {"reservoir": (tank_at, tank["texte"], timedelta(0)) if tank_at and tank.get("texte") else None,
+            "indisponible": _down(facts, now), "ventilation": _fan(facts, now), "sonde": _probe(facts, mem, now),
             "enregistrement": _seen("enregistrement", _recorder(facts), mem, now, timedelta(0)),
             "briques": _seen("briques", " ".join(facts.get("briques") or ()) or None, mem, now, DOWN)}
     quiet = bool(facts.get("copie"))

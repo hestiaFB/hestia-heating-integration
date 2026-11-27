@@ -9,7 +9,7 @@ import re
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from . import driver, granules, home_planning, mild, phrases, pilot, planning, sources, stove as stove_engine, stove_says
+from . import driver, granules, home_planning, mild, phrases, pilot, planning, sources, stove as stove_engine, stove_says, tank
 from .phrases import degrees, hour
 
 # The tone of each room's chip in the panel and the card (the colours of the charte).
@@ -96,8 +96,12 @@ def build(snap: dict) -> dict:
     if stove:
         chosen_g = snap.get("granules_reglages") or {}
         bags = granules.bags_of(pellets, chosen_g.get("poids_sac"))
-        pellet_memory = granules.advance(snap.get("granules_memoire"), stove, bags, now, raw_stove["profile"].rates,
+        # The tank empty, seen from the smoke (1.1.0b9): no pellet is counted while in doubt.
+        tank_memory, stove["reservoir"] = tank.watch((snap.get("granules_memoire") or {}).get("reservoir"), stove, now)
+        counted = {**stove, "etat": "vide"} if stove["reservoir"] and stove["etat"] == "chauffe" else stove
+        pellet_memory = granules.advance(snap.get("granules_memoire"), counted, bags, now, raw_stove["profile"].rates,
                                          (pellets or {}).get("debut_saison"))
+        pellet_memory["reservoir"] = tank_memory
         price = chosen_g.get("prix_sac") or (pellets or {}).get("prix_sac")
         stove["conso"] = granules.view(pellet_memory, bags, chosen_g.get("brasier_kg"), price,
                                        chosen_g.get("poids_sac") or (pellets or {}).get("sac_kg") or granules.BAG_KG, now)
