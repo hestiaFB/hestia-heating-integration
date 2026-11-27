@@ -10,6 +10,7 @@ from engine import driver, pilot
 
 NOW = m.NOW                                      # Friday 20 November 2026, 21 h 40
 COLD, MILD = 17.5, 18.5                          # the house: cold enough to start without asking, or the mild season
+ASK_ROOM = 20.8                                  # the stove's room, mild season: neither clearly needed nor not (ask)
 SETTINGS = [{"nom": "Consigne interne à 25 °C", "role": "thermostat", "reserve": None, "a_changer": False},
             {"nom": "ECO Stop", "role": "eco_stop", "reserve": None, "a_changer": True},
             {"nom": "Ventilation en AUTO", "role": "ventilation", "reserve": 6, "a_changer": True}]
@@ -39,9 +40,9 @@ class Pilot:
         self.now = NOW
         self.ctx = {"prise_switch": "switch.prise_du_poele", "couper_prise": True, **ctx}
 
-    def look(self, s, t, after=timedelta(0), house_c=COLD, **ctx):
+    def look(self, s, t, after=timedelta(0), house_c=COLD, outlook=None, **ctx):
         self.now += after
-        decision, self.mem, _ = pilot.decide(s, t, self.mem, self.now, house_c)
+        decision, self.mem, _ = pilot.decide(s, t, self.mem, self.now, house_c, outlook=outlook)
         orders, events, status, wake = driver.drive(decision, s, t, self.mem, self.now, {**self.ctx, **ctx})
         self.decision, self.events, self.status, self.wake = decision, events, status, wake
         return orders
@@ -184,7 +185,7 @@ class Refuse(unittest.TestCase):
 class MildSeason(unittest.TestCase):
     def ask(self) -> Pilot:
         p = Pilot()
-        orders = boosted(p, house_c=MILD)
+        orders = boosted(p, house_c=MILD, room=ASK_ROOM)
         self.assertEqual(p.decision["action"], "demander")
         self.assertEqual(gestures(orders), ["notifier:saison"])
         self.assertEqual(orders[0]["actions"], ["HESTIA_POELE_OUI", "HESTIA_POELE_NON"])
@@ -194,31 +195,72 @@ class MildSeason(unittest.TestCase):
 
     def test_yes_starts(self):
         p = self.ask()
-        orders = p.look(stove(), thermostat("boost"), timedelta(minutes=2), house_c=MILD,
+        orders = p.look(stove(), thermostat("boost", room=ASK_ROOM), timedelta(minutes=2), house_c=MILD,
                         reponses={"oui": p.now.isoformat()})
         self.assertEqual(gestures(orders), ["effacer:saison", "reglage:eco_stop", "reglage:ventilation"])
-        orders = p.look(stove(), thermostat("boost"), timedelta(seconds=2), house_c=MILD)
+        orders = p.look(stove(), thermostat("boost", room=ASK_ROOM), timedelta(seconds=2), house_c=MILD)
         self.assertEqual(gestures(orders), ["allumer"])
         self.assertIn("vous avez dit oui", p.events[0]["texte"])
 
     def test_no_puts_the_thermostat_back_to_hors_gel(self):
         p = self.ask()
-        orders = p.look(stove(), thermostat("boost"), timedelta(minutes=2), house_c=MILD,
+        orders = p.look(stove(), thermostat("boost", room=ASK_ROOM), timedelta(minutes=2), house_c=MILD,
                         reponses={"non": p.now.isoformat()})
         self.assertEqual(gestures(orders), ["effacer:saison", "thermostat:set_preset_mode"])
         self.assertEqual(orders[1]["donnees"], {"preset_mode": "frost"})
 
-    def test_no_answer_hors_gel_unless_the_stove_is_already_on_its_way(self):
+    def test_no_answer_keeps_the_boost_and_watches_the_room(self):
+        # 1.1.0b8: no longer back to hors gel at once. The boost stays; the stove is lit if the room, carried to the
+        # end of the boost, would end too cold.
         p = self.ask()
-        orders = p.look(stove(), thermostat("boost"), timedelta(minutes=15), house_c=MILD)
-        self.assertEqual(gestures(orders), ["effacer:saison", "thermostat:set_preset_mode"])
-        p = self.ask()
-        orders = p.look(stove("allumage", 2, reglages=SETTLED), thermostat("boost"), timedelta(minutes=15), house_c=MILD)
+        orders = p.look(stove(), thermostat("boost", room=ASK_ROOM), timedelta(minutes=15), house_c=MILD)
         self.assertEqual(gestures(orders), ["effacer:saison"])
+        self.assertIn("Hestia garde le boost et surveille", p.events[0]["texte"])
+        self.assertIsNotNone(p.decision["veille"])
+        orders = p.look(stove(), thermostat("boost", room=ASK_ROOM), timedelta(minutes=10), house_c=MILD)
+        self.assertEqual(orders, [])
+        orders = p.look(stove(), thermostat("boost", room=19.4), timedelta(minutes=10), house_c=MILD)
+        self.assertEqual(p.decision["action"], "demarrer")
+        self.assertEqual(gestures(orders), ["reglage:eco_stop", "reglage:ventilation"])
+        self.assertIn("la pièce du poêle descend trop", " ".join(e["texte"] for e in p.events))
+        self.assertIsNone(p.decision["veille"])
+        p = self.ask()
+        orders = p.look(stove("allumage", 2, reglages=SETTLED), thermostat("boost", room=ASK_ROOM), timedelta(minutes=15), house_c=MILD)
+        self.assertEqual(gestures(orders), ["effacer:saison"])
+
+    def test_no_need_is_said_and_the_boost_is_watched(self):
+        p = Pilot()
+        out = {"heures": [{"time": (NOW + timedelta(hours=h)).isoformat(), "temperature": 15.0} for h in range(6)],
+               "dehors_c": 15.0, "fin": NOW + timedelta(hours=1, minutes=30)}
+        p.look(stove(), thermostat("eco", room=21.4, target=21.5), house_c=MILD, outlook=out)
+        orders = p.look(stove(), thermostat("boost", room=21.4, target=21.5), timedelta(minutes=1), house_c=MILD,
+                        outlook=out)
+        self.assertEqual((p.decision["action"], p.decision["titre"]), ("refuser", "Pas besoin du poêle"))
+        self.assertEqual(gestures(orders), ["notifier:refus"])
+        self.assertEqual(orders[0]["titre"], "Pas besoin du poêle")
+        self.assertIn("pas besoin du poêle : la pièce du poêle est à 21,4", orders[0]["texte"])
+        self.assertIn("à 23 h 10 sans le poêle", orders[0]["texte"])
+        # Nothing is locked, the thermostat stays in boost, and the room is watched.
+        self.assertIsNone(p.run.get("verrou"))
+        orders = p.look(stove(), thermostat("boost", room=21.3, target=21.5), timedelta(minutes=12), house_c=MILD,
+                        outlook=out)
+        self.assertEqual(orders, [])
+        self.assertEqual(p.decision["veille"], {"fin": out["fin"].isoformat()})
+        # Too close to the end of the boost: no more start from the watch.
+        orders = p.look(stove(), thermostat("boost", room=19.0, target=21.5), timedelta(minutes=50), house_c=MILD,
+                        outlook=out)
+        self.assertEqual(orders, [])
+
+    def test_clearly_needed_lights_without_asking(self):
+        p = Pilot()
+        orders = boosted(p, house_c=MILD, room=19.0, target=21.5)
+        self.assertEqual(p.decision["action"], "demarrer")
+        self.assertIn("sans demander", p.decision["texte"])
+        self.assertEqual(gestures(orders), ["reglage:eco_stop", "reglage:ventilation"])
 
     def test_the_thermostat_leaving_boost_is_a_no_without_order(self):
         p = self.ask()
-        orders = p.look(stove(), thermostat("eco"), timedelta(minutes=3), house_c=MILD)
+        orders = p.look(stove(), thermostat("eco", room=ASK_ROOM), timedelta(minutes=3), house_c=MILD)
         self.assertEqual(gestures(orders), ["effacer:saison"])
 
 
@@ -650,11 +692,11 @@ class Simulator(unittest.TestCase):
                                  "de 28 °C.", None), self.said(p))
         self.assertIsNone(p.run.get("verrou"))
         q = Pilot(blanc=True)
-        everything += boosted(q, house_c=MILD)
+        everything += boosted(q, house_c=MILD, room=ASK_ROOM)
         self.assertIn(("hestia", "Hestia demanderait votre accord pour démarrer le poêle (saison douce).", None),
                       self.said(q))
         self.assertIsNone(q.run.get("question"))
-        everything += q.look(stove(), thermostat("boost"), timedelta(minutes=20), house_c=MILD,
+        everything += q.look(stove(), thermostat("boost", room=ASK_ROOM), timedelta(minutes=20), house_c=MILD,
                              reponses={"non": NOW.isoformat()})
         self.assertEqual(everything, [])
 

@@ -123,7 +123,12 @@ class WhileItIsOff(unittest.TestCase):
         self.assertEqual(say(asking)["texte"], "Éteint : saison douce, Hestia attend votre accord")
         mild = stove("eteint", pilote={"mode": "entier", "maison_c": 18.5})
         self.assertEqual(say(mild, thermostat(preset="eco"))["texte"],
-                         "Éteint : saison douce, le prochain démarrage demandera votre accord")
+                         "Éteint : saison douce, Hestia jugera du besoin au prochain boost")
+        watching = stove("eteint", pilote={"mode": "entier", "maison_c": 19.5, "action": "refuser",
+                                           "texte": "Le thermostat est passé en boost, mais pas besoin du poêle.",
+                                           "veille": {"fin": "2026-11-27T22:00:00+01:00"}})
+        self.assertEqual(say(watching, thermostat(preset="boost"))["texte"],
+                         "Éteint : pas besoin pour l’instant, Hestia surveille la pièce jusqu’à 22 h")
 
 
 if __name__ == "__main__":

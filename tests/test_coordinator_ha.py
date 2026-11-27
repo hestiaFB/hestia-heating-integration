@@ -41,6 +41,7 @@ def eco_between(start, end):
         rows[cur.weekday()].append([cur.strftime("%H:%M"), "24:00" if stop == midnight else stop.strftime("%H:%M"), "eco"])
         cur = stop
     return rows
+ASK_ROOM = 20.6                                  # the stove's room, a little under its boost at 21 °C
 
 
 class SendsThePlanning:
@@ -118,8 +119,9 @@ class DrivesTheStove:
         entry, c = await self._setup()
         await c.async_set_settings({"pilote": "entier", "pilote_notifier": "notify.telephones"})
         await hass.async_block_till_done()
+        # The stove's room a little under the boost (1.1.0b8): neither clearly needed nor not, Hestia asks.
         hass.states.async_set("climate.vt_poele", "heat", {**hass.states.get("climate.vt_poele").attributes,
-                                                           "preset_mode": "boost"})
+                                                           "preset_mode": "boost", "current_temperature": ASK_ROOM})
         await asyncio.sleep(1.5)
         await hass.async_block_till_done()
         return entry, c
@@ -664,8 +666,8 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         await change("climate.vt_poele", "heat", preset_mode="frost")
         self.assertEqual(c.data["poele"]["pilote"]["action"], "arreter")
         await change("sensor.poele_status", "Éteindre")
-        await change("climate.vt_poele", "heat", preset_mode="boost")
-        # The house is at 20 °C, the mild season: Hestia would ask before starting the stove.
+        await change("climate.vt_poele", "heat", preset_mode="boost", current_temperature=ASK_ROOM)
+        # The house is at 20 °C, the mild season, the stove's room a little under the boost: Hestia would ask.
         self.assertEqual(c.data["poele"]["pilote"]["action"], "demander")
         said = [(j["qui"], j["texte"], j["accord"]) for j in c.data["poele"]["pilote"]["journal"]]
         self.assertEqual(said, [("hestia", "Hestia arrêterait le poêle.", None), ("maison", "La maison a éteint le poêle.", True),
@@ -795,6 +797,29 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
                          [("climate", "set_fan_mode", {"entity_id": "climate.poele_vent_front", "fan_mode": "2"})])
         # Réglages can save every setting the tab shows (the card's « Gestion auto » has its own command).
         self.assertEqual(set(DEFAULTS) - set(SETTING_KEYS), {"pilote_auto"})
+        self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+
+    async def test_the_last_message_and_the_test_message(self):
+        """1.1.0b8: on 27 November a question did not reach the phone. Réglages shows the last message sent and Home
+        Assistant's error; « Envoyer un essai » sends one, with a button that answers nothing."""
+        entry, c = await self._whole_mode("sensor.poele_status", "climate.poele")
+        await self.hass.async_block_till_done()
+        self.assertEqual((c.phone_last["service"], c.phone_last["erreur"]), ("notify.telephones", None))
+        self.assertEqual(c.phone_last["titre"], "Saison douce : allumer le poêle ?")
+        self.sent.clear()
+        last = await c.async_test_phone()
+        self.assertEqual(self.sent[0][:2], ("notify", "telephones"))
+        self.assertEqual(self.sent[0][2]["data"]["actions"], [{"action": "HESTIA_ESSAI", "title": "Bien reçu"}])
+        self.assertEqual((last["titre"], last["erreur"]), ("Hestia Chauffage : essai", None))
+
+        async def broken(call):
+            raise RuntimeError("téléphone inconnu")
+        self.hass.services.async_register("notify", "telephones", broken)
+        last = await c.async_test_phone()
+        self.assertEqual(last["erreur"], "téléphone inconnu")
+        await c.async_set_settings({"pilote_notifier": None})
+        with self.assertRaises(ValueError):
+            await c.async_test_phone()
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
 
     async def test_whole_mode_survives_a_restart_without_its_sequences(self):

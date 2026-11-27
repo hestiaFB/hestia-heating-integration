@@ -40,7 +40,8 @@ const TROUBLE:Record<string,[string,string]>={indisponible:['Ne répond plus','m
  sonde:['Sonde de la pièce','mdi:thermometer-alert'],enregistrement:['Recorder','mdi:database-alert'],briques:['Briques Hestia-FB','mdi:link-variant-off']};
 type Stove={nom:string;modele?:string|null;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;
  fumees:number|null;prise:string|null;prise_w:number|null;demande_pct:number|null;consigne?:number|null;ecritures:number|null;ecritures_max:number|null;
- alarme:boolean|null;alarme_texte:string|null;allume?:boolean|null;conso?:Use;pilote?:{mode:string;titre?:string;texte?:string;flamme?:number|null;flamme_manuelle?:boolean};
+ alarme:boolean|null;alarme_texte:string|null;allume?:boolean|null;conso?:Use;pilote?:{mode:string;titre?:string;texte?:string;flamme?:number|null;flamme_manuelle?:boolean;
+  conduite?:{question?:{sujet:string;texte:string;reste_min?:number;reponses:string[]}|null}};
  boutons?:{allumer?:Order;eteindre?:Order};ventilation?:string|null;copie?:boolean;soucis?:Trouble[];entites?:Record<string,string>;
  flamme_min?:number;ventilation_niveaux?:string[];ventilation_choix?:string;eco_stop?:boolean|null;eco_stop_delai?:number|null;consigne_poele?:number|null;air?:number|null;
  flamme_basse?:{entity_id:string;nom:string;on:boolean|null}|null;prise_switch?:{entity_id:string;on:boolean|null}|null;
@@ -580,7 +581,7 @@ class HestiaHeatingCard extends LitElement {
    this._config.compacte?bare(t,s.en_feu?s.consigne??null:null):center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
   const why=this._why(s,room,auto,level);
   if(this._config.compacte)return this._compact({tone:this._stoveTone(s),title:this._config.name||s.nom,
-   say:s.phrase??(why?{texte:why}:null),ticker:this._ticker(s,true),
+   say:s.phrase??(why?{texte:why}:null),ticker:this._ask(s,true)??this._ticker(s,true),
    pill:this._artPill(stoveArt(level,max,s.en_feu),s.etat==='alarme'?'alert':s.en_feu?'stove':'off',`Poêle : ${state}`,
     s.etat==='alarme'?'alarme':s.en_feu&&level?`${level}/${max}`:''),clock,
    side:this._stoveButtons(s,true),
@@ -593,6 +594,7 @@ class HestiaHeatingCard extends LitElement {
    ${clock}
    ${this._legend(tones,(series.temperature??[]).length?`température du ${where.toLowerCase()}`:null,sets.some(p=>p[1]!=null),'flame',max)}
    ${this._stoveButtons(s)}
+   ${this._ask(s)}
    ${this._ticker(s)}
   </div>
   ${this._fireDrawer(v,s,room)}
@@ -628,6 +630,22 @@ class HestiaHeatingCard extends LitElement {
   const pot=s.conso?.brasier;
   if(pot?.a_nettoyer)out.push({cle:'brasier',label:'Brasier',icone:'mdi:broom',ton:'act',texte:'Brasier à nettoyer : appuyez sur « J’ai nettoyé » une fois fait.'});
   return out;
+ }
+ /** Hestia's question, on the card too (1.1.0b8: on 27 November it did not reach the phone): the mild season's « allumer
+     le poêle ? », with its buttons, for as long as Hestia waits. In the compact card, one line in place of its sentence. */
+ private _ask(s:Stove,line=false){
+  const q=s.pilote?.mode==='entier'?s.pilote.conduite?.question:null;
+  if(!q||q.sujet!=='saison')return null;
+  const busy=this._busy==='oui'||this._busy==='non',locked=!!s.copie;
+  const answer=(r:string)=>()=>void this._press(r,()=>this._hass!.callWS({type:'hestia_heating/repondre',reponse:r}));
+  const buttons=html`<span class="ask-btns" @click=${(e:Event)=>e.stopPropagation()}>
+   <button class="btn yes" ?disabled=${busy||locked} @click=${answer('oui')}>${line?'Oui':'Oui, allumer'}</button>
+   <button class="btn" ?disabled=${busy||locked} @click=${answer('non')}>Non</button></span>`;
+  if(line)return html`<span class="ask line"><b>Allumer le poêle ?</b>${buttons}</span>`;
+  return html`<div class="annonces act ask"><b>Allumer le poêle ? Hestia vous demande</b>
+   <p>${q.texte}</p>
+   ${q.reste_min!=null?html`<small>Sans réponse dans ${q.reste_min} min, Hestia garde le boost et surveille la pièce.</small>`:nothing}
+   ${buttons}</div>`;
  }
  private _ticker(s:Stove,line=false){
   const points=this._announces(s);

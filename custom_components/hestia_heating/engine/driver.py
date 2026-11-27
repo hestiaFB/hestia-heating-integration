@@ -259,7 +259,12 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
         run.log("Vous avez demandé de couper la prise du poêle injoignable : Hestia la coupe.")
     # 4. Start, refuse, or ask: on the thermostat's step up only (pilot.decide marks it with this look's time).
     if action == "demarrer" and pilot_mem.get("demarrage") == fresh:
-        _start_begin(run, mem, now, "le thermostat est passé en boost")
+        # A start from a boost Hestia watched (1.1.0b8) says why: the room would end too cold.
+        woke = "est en boost jusqu’à" in (decision.get("texte") or "")
+        _start_begin(run, mem, now, "la pièce du poêle descend trop pendant le boost" if woke
+                     else "le thermostat est passé en boost")
+        if woke:
+            run.log("Pendant le boost, la pièce du poêle descend trop : Hestia allume le poêle.", sent=False)
     elif action == "refuser" and (pilot_mem.get("refus") or {}).get("a") == fresh:
         _refuse(run, mem, decision, mode)
     elif action == "demander" and pilot_mem.get("demande") == fresh and not mem.get("question"):
@@ -267,7 +272,7 @@ def drive(decision: dict, stove: dict, thermostat: dict | None, pilot_mem: dict,
         mem["question"] = None if blank else {"a": fresh, "sujet": "saison"}
         run.say("saison", "Saison douce : allumer le poêle ?", decision.get("texte") or "", ("oui", "non"), lasting=True)
         run.log("Hestia demande votre accord pour démarrer le poêle (saison douce).", sent=False)
-    _question(run, mem, stove, thermostat, answers)
+    _question(run, mem, stove, thermostat, answers, pilot_mem)
     fan = ctx.get("ventilation") if ctx.get("ventilation") in FAN_MODES else "auto"
     # The fan's AUTO goes before a start only when the stove leads it; the ÉCO Stop and the stove's own set point as
     # chosen in Réglages (ctx « reglages_poele »).
@@ -493,7 +498,8 @@ def _refuse(run: _Run, mem: dict, decision: dict, mode: str | None) -> None:
                                          ("muet", "ne répond pas")) if words in text), None)
     title = {"brasier": "Démarrage annulé : brasier à nettoyer", "surchauffe": "Démarrage annulé : pièce trop chaude",
              "alarme": "Démarrage annulé : poêle en alarme", "muet": "Démarrage annulé : poêle injoignable"}.get(
-                 lock, "Poêle non lancé" if "thermostat est éteint" in text else "Pas de démarrage")
+                 lock, "Poêle non lancé" if "thermostat est éteint" in text else
+                 "Pas besoin du poêle" if "pas besoin du poêle" in text else "Pas de démarrage")
     said = f"Le thermostat est passé en boost, mais {reason}."
     if lock and mode != "off":
         run.thermostat("turn_off")
@@ -511,9 +517,10 @@ def _refuse(run: _Run, mem: dict, decision: dict, mode: str | None) -> None:
             ("nettoye",) if lock == "brasier" else (), lasting=bool(lock))
 
 
-def _question(run: _Run, mem: dict, stove: dict, thermostat: dict, answers: dict) -> None:
+def _question(run: _Run, mem: dict, stove: dict, thermostat: dict, answers: dict, pilot_mem: dict | None = None) -> None:
     """The mild season's question: Oui starts, Non (or the preset leaving boost, or the thermostat off) does not; no
-    answer in 15 minutes: hors gel, unless the stove is already on its way."""
+    answer in 15 minutes: the boost stays and Hestia watches the room (1.1.0b8; hors gel before), the stove lit if the
+    room would end too cold."""
     q = mem.get("question")
     if not q or q.get("sujet") != "saison":
         return
@@ -544,9 +551,16 @@ def _question(run: _Run, mem: dict, stove: dict, thermostat: dict, answers: dict
     if stove.get("etat") in BURNING or stove.get("allume"):
         run.log("Pas de réponse, mais le poêle est déjà en route : Hestia ne coupe rien.", sent=False)
         return
-    run.thermostat("set_preset_mode", preset_mode="frost")
-    run.log(f"Pas de réponse en {number(tuning.get('reponse_min'), 0)} minutes : Hestia remet le thermostat du "
-            "poêle hors gel.")
+    watch = (pilot_mem or {}).get("veille") or {}
+    end = _iso(watch.get("fin"))
+    if end is None:
+        # No boost to watch (an older memory): as before, back to hors gel.
+        run.thermostat("set_preset_mode", preset_mode="frost")
+        run.log(f"Pas de réponse en {number(tuning.get('reponse_min'), 0)} minutes : Hestia remet le thermostat du "
+                "poêle hors gel.")
+        return
+    run.log(f"Pas de réponse en {number(tuning.get('reponse_min'), 0)} minutes : Hestia garde le boost et surveille "
+            f"la pièce du poêle jusqu’à {hour(end)} ; il allumera le poêle si elle descend trop.", sent=False)
 
 
 # --- stop ----------------------------------------------------------------------------------------------------------

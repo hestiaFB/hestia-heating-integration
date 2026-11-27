@@ -68,7 +68,7 @@ type View={pret:boolean;version:string;maison:House;pieces:Room[];sources:Source
  mis_a_jour:string;calcul_ms:number|null;sante?:{sujet:string;texte:string;depuis:string}[]};
 type Found={thermostats:{id:string;nom:string;piece:string}[];coupes:{id:string;nom:string}[];poele:boolean;poele_thermostat:string|null;
   prises:{id:string;nom:string;poele:boolean}[];prise:string|null;thermometres:{id:string;nom:string;maison:boolean}[];interrupteurs?:{id:string;nom:string}[];poele_copie?:boolean;
-  notifieurs?:string[];coupures?:{id:string;nom:string;poele:boolean}[];coupure?:string|null;pilotable?:boolean;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null};
+  notifieurs?:string[];dernier_message?:{a:string;service:string;titre:string|null;erreur:string|null}|null;coupures?:{id:string;nom:string;poele:boolean}[];coupure?:string|null;pilotable?:boolean;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null};
   avance?:Record<string,[number|null,number,number]>;types?:string[]};
 type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string,boolean>;poele_thermostat:string|null;poele_prise:string|null;weather_place:string|null;planning:Model;pilote:string;pilote_thermometre:string|null;planning_autorises:string[];pilote_flamme_basse:string|null;
   brasier_kg?:number|null;granules_prix_sac?:number|null;granules_poids_sac?:number|null;pilote_notifier?:string|null;poele_prise_switch?:string|null;couper_prise?:boolean;prix_kwh?:number|null;
@@ -77,7 +77,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.1.0b7';
+const VERSION='1.1.0b8';
 
 let pickerLoad:Promise<string|null>|undefined;
 /** Home Assistant's own entity picker (filtered list with a search), as in Hestia Confort and Hestia Énergie. HA loads
@@ -611,7 +611,7 @@ export class HestiaHeatingSetup extends LitElement {
   return html`${p?.commande?.lache?noteBox('Flamme laissée',p.commande.lache):nothing}
    ${s.copie?noteBox('Recopié','Ce poêle est recopié d’une autre maison : Hestia ne lui envoie jamais rien, ni ordre ni notification.'):nothing}
    ${q?listSection('Hestia vous demande',[listRow({label:html`<b>${q.texte}</b>`,control:true,
-     sub:q.sujet==='saison'?`Sans réponse${q.reste_min!=null?` dans ${q.reste_min} min`:''}, le thermostat repasse hors gel, sauf si le poêle est déjà en route.`:'La même question est sur votre téléphone.',
+     sub:q.sujet==='saison'?`Sans réponse${q.reste_min!=null?` dans ${q.reste_min} min`:''}, Hestia garde le boost et surveille la pièce : il allumera le poêle si elle descend trop.`:'La même question est sur votre téléphone.',
      value:html`<span class="pot-ask">${q.reponses.map((r,i)=>html`<button type="button" class=${i===0?'primary':''} ?disabled=${this.answering} @click=${()=>answer(r)}>${ANSWER[r]??r}</button>`)}</span>`})]):nothing}
    ${listSection('Ce que Hestia lit',[
     ...[...reads].sort(byRole).map(r=>listRow({label:ROLE_NAME[r.role]??r.role,sub:html`<span class="eid">${r.entite}</span>`,
@@ -884,7 +884,21 @@ export class HestiaHeatingSetup extends LitElement {
      value:v.granules?.prix_sac!=null?`${euros(v.granules.prix_sac)} le sac`:'Poêle',go:()=>this.go('poele/granules')})]:[])])}
    ${listSection('Les messages de Hestia',[listRow({label:'Les recevoir sur',control:true,sub:'Un téléphone avec l’application Home Assistant. Hestia vous y prévient et vous pose ses questions, avec des boutons Oui et Non. « Aucun » : rien n’est envoyé.',
     level:this.val<string>('pilote')==='entier'&&!notifier?'todo':undefined,
-    value:this.select('Service de notification',notifier,(f.notifieurs??[]).map(n=>[n,n.replace(/^notify\./,'')]),'Aucun',x=>this.set('pilote_notifier',x))})])}`;
+    value:this.select('Service de notification',notifier,(f.notifieurs??[]).map(n=>[n,n.replace(/^notify\./,'')]),'Aucun',x=>this.set('pilote_notifier',x))}),
+    ...(this.stored('pilote_notifier')?[this.phoneRow(f)]:[])])}`;
+ }
+ /** « Envoyer un message d’essai » (1.1.0b8: on 27 November a question did not reach the phone), and the last message
+     sent, with Home Assistant's error when the call failed. Home Assistant only says whether it took the message:
+     whether the phone showed it, only the phone tells. */
+ private phoneRow(f:Found){
+  const last=f.dernier_message,when=last?.a?`à ${clockOf(last.a)}`:null;
+  const sub=!last?'Aucun message envoyé depuis le démarrage de Home Assistant. Envoyez un essai : il doit arriver sur le téléphone, avec un bouton « Bien reçu ».'
+   :last.erreur?`Le dernier message (${when}, ${last.service}) n’est pas parti : ${last.erreur}.`
+   :`Dernier message pris par Home Assistant ${when} (${last.service}${last.titre?` · ${last.titre}`:''}). S’il n’est pas arrivé, regardez l’application Home Assistant du téléphone : notifications autorisées, et le téléphone bien dans ce service.`;
+  const test=async()=>{this.answering=true;try{await this.hass!.callWS({type:'hestia_heating/essai_message'});await this.load();}
+   catch(e){this.error=(e as {message?:string}).message??'L’essai n’est pas parti.';}finally{this.answering=false;}};
+  return listRow({label:'Le dernier message',control:true,sub,level:last?.erreur?'todo':undefined,
+   value:html`<button type="button" ?disabled=${this.answering} @click=${test}>Envoyer un essai</button>`});
  }
 
  /* ── Pièces: a table, then one page per room (1.0.0b10) ── */
@@ -1095,12 +1109,14 @@ export class HestiaHeatingSetup extends LitElement {
     always('Un ordre à la fois. Si la flamme change sans Hestia, elle la laisse jusqu’au lendemain.'),
    ],{help:'Chaque ordre s’écrit dans la mémoire du poêle, qui n’en permet qu’un certain nombre par jour.'})}
    ${listSection('L’allumage',[
-    fig('saison_douce_c','Demander avant d’allumer à partir de','°C','La maison à cette température ou plus : Hestia vous demande sur votre téléphone avant d’allumer.',0.5),
-    fig('reponse_min','Attendre votre réponse','min','Sans réponse, le thermostat du poêle repasse hors gel, sauf si le poêle est déjà en route.'),
+    fig('saison_douce_c','Saison douce à partir de','°C','La maison à cette température ou plus : au passage en Boost, Hestia regarde si le poêle sert vraiment. En dessous, il l’allume.',0.5),
+    fig('douce_besoin_c','Allumer sans demander sous la consigne de','°C','En saison douce, Hestia prolonge la pièce du poêle jusqu’à la fin du Boost, sans le poêle, d’après les prévisions. Elle finirait à cet écart sous la consigne, ou plus bas : il allume.',0.1),
+    fig('douce_sans_besoin_c','Pas besoin du poêle à moins de','°C','Elle finirait à cet écart de la consigne, ou plus près : il n’allume pas, vous le dit, et surveille jusqu’à la fin du Boost. Entre les deux, il vous demande.',0.1),
+    fig('reponse_min','Attendre votre réponse','min','Sans réponse, Hestia garde le Boost et surveille la pièce : il allume le poêle si elle descend trop.'),
     fig('allumage_verif_min','Vérifier l’allumage après','min','Pas pris : l’intégration du poêle est rechargée et l’ordre renvoyé.'),
     fig('recharge_s','Attendre après le rechargement','s','Le temps que l’intégration du poêle revienne.'),
     fig('demarrages_max','Allumages par jour, au plus','','Au-delà, allumez-le vous-même.'),
-    always('Hestia n’allume jamais le poêle de lui-même : seulement au passage de son thermostat en Boost. Pas si le thermostat est éteint, le poêle en alarme ou muet, ni pendant le démarrage de Home Assistant.'),
+    always('Hestia n’allume jamais le poêle de lui-même : seulement au passage de son thermostat en Boost, ou pendant un Boost qu’il surveille en saison douce. Pas si le thermostat est éteint, le poêle en alarme ou muet, ni pendant le démarrage de Home Assistant.'),
    ],{help:pilote==='entier'?'Hestia allume et éteint le poêle.':'Ces chiffres servent quand Hestia allume et éteint le poêle, et à son essai à blanc.'})}
    ${listSection('L’arrêt',[
     fig('arret_ecart_c','Éteindre quand la maison est à moins de','°C','de sa consigne : assez chaude. En Boost, à la consigne.',0.1),

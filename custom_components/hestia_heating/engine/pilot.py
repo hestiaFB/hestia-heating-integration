@@ -11,7 +11,9 @@ The thermostat of the stove decides how much to heat (its demand, in %); the pil
   step, not a state: the stove never relights on its own. Refused when the thermostat is off, the stove's room is
   over 28 °C, the fire pot must be cleaned, the stove is in alarm or silent, or the house is already at the
   thermostat's set point. In the mild
-  season (the house at 18 °C or more, until it falls under 18 °C; then allowed up to 19 °C) it asks first.
+  season (the house at 18 °C or more, until it falls under 18 °C; then allowed up to 19 °C) it judges the need
+  (1.1.0b8, engine/mild.py): the stove's room carried to the end of the boost decides a start, no start (the boost
+  then watched, and the stove lit later in it if the room would end too cold), or the question.
 - Flame, in every burning state: the demand gives the flame (85 % → 5, 65 % → 4, 45 % → 3, else 2); the stove's
   current flame holds while it stays within the steps of the demand ± 7 points. Flame 1 when the room, carried 15
   minutes ahead on its rising slope, would pass its set point by 2 °C (Réglages, « Pièce trop chaude », 1.0; the
@@ -40,7 +42,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from . import tuning
+from . import mild as mild_season, tuning
 from .phrases import degrees, hour, number
 
 # The figures below are the defaults: since 1.0.0b3 each one may be set in Réglages › Avancé (engine/tuning.py, which
@@ -136,12 +138,13 @@ def warm_enough(house_c: float | None, target_c: float | None, preset: str | Non
 
 
 def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datetime,
-           house_c: float | None = None, low: str | None = None, over_c: float | None = None) \
-        -> tuple[dict, dict, list[dict]]:
+           house_c: float | None = None, low: str | None = None, over_c: float | None = None,
+           outlook: dict | None = None) -> tuple[dict, dict, list[dict]]:
     """(the decision, the new memory, the day's events: what Hestia would do and what the house did). `house_c`: the
     house's temperature (the sensor chosen in Réglages, else the average of its rooms). `low`: the name of the switch
     that asks for the lowest flame, when it is on. `over_c`: how far over its set point the stove's room is too hot
-    (Réglages, else 2 °C)."""
+    (Réglages, else 2 °C). `outlook` (1.1.0b8): what the mild season reads ahead, {"fin": when the planning takes
+    the thermostat out of boost, "heures": Hestia Weather's hourly forecast, "dehors_c": outside now}."""
     mem = {k: v for k, v in (memory or {}).items() if k not in ("jour", "demarrages", "cible", "hausse")}
     events: list[dict] = []
     at = hour(now)
@@ -238,6 +241,15 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     mild_c = tuning.get("saison_douce_c")
     mild = not (house_c is not None and house_c < (mild_c + 1 if not mem.get("saison_douce", True) else mild_c))
     mem["saison_douce"] = mild
+    # The mild season judged on the need (1.1.0b8, engine/mild.py): the room's readings while the stove is off, and
+    # the boost Hestia watches when it did not light the stove.
+    outlook = outlook or {}
+    out_now = outlook.get("dehors_c")
+    mem["releves"] = mild_season.remember(mem.get("releves"), now, room, out_now, burning)
+    watch = mem.get("veille") or None
+    watch_end = _iso((watch or {}).get("fin"))
+    if watch and (preset != "boost" or mode == "off" or burning or watch_end is None or now >= watch_end):
+        mem["veille"] = watch = None
     house_text = (f"la maison est à {degrees(house_c)}" if house_c is not None
                   else "la température de la maison est inconnue")
 
@@ -246,7 +258,17 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     stepped = ((before_preset is not None and before_preset != "boost" and preset == "boost") or (
         before_mode is not None and before_mode != "heat" and mode == "heat" and preset == "boost")) and not (
         safety or back_from_safety)
-    if stepped and state != "extinction" and (not burning or before_state in ("eteint", "inconnu", "alarme")):
+    # Watching a boost (1.1.0b8): the room carried to its end now says the stove is needed (an evening colder than
+    # forecast). Not while the question waits for the person, nor too close to the end of the boost.
+    woke = None
+    asking = bool(((mem.get("conduite") or {}).get("question") or {}).get("sujet") == "saison")
+    if watch and not stepped and not asking and state == "eteint" and now <= watch_end - mild_season.LAST_START:
+        woke = _ahead(room, target_c, now, watch_end, outlook, mem)
+        if woke["verdict"] != "allumer":
+            woke = None
+    if (stepped or woke) and state != "extinction" and (not burning or before_state in ("eteint", "inconnu", "alarme")):
+        if woke:
+            mem["veille"] = None    # one start from a watch, whatever comes of it
         refusal = None
         if mode == "off":
             refusal = "le thermostat est éteint"
@@ -267,13 +289,34 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
             start = _decision("refuser", "Pas de démarrage", f"Le thermostat est passé en boost, mais {refusal}.",
                               None, stove)
             mem.update(refus={"a": now.isoformat(), "texte": start["texte"]}, demarrage=None, demande=None)
+        elif woke:
+            start = _decision("demarrer", "Démarrer le poêle", f"Le thermostat est en boost jusqu’à {hour(watch_end)}"
+                              f" et {woke['texte']} : le pilote allumerait le poêle.", None, stove)
+            mem.update(demarrage=now.isoformat(), demande=None, refus=None)
         elif mild:
-            start = _decision("demander", "Démarrer ?", f"Le thermostat est passé en boost à {at}, mais {house_text} "
-                              f"(saison douce, {degrees(mild_c)} ou plus). Le pilote vous demanderait d’abord "
-                              f"votre accord ; sans réponse en {number(tuning.get('reponse_min'), 0)} min, il "
-                              "remettrait le thermostat hors gel, sauf si le poêle est déjà en route : alors il ne "
-                              "couperait rien.", None, stove)
-            mem.update(demande=now.isoformat(), demarrage=None, refus=None)
+            end = (outlook.get("fin") if isinstance(outlook.get("fin"), datetime) else None) \
+                or now + mild_season.DEFAULT_SPAN
+            ahead = _ahead(room, target_c, now, end, outlook, mem)
+            verdict, seen = ahead["verdict"], ahead["texte"]
+            season = f"saison douce ({house_text}, {degrees(mild_c)} ou plus)"
+            if verdict == "allumer":
+                start = _decision("demarrer", "Démarrer le poêle", f"Le thermostat est passé en boost à {at}, en "
+                                  f"{season}, et {seen} : le pilote l’allumerait sans demander.", None, stove)
+                mem.update(demarrage=now.isoformat(), demande=None, refus=None)
+            elif verdict == "sans_besoin":
+                mem["veille"] = {"fin": end.isoformat(), "a": now.isoformat()}
+                start = _decision("refuser", "Pas besoin du poêle", f"Le thermostat est passé en boost, mais pas "
+                                  f"besoin du poêle : {seen}. Hestia garde le boost et surveille : il allumera le "
+                                  f"poêle si la pièce descend trop d’ici {hour(end)}.", None, stove)
+                mem.update(refus={"a": now.isoformat(), "texte": start["texte"]}, demarrage=None, demande=None)
+            else:
+                mem["veille"] = {"fin": end.isoformat(), "a": now.isoformat()}
+                start = _decision("demander", "Démarrer ?", f"Le thermostat est passé en boost à {at}, en {season}, "
+                                  f"et {seen}. Le pilote vous demanderait d’abord votre accord ; sans réponse en "
+                                  f"{number(tuning.get('reponse_min'), 0)} min, il garderait le boost et "
+                                  f"surveillerait la pièce jusqu’à {hour(end)} : il allumerait le poêle si elle "
+                                  "descendait trop.", None, stove)
+                mem.update(demande=now.isoformat(), demarrage=None, refus=None)
         else:
             start = _decision("demarrer", "Démarrer le poêle", f"Le thermostat est passé en boost à {at}, le poêle "
                               "est éteint : le pilote l’allumerait.", None, stove)
@@ -351,7 +394,27 @@ def decide(stove: dict, thermostat: dict | None, memory: dict | None, now: datet
     mem["dernier"] = key
     # The probe the stove's thermostat is in safety for (1.0.0b7), for the stove's sentence.
     decision["securite"] = mem.get("securite_sonde")
+    # The boost Hestia watches without the stove (1.1.0b8), for the stove's sentence and card.
+    decision["veille"] = {"fin": mem["veille"]["fin"]} if mem.get("veille") else None
+    if decision["veille"] and decision["action"] == "attendre" and state == "eteint" and _iso(decision["veille"]["fin"]):
+        decision["texte"] = (f"Le poêle est éteint. Le thermostat est en boost jusqu’à "
+                             f"{hour(_iso(decision['veille']['fin']))} : pas besoin du poêle pour l’instant, le pilote "
+                             "surveille la pièce et l’allumerait si elle descendait trop.")
     return decision, mem, events
+
+
+def _ahead(room, target_c, now: datetime, end: datetime, outlook: dict, mem: dict) -> dict:
+    """The stove's room carried to the end of the boost without the stove, and what it says (engine/mild.py)."""
+    if room is None:
+        return {"verdict": "demander", "fin_c": None, "texte": "la température de la pièce du poêle est inconnue"}
+    out_now = outlook.get("dehors_c")
+    k = mild_season.pace(mem.get("releves"), out_now)
+    end_c = mild_season.carry(room, now, end, outlook.get("heures"), k, out_now)
+    need, fine = tuning.get("douce_besoin_c"), tuning.get("douce_sans_besoin_c")
+    verdict = mild_season.judge(target_c, room, end_c, need, min(fine, need))
+    text = (f"la pièce du poêle est à {degrees(room)} et serait à {degrees(end_c)} à {hour(end)} sans le poêle"
+            + (f", pour {degrees(target_c)} visés" if target_c is not None else ""))
+    return {"verdict": verdict, "fin_c": end_c, "texte": text}
 
 
 def _flame(stove, now, demand, room, target_c, slope, flame_set, flame_since, lo, hi, low=None, over_c=OVER_C,
