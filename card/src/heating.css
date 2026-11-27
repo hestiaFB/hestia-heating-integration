@@ -272,7 +272,7 @@ ha-card.small.folded { cursor:pointer; }
 @keyframes hc-flick { 0% { transform:scale(1, 1) skewX(0deg); } 35% { transform:scale(.96, 1.05) skewX(-3deg); } 70% { transform:scale(1.03, .96) skewX(2deg); }
   100% { transform:scale(.99, 1.03) skewX(-1deg); } }
 @keyframes hc-beat { 0%, 100% { opacity:1; } 50% { opacity:.45; } }
-@media (prefers-reduced-motion:reduce) { .rise, .blow, .flick, .flick2, .pill .beat { animation:none; } 
+@media (prefers-reduced-motion:reduce) { .rise, .blow, .flick, .flick2, .pill .beat { animation:none; } }
 .legend { display:flex; justify-content:center; gap:8px 14px; flex-wrap:wrap; font-size:var(--nw-fs-small); color:var(--nw-fg2); }
 .legend span { display:inline-flex; align-items:center; gap:6px; }
 .legend .sw { width:14px; height:6px; border-radius:3px; background:var(--hc-r-off); }
@@ -519,3 +519,9 @@ ha-card.small.folded { cursor:pointer; }
 .rhead { display:grid; grid-template-columns:minmax(0, 1fr) 72px 88px; gap:10px; padding:0 2px 2px; font-size:var(--nw-fs-label); color:var(--nw-fg2); white-space:nowrap; }
 .rhead span:not(:first-child) { text-align:right; }
 @container (max-width:420px) { .rhead { grid-template-columns:minmax(0, 1fr) 50px 76px; gap:6px; font-size:10px; } }
+
+/* The announcements (1.1.0b6): Hestia Weather's bubble, under the stove's buttons, framed in the tone of the most urgent. */
+.annonces { padding:12px 14px; border-radius:14px; background:color-mix(in oklab, var(--c) 10%, transparent);
+  border:1px solid color-mix(in oklab, var(--c) 32%, transparent); }
+.annonces.act { --c:var(--nw-act); } .annonces.alert { --c:var(--nw-alert); }
+.small .compact .say.line.ticker { overflow:visible; text-overflow:clip; }

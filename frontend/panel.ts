@@ -65,7 +65,7 @@ type House={etat:string;titre:string;texte:string;temperature:number|null;en_cha
 type View={pret:boolean;version:string;maison:House;pieces:Room[];sources:Source[];poele:Stove|null;granules:Pellets|null;
  planning:Planning;a_regler:Todo[];extensions:Ext[];meteo:{etat:string;nom:string|null};prix_kwh?:number|null;changements?:Changes;
  prix_energie?:{kwh:number;periode:string|null;couleur:string|null}|null;
- mis_a_jour:string;calcul_ms:number|null};
+ mis_a_jour:string;calcul_ms:number|null;sante?:{sujet:string;texte:string;depuis:string}[]};
 type Found={thermostats:{id:string;nom:string;piece:string}[];coupes:{id:string;nom:string}[];poele:boolean;poele_thermostat:string|null;
   prises:{id:string;nom:string;poele:boolean}[];prise:string|null;thermometres:{id:string;nom:string;maison:boolean}[];interrupteurs?:{id:string;nom:string}[];poele_copie?:boolean;
   notifieurs?:string[];coupures?:{id:string;nom:string;poele:boolean}[];coupure?:string|null;pilotable?:boolean;meteo:{etat:string;lieu:string|null;nom:string|null;lieux:{id:string;nom:string}[]|null};
@@ -77,7 +77,7 @@ type Settings={reglages:{sources:Record<string,boolean>;extensions:Record<string
  trouve:Found};
 
 const REPO='https://github.com/hestiaFB/hestia-heating-integration';
-const VERSION='1.1.0b5';
+const VERSION='1.1.0b6';
 
 let pickerLoad:Promise<string|null>|undefined;
 /** Home Assistant's own entity picker (filtered list with a search), as in Hestia Confort and Hestia Énergie. HA loads
@@ -515,7 +515,8 @@ export class HestiaHeatingSetup extends LitElement {
  /* ── Vue d'ensemble: a sentence, what is to fix, four tiles, what Hestia may do and did today ── */
  private home(v:View){
   const src=v.sources,c=v.changements??this.count0(),s=v.poele,p=s?.pilote;
-  const answering=src.filter(x=>x.etat!=='inconnu').length,todo=v.a_regler.length,ok=!todo&&answering===src.length;
+  const answering=src.filter(x=>x.etat!=='inconnu').length,todo=v.a_regler.length,troubles=v.sante??[];
+  const ok=!todo&&!troubles.length&&answering===src.length;
   const allowed=this.allowedSet(v),active=(v.planning.hestia??[]).filter(h=>h.actif),heating=src.filter(x=>(x.demande_pct??0)>0).length;
   const ruled=src.filter(x=>allowed.has(x.id)&&this.planOf(x.id)).length,looked=src.length-ruled;
   const stoveSay=s?[s.flamme_reglee!=null&&s.en_feu?`flamme ${s.flamme_reglee}`:'',this.flameAuto(p)?'Hestia règle la flamme':'la flamme est à vous',
@@ -524,9 +525,11 @@ export class HestiaHeatingSetup extends LitElement {
   const tile=(o:{k:string;v:string;s:unknown;go?:string;more?:string;todo?:boolean})=>o.go
    ?html`<button type="button" class=${'tile'+(o.todo?' todo':'')} @click=${()=>this.go(o.go!)}><span class="tk">${o.k}</span><span class="tv">${o.v}</span><span class="ts">${o.s}</span><span class="tg">${o.more} ›</span></button>`
    :html`<div class="tile"><span class="tk">${o.k}</span><span class="tv">${o.v}</span><span class="ts">${o.s}</span></div>`;
-  return html`<div class="plan-top"><div>${this.head('Chauffage',{pill:ok?['ok','Tout marche']:['todo',todo?`${todo} à régler`:'Un thermostat ne répond pas'],lead:html`Mis à jour ${ago(v.mis_a_jour)}.`})}</div>
+  return html`<div class="plan-top"><div>${this.head('Chauffage',{pill:ok?['ok','Tout marche']:['todo',troubles.length?plural(troubles.length,'souci'):todo?`${todo} à régler`:'Un thermostat ne répond pas'],lead:html`Mis à jour ${ago(v.mis_a_jour)}.`})}</div>
     <button type="button" class="add" @click=${()=>this.go('guide/1')}>Tout régler pas à pas</button></div>
    ${v.maison?.titre?html`<div class="band now"><span class="tk">Maintenant</span><b>${v.maison.titre}</b>${v.maison.texte?html`<p>${v.maison.texte}</p>`:nothing}</div>`:nothing}
+   ${troubles.length?listSection('Ce qui ne va pas',troubles.map(t=>listRow({label:html`<b>${t.texte}</b>`,name:t.texte,
+     sub:`Depuis ${hm(new Date(t.depuis))}. Hestia prévient une fois, puis dit quand c’est réglé.`,level:'todo'}))):nothing}
    ${todo?listSection('À régler',v.a_regler.map(t=>listRow({label:html`<b>${t.titre}</b>`,name:t.titre,sub:t.texte,level:'todo',go:()=>this.go(MOVED[t.page]??t.page)}))):nothing}
    <div class="tiles">
     ${tile({k:'Pièces',v:src.length?`${answering} sur ${src.length} ${answering>1?'répondent':'répond'}`:'Aucun thermostat',go:'pieces',more:'Voir les pièces',todo:answering<src.length,

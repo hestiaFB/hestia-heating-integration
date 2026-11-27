@@ -3,6 +3,8 @@ import charte from './ui/hestia-charte.css';
 import heating from './heating.css';
 import './editor';
 import {follow,type Connection} from './stream';
+import './ticker';
+import type {Announce} from './ticker';
 import {wheel,hours,center,bare,heaterArt,heaterMiddle,stoveArt,sample,type Pt,type Mark,type Hour,type Detail,type Span} from './clock';
 
 /* Hestia Chauffage's card, after the cards' mock-up validated by Frank on 20 Nov. 2026, and the clock of 24 Nov. 2026:
@@ -31,10 +33,15 @@ type Room={id:string;nom:string;temperature:number|null;consigne:number|null;eta
 type Order={service:string;entity_id:string;donnees?:Record<string,unknown>};
 type FirePot={kg:number|null;seuil_kg:number;a_nettoyer:boolean;bientot?:boolean;texte:string;jours?:number|null};
 type Use={debit_kg_h:number;kg_jour:number;kg_saison:number;prix_kg:number|null;cout_jour:number|null;cout_heure:number|null;brasier?:FirePot};
+/** A souci of the brick's health (1.1.0b6): an entity that no longer answers, an order not followed… */
+type Trouble={sujet:string;texte:string;depuis:string};
+/** Each souci's label and icon in the announcements, as Hestia Weather's bubble shows a vigilance. */
+const TROUBLE:Record<string,[string,string]>={indisponible:['Ne répond plus','mdi:lan-disconnect'],ventilation:['Ventilation','mdi:fan-alert'],
+ sonde:['Sonde de la pièce','mdi:thermometer-alert'],enregistrement:['Recorder','mdi:database-alert'],briques:['Briques Hestia-FB','mdi:link-variant-off']};
 type Stove={nom:string;modele?:string|null;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;
  fumees:number|null;prise:string|null;prise_w:number|null;demande_pct:number|null;consigne?:number|null;ecritures:number|null;ecritures_max:number|null;
  alarme:boolean|null;alarme_texte:string|null;allume?:boolean|null;conso?:Use;pilote?:{mode:string;titre?:string;texte?:string;flamme?:number|null;flamme_manuelle?:boolean};
- boutons?:{allumer?:Order;eteindre?:Order};ventilation?:string|null;copie?:boolean;entites?:Record<string,string>;
+ boutons?:{allumer?:Order;eteindre?:Order};ventilation?:string|null;copie?:boolean;soucis?:Trouble[];entites?:Record<string,string>;
  flamme_min?:number;ventilation_niveaux?:string[];ventilation_choix?:string;eco_stop?:boolean|null;eco_stop_delai?:number|null;consigne_poele?:number|null;air?:number|null;
  flamme_basse?:{entity_id:string;nom:string;on:boolean|null}|null;prise_switch?:{entity_id:string;on:boolean|null}|null;
  phrase?:{texte:string;ton:string}};
@@ -243,11 +250,11 @@ class HestiaHeatingCard extends LitElement {
  /* 1.0.1b2 (Frank, 26 Nov.: « toutes la même taille verticalement »): every compact card has the same rows, whatever it
     says: its name and its state's picture, its sentence on one line where the kind of heating was, the clock beside two
     rows of buttons and a legend of three lines, always all of them. */
- private _compact(o:{tone:string;title:string;say:{texte:string;ton?:string}|null;pill:unknown;clock:unknown;side:unknown;legend:unknown;body:()=>unknown}){
+ private _compact(o:{tone:string;title:string;say:{texte:string;ton?:string}|null;ticker?:unknown;pill:unknown;clock:unknown;side:unknown;legend:unknown;body:()=>unknown}){
   const open=this._unfolded();
   return html`<div class="glow" style=${`--c:var(${o.tone})`} aria-hidden="true"></div>
    <div class="top compact"><div class="chead"><h2 class="nw-title">${o.title}</h2><div class="pills">${o.pill}</div>
-     <p class=${'say line '+(o.say?.ton??'')} title=${o.say?.texte??''}>${o.say?.texte??''}</p></div>
+     ${o.ticker?html`<div class="say line ticker">${o.ticker}</div>`:html`<p class=${'say line '+(o.say?.ton??'')} title=${o.say?.texte??''}>${o.say?.texte??''}</p>`}</div>
     <div class="pair">${o.clock}<div class="side"><div class="face">${o.side}</div>${o.legend}</div></div>
    </div>
    ${open?html`<div class="unfold">${o.body()}</div>`:nothing}
@@ -559,7 +566,7 @@ class HestiaHeatingCard extends LitElement {
    this._config.compacte?bare(t,s.en_feu?s.consigne??null:null):center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
   const why=this._why(s,room,auto,level);
   if(this._config.compacte)return this._compact({tone:this._stoveTone(s),title:this._config.name||s.nom,
-   say:s.phrase??(why?{texte:why}:null),
+   say:s.phrase??(why?{texte:why}:null),ticker:this._ticker(s,true),
    pill:this._artPill(stoveArt(level,max,s.en_feu),s.etat==='alarme'?'alert':s.en_feu?'stove':'off',`Poêle : ${state}`,
     s.etat==='alarme'?'alarme':s.en_feu&&level?`${level}/${max}`:''),clock,
    side:this._stoveButtons(s,true),
@@ -572,6 +579,7 @@ class HestiaHeatingCard extends LitElement {
    ${clock}
    ${this._legend(tones,(series.temperature??[]).length?`température du ${where.toLowerCase()}`:null,sets.some(p=>p[1]!=null),'flame',max)}
    ${this._stoveButtons(s)}
+   ${this._ticker(s)}
   </div>
   ${this._fireDrawer(v,s,room)}
   ${this._pelletDrawer(v,s)}
@@ -590,6 +598,28 @@ class HestiaHeatingCard extends LitElement {
   return html`<div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
    ${temp?html`<span><i class="sw line"></i>${temp}</span>`:nothing}${set?html`<span><i class="sw set"></i>consigne</span>`:nothing}
    ${kind?html`<span>${blocks()}${kind==='flame'?`flamme : un pavé par palier, ${max} au plus`:'temps de chauffe : un pavé par 20 % de l’heure'}</span>`:nothing}</div>`;
+ }
+ /** The card's announcements (1.1.0b6, Frank: « reprendre le format des alertes Météo-France, les messages qui
+     défilent »): Hestia Weather's bubble, one point at a time, every 5 s (ticker.ts). The stove's alarm first, then
+     the soucis of the brick's health, then a fire pot to clean. Under the buttons; in the compact card, in place of
+     its sentence, on one line. Nothing when all is well. */
+ private _announces(s:Stove):Announce[]{
+  const out:Announce[]=[];
+  if(s.etat==='alarme'||s.alarme)out.push({cle:'alarme',label:'Alarme du poêle',icone:'mdi:alert-octagon',ton:'alert',
+   texte:s.alarme_texte?`Le poêle est en alarme : ${s.alarme_texte}.`:'Le poêle est en alarme.'});
+  for(const x of s.soucis??[]){
+   const [label,icone]=TROUBLE[x.sujet]??['Souci','mdi:alert-circle-outline'];
+   out.push({cle:x.sujet,label,icone,ton:'act',texte:x.texte});
+  }
+  const pot=s.conso?.brasier;
+  if(pot?.a_nettoyer)out.push({cle:'brasier',label:'Brasier',icone:'mdi:broom',ton:'act',texte:'Brasier à nettoyer : appuyez sur « J’ai nettoyé » une fois fait.'});
+  return out;
+ }
+ private _ticker(s:Stove,line=false){
+  const points=this._announces(s);
+  if(!points.length)return null;
+  return line?html`<hestia-heating-ticker line .points=${points}></hestia-heating-ticker>`
+   :html`<div class=${'annonces '+(points.some(p=>p.ton==='alert')?'alert':'act')}><hestia-heating-ticker .points=${points}></hestia-heating-ticker></div>`;
  }
  /* The sentence under the clock: what Hestia does when it drives the stove (« Gestion auto »), else what the stove does. */
  private _why(s:Stove,room:Room|undefined,auto:boolean,level:number){

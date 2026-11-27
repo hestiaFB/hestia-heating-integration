@@ -23,7 +23,7 @@ from homeassistant.util import dt as dt_util
 from . import reader
 from .house_journal import HouseJournal
 from .const import API_KEY, DOMAIN, PLANNING_STATE_KEY, STORE_KEY, STORE_VERSION, VERSION
-from .engine import driver, granules, home_planning, house, money, phrases, pilot, profiles, sources, tuning
+from .engine import driver, granules, health, home_planning, house, money, phrases, pilot, profiles, sources, tuning
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -102,6 +102,8 @@ class HeatingCoordinator:
         # The pellets counted by Hestia (engine/granules.py), kept with the planning's state.
         self.pellets_memory: dict = {}
         self._pellets_saved = 0.0
+        # The brick's health (1.1.0b6, engine/health.py): its soucis seen and said, kept with the planning's state.
+        self.health_memory: dict = {}
         # The whole pilot: the answers given since the last look, since when Home Assistant runs (None when this brick
         # started after it), the next look it asked for, and the phone notices that carry buttons.
         self.answers: dict[str, str] = {}
@@ -176,6 +178,7 @@ class HeatingCoordinator:
         # The rate seen before the stop is not carried over it: the time Home Assistant was stopped counts nothing.
         pellets = state.get("granules")
         self.pellets_memory = {**pellets, "debit": 0.0} if isinstance(pellets, dict) else {}
+        self.health_memory = state.get("sante") if isinstance(state.get("sante"), dict) else {}
         await self.house_journal.async_load()
         folder = Path(__file__).parent / "profiles"
         self.profiles = await self.hass.async_add_executor_job(profiles.load_all, folder)
@@ -318,6 +321,10 @@ class HeatingCoordinator:
             if now_price and now_price.get("price") is not None else None
         view["extensions"] = self._extensions()
         view["changements"] = self._changes(today)
+        try:
+            self._health(view, snap["now"])
+        except Exception:  # noqa: BLE001 - the checks never stop the brick
+            _LOGGER.exception("Hestia Chauffage n'a pas pu contrôler sa santé")
         self.data = view
         try:
             self.house_journal.observe(view, snap["now"], hourly, snap["climates"])
@@ -419,7 +426,10 @@ class HeatingCoordinator:
         then on). Only once Home Assistant runs, never to an entity copied from another Home Assistant."""
         if self.hass.state is not CoreState.running or not stove:
             return
-        calls = [c for o in orders for c in self._calls_of(o, stove)]
+        self._run([c for o in orders for c in self._calls_of(o, stove)])
+
+    def _run(self, calls: list[tuple[str, str, dict]]) -> None:
+        """Calls made one after the other in one task, after the ones before them."""
         if not calls:
             return
         previous = self._gestures
@@ -537,6 +547,80 @@ class HeatingCoordinator:
             out.append(("notify", notifier, {"message": "clear_notification", "data": {"tag": TAG + subject}}))
         return out
 
+    # --- the brick's health (1.1.0b6) ---------------------------------------------------------------------------
+
+    def _health(self, view: dict, now: datetime) -> None:
+        """What engine/health.py checks, read here: the soucis go in the view (`sante`, and the stove's card), the
+        notices are sent (Home Assistant's notifications, the phones), never anything else."""
+        shown, memory, orders = health.check(self._health_facts(view), self.health_memory, now)
+        lasting = {k: v for k, v in memory.items() if k in health.SUBJECTS}
+        if lasting != {k: v for k, v in self.health_memory.items() if k in health.SUBJECTS}:
+            self._save_state()
+        self.health_memory = memory
+        view["sante"] = shown
+        if view.get("poele"):
+            view["poele"]["soucis"] = shown
+        if orders and self.hass.state is CoreState.running:
+            self._run([c for o in orders for c in (self._notice(o) if o["geste"] == "notifier" else self._clear(o["sujet"]))])
+
+    def _health_facts(self, view: dict) -> dict:
+        hass, found, stove = self.hass, self.found, view.get("poele") or {}
+        found_stove = found.stove or {}
+        names = lambda i: (hass.states.get(i).name if hass.states.get(i) else i)  # noqa: E731
+        # The entities the stove is read by, their spares, its thermostat and its plug; the rooms' thermostats.
+        roles = found_stove.get("roles") or {}
+        spare_of = {i: role for role, ids in (found_stove.get("relais") or {}).items() for i in ids}
+        ids = list(dict.fromkeys([*roles.values(), *spare_of, stove.get("thermostat"), stove.get("prise"),
+                                  found.plug_switch, *(c["entity_id"] for c in found.climates)]))
+        down = []
+        for entity_id in ids:
+            state = hass.states.get(entity_id) if entity_id else None
+            if state is None or state.state != "unavailable":
+                continue
+            role = spare_of.get(entity_id)
+            instead = roles.get(role) if role else None
+            alive = instead and instead != entity_id and (hass.states.get(instead) or state).state not in ("unavailable", "unknown")
+            down.append({"entite": entity_id, "nom": state.name, "depuis": dt_util.as_local(state.last_changed).isoformat(),
+                         "remplace_par": names(instead) if alive else None})
+        # The fan by Hestia: the level it asked last, while the stove lights or burns.
+        fan = None
+        if self.settings.get("pilote_ventilation") == "flamme" and stove.get("etat") in ("allumage", "chauffe"):
+            memory = self.pilot_memory
+            seq = ((memory.get("conduite") or {}).get("ventilation") if self.settings.get("pilote") == "entier"
+                   else memory.get("ventilation_seule")) or {}
+            fan = {"voulu": seq.get("voulu"), "a": seq.get("a"), "actuel": stove.get("ventilation")}
+        # The room's temperature as the stove's thermostat reads it.
+        probe = None
+        thermostat = hass.states.get(stove["thermostat"]) if stove.get("thermostat") else None
+        if thermostat is not None:
+            room = next((r for r in view.get("pieces") or [] if r.get("id") == stove.get("piece")), None)
+            value = thermostat.attributes.get("current_temperature")
+            probe = {"valeur": value if isinstance(value, (int, float)) else None, "en_chauffe": stove.get("etat") == "chauffe",
+                     "nom": (room or {}).get("nom")}
+        # Hestia's own sensors the house card counts from, when the recorder leaves them out.
+        unrecorded = []
+        if stove and "recorder" in hass.config.components:
+            from homeassistant.components.recorder import is_entity_recorded
+            for key, label in (("poele_granules_brules", "les granulés brûlés"), ("poele_energie", "l’énergie du poêle")):
+                entity_id = self._own_entity("sensor", key)
+                try:
+                    if entity_id and not is_entity_recorded(hass, entity_id):
+                        unrecorded.append(f"{label} ({entity_id})")
+                except Exception:  # noqa: BLE001 - a recorder not ready yet says nothing
+                    pass
+        # The other bricks, installed and in use, that do not answer.
+        bricks = []
+        off = self.settings.get("extensions") or {}
+        if "hestia_weather" in hass.config.components and off.get("hestia_weather") is not False \
+                and reader.weather_place(hass, self.settings.get("weather_place"))["etat"] != "oui":
+            bricks.append("Hestia Weather ne donne pas son lieu : le froid à venir n’est pas compté.")
+        if "hestia_energy" in hass.config.components and off.get("hestia_energy") is not False \
+                and getattr(hass.data.get(reader.ENERGY_API), "version", None) != reader.ENERGY_API_VERSION:
+            bricks.append("Hestia Énergie ne répond pas : l’argent est compté au prix réglé ici.")
+        return {"pret": hass.state is CoreState.running, "copie": bool(found_stove.get("copie")),
+                "indisponibles": down, "ventilation": fan, "sonde": probe, "non_enregistres": unrecorded,
+                "briques": bricks}
+
     def _pellet_settings(self) -> dict:
         s = self.settings
         return {"brasier_kg": s.get("brasier_kg"), "prix_sac": s.get("granules_prix_sac"),
@@ -562,7 +646,7 @@ class HeatingCoordinator:
 
     def _state(self) -> dict:
         return {"thermostats": self.applied, "pilote": self.pilot_memory, "journal_pilote": self.pilot_journal,
-                "granules": self.pellets_memory}
+                "granules": self.pellets_memory, "sante": self.health_memory}
 
     def _save_state(self) -> None:
         self.state_store.async_delay_save(self._state, 5)
