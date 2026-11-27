@@ -712,6 +712,22 @@ class MadeUpHouse(SetsTheFlame, DrivesTheStove, HomeAssistantWithAHouse):
         self.assertEqual(c._calls_of({"geste": "ventilation", "valeur": "2"}, c.data["poele"]),
                          [("climate", "set_fan_mode", {"entity_id": "climate.poele_vent_main", "fan_mode": "2"})])
         self.assertEqual(c.data["poele"]["ventilation"], "5")
+        # 1.1.0b6, the brick's health: the dead front fan is a souci after 10 minutes, on the card and said once.
+        down = c._health_facts(c.data)["indisponibles"]
+        self.assertEqual([(d["entite"], d["remplace_par"]) for d in down],
+                         [("climate.poele_vent_front", self.hass.states.get("climate.poele_vent_main").name)])
+        self.sent.clear()
+        later = dt_util.now() + timedelta(minutes=11)
+        view = dict(c.data, poele=dict(c.data["poele"]))
+        c._health(view, later)
+        await self.hass.async_block_till_done()
+        self.assertEqual([s["sujet"] for s in view["poele"]["soucis"]], ["indisponible"])
+        self.assertIn(("persistent_notification", "create"), [s[:2] for s in self.sent])
+        self.assertEqual(len([s for s in self.sent if s[0] == "notify"]), 1)
+        self.sent.clear()
+        c._health(view, later + timedelta(minutes=1))
+        await self.hass.async_block_till_done()
+        self.assertEqual(self.sent, [], "said once")
         self.hass.states.async_set("climate.poele_vent_front", "heat", {"fan_mode": "3",
                                                                          "fan_modes": ["OFF", "AUTO", "1", "2", "3", "4", "5"]})
         c._build()

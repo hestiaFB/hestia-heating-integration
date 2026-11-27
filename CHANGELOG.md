@@ -1,5 +1,21 @@
 # Changements
 
+## 1.1.0b6 — Hestia surveille le poêle et prévient
+
+### Nouveautés
+- **Hestia contrôle toutes les minutes que tout va bien, et le dit quand ce n’est pas le cas.** Cinq contrôles :
+  - une entité du poêle (son état, sa flamme, sa ventilation, ses sondes, son thermostat, sa prise) ou le thermostat d’une pièce **ne répond plus** depuis plus de 10 minutes ; si Hestia lit un ventilateur de secours à sa place, elle le dit aussi ;
+  - **la ventilation ne suit pas** : 15 minutes après l’ordre de Hestia, elle n’est toujours pas au niveau demandé ;
+  - **la sonde de la pièce du poêle semble figée** : sa température n’a pas bougé depuis 2 heures alors que le poêle chauffe ;
+  - **le recorder de Home Assistant n’enregistre pas** les granulés brûlés ou l’énergie du poêle, dont la carte maison a besoin ;
+  - **Hestia Weather ou Hestia Énergie ne répondent pas** depuis plus de 10 minutes, alors qu’elles sont installées et utilisées.
+- **Chaque souci s’affiche en orange sur la carte du poêle**, sous ses boutons. Sur la carte compacte, le premier souci prend la place de la phrase, et la liste complète est en haut du volet. La Vue d’ensemble du panneau les liste aussi, sous « Ce qui ne va pas ».
+- **Hestia prévient une seule fois par souci** : dans les notifications de Home Assistant, et sur les téléphones du service de notification choisi dans Réglages. Quand le souci est réglé, la notification de Home Assistant s’efface et les téléphones reçoivent un dernier message, « réglé ».
+- Hestia ne fait rien d’autre : ces contrôles n’envoient jamais d’ordre au poêle ni aux thermostats. Pour un poêle recopié d’une autre maison (un labo), les soucis s’affichent, mais aucune notification ne part.
+
+### Corrections
+- **Les cartes retrouvent toute leur mise en forme.** Depuis la 1.1.0b4, une accolade manquante dans le style des cartes faisait ignorer une grande partie de leur mise en page (légende de l’horloge, carte maison, pièces), sauf sur un appareil réglé pour réduire les animations.
+
 ## 1.1.0b5 — La ventilation sur le ventilateur qui répond
 
 ### Corrections

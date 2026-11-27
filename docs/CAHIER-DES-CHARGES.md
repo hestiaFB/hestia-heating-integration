@@ -322,6 +322,10 @@ Toute la logique d’affichage vit dans le calcul, la page ne fait que la mettre
 - **Oui** et **Non**, seulement quand une question attend. Sans Non, il faudrait attendre 15 minutes, la page en alerte tout ce temps.
 - **Les notifications** vont au destinataire choisi dans Réglages, avec une étiquette par sujet (une nouvelle remplace l’ancienne) : thermostat éteint, saison douce, refus, ordre d’allumage refusé, alarme, surchauffe, poêle muet, brasier, arrêt non confirmé, prise coupée, coupure de rattrapage, reprise après un redémarrage. Les plus graves restent aussi dans les notifications de Home Assistant. Leurs boutons : Oui, Non, J’ai nettoyé, Couper la prise, Ignorer.
 
+### La surveillance (1.1.0b6)
+
+Chaque minute, Hestia vérifie que tout va bien, dans tous les modes, même en « Conseil » (`engine/health.py`). Un souci n’est dit que s’il dure : une entité du poêle ou le thermostat d’une pièce indisponible depuis 10 minutes ; la ventilation par Hestia pas au niveau demandé 15 minutes après l’ordre ; la température de la pièce du poêle immobile depuis 2 heures pendant qu’il chauffe ; les granulés brûlés ou l’énergie du poêle laissés de côté par le recorder ; Hestia Weather ou Hestia Énergie installées, utilisées, mais muettes depuis 10 minutes. Chaque souci est une ligne orange sur la carte du poêle et dans la Vue d’ensemble, et une notification, une seule fois (Home Assistant et téléphones), puis un message « réglé » quand il disparaît. Les minutes d’un redémarrage ne comptent pas : ni souci, ni « réglé » avant le délai. La surveillance ne fait aucun geste, et n’envoie rien pour un poêle recopié. *Pourquoi : le 26 novembre, le ventilateur avant resté indisponible après un redémarrage a laissé la ventilation à 5 pendant 14 heures, sans un mot.*
+
 ## Les pièces, le planning et le bilan : ce que la maison de référence apprend
 
 - **Une pièce chauffe** quand son thermostat chauffe **ou** que sa puissance moyenne du cycle est au-dessus de zéro : `hvac_action` seul disait « poêle seul » au-dessus de « électrique 3 % ».

@@ -31,10 +31,12 @@ type Room={id:string;nom:string;temperature:number|null;consigne:number|null;eta
 type Order={service:string;entity_id:string;donnees?:Record<string,unknown>};
 type FirePot={kg:number|null;seuil_kg:number;a_nettoyer:boolean;bientot?:boolean;texte:string;jours?:number|null};
 type Use={debit_kg_h:number;kg_jour:number;kg_saison:number;prix_kg:number|null;cout_jour:number|null;cout_heure:number|null;brasier?:FirePot};
+/** A souci of the brick's health (1.1.0b6): an entity that no longer answers, an order not followed… */
+type Trouble={sujet:string;texte:string;depuis:string};
 type Stove={nom:string;modele?:string|null;etat:string;en_feu:boolean;depuis:string|null;flamme:number|null;flamme_reglee:number|null;flamme_max:number;
  fumees:number|null;prise:string|null;prise_w:number|null;demande_pct:number|null;consigne?:number|null;ecritures:number|null;ecritures_max:number|null;
  alarme:boolean|null;alarme_texte:string|null;allume?:boolean|null;conso?:Use;pilote?:{mode:string;titre?:string;texte?:string;flamme?:number|null;flamme_manuelle?:boolean};
- boutons?:{allumer?:Order;eteindre?:Order};ventilation?:string|null;copie?:boolean;entites?:Record<string,string>;
+ boutons?:{allumer?:Order;eteindre?:Order};ventilation?:string|null;copie?:boolean;soucis?:Trouble[];entites?:Record<string,string>;
  flamme_min?:number;ventilation_niveaux?:string[];ventilation_choix?:string;eco_stop?:boolean|null;eco_stop_delai?:number|null;consigne_poele?:number|null;air?:number|null;
  flamme_basse?:{entity_id:string;nom:string;on:boolean|null}|null;prise_switch?:{entity_id:string;on:boolean|null}|null;
  phrase?:{texte:string;ton:string}};
@@ -559,12 +561,12 @@ class HestiaHeatingCard extends LitElement {
    this._config.compacte?bare(t,s.en_feu?s.consigne??null:null):center(stoveArt(level,max,s.en_feu),t!=null?`${num(t)}°`:'—',sub));
   const why=this._why(s,room,auto,level);
   if(this._config.compacte)return this._compact({tone:this._stoveTone(s),title:this._config.name||s.nom,
-   say:s.phrase??(why?{texte:why}:null),
+   say:this._troubleSay(s)??s.phrase??(why?{texte:why}:null),
    pill:this._artPill(stoveArt(level,max,s.en_feu),s.etat==='alarme'?'alert':s.en_feu?'stove':'off',`Poêle : ${state}`,
     s.etat==='alarme'?'alarme':s.en_feu&&level?`${level}/${max}`:''),clock,
    side:this._stoveButtons(s,true),
    legend:this._legend(tones,'température',true,'flame',max,true),
-   body:()=>html`${this._fireDrawer(v,s,room)}${this._pelletDrawer(v,s)}${this._foot('poele','Ouvrir les réglages du poêle','Réglages du poêle')}`});
+   body:()=>html`${this._troubles(s)}${this._fireDrawer(v,s,room)}${this._pelletDrawer(v,s)}${this._foot('poele','Ouvrir les réglages du poêle','Réglages du poêle')}`});
   return html`${this._glow(this._stoveTone(s))}<div class="top">
    ${this._head(this._config.name||s.nom,s.phrase?html`<span class=${'say '+s.phrase.ton}>${s.phrase.texte}</span>`:
     `Poêle à granulés${s.modele?` · ${s.modele}`:''}`,html`
@@ -572,6 +574,7 @@ class HestiaHeatingCard extends LitElement {
    ${clock}
    ${this._legend(tones,(series.temperature??[]).length?`température du ${where.toLowerCase()}`:null,sets.some(p=>p[1]!=null),'flame',max)}
    ${this._stoveButtons(s)}
+   ${this._troubles(s)}
   </div>
   ${this._fireDrawer(v,s,room)}
   ${this._pelletDrawer(v,s)}
@@ -590,6 +593,17 @@ class HestiaHeatingCard extends LitElement {
   return html`<div class="legend">${tones.map(x=>html`<span><i class=${'sw t-'+x}></i>${LANE_WORD[x]??x}</span>`)}
    ${temp?html`<span><i class="sw line"></i>${temp}</span>`:nothing}${set?html`<span><i class="sw set"></i>consigne</span>`:nothing}
    ${kind?html`<span>${blocks()}${kind==='flame'?`flamme : un pavé par palier, ${max} au plus`:'temps de chauffe : un pavé par 20 % de l’heure'}</span>`:nothing}</div>`;
+ }
+ /** The brick's health (1.1.0b6, Frank: « mettre des messages sur la carte ») : one orange line per souci, under the
+     buttons (in the compact card, at the top of its drawer, and the first one in place of its sentence). */
+ private _troubles(s:Stove){
+  const list=s.soucis??[];
+  return list.length?html`<ul class="troubles" role="status">${list.map(x=>html`<li>${x.texte}</li>`)}</ul>`:nothing;
+ }
+ private _troubleSay(s:Stove){
+  const list=s.soucis??[];
+  if(!list.length||s.phrase?.ton==='alert')return null;
+  return {texte:list[0].texte+(list.length>1?` (+${list.length-1})`:''),ton:'act'};
  }
  /* The sentence under the clock: what Hestia does when it drives the stove (« Gestion auto »), else what the stove does. */
  private _why(s:Stove,room:Room|undefined,auto:boolean,level:number){
