@@ -8,7 +8,7 @@ what says it took the order, whether its integration can be reloaded, and the se
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 # The stove's states, in the brick's words (the `poele_etat` sensor's options).
@@ -72,21 +72,45 @@ def load_all(folder: Path) -> list[Profile]:
     return out
 
 
-def match(profile: Profile, entities: list[dict]) -> dict[str, str]:
+def match(profile: Profile, entities: list[dict], alive=None) -> dict[str, str]:
     """{role: entity_id} for one stove device's entities ({entity_id, unique_id}).
 
     A role names a domain and the end of the id (`fin`); without `fin`, the device's main entity of that domain, the one
-    with the shortest id (« climate.poele » before « climate.poele_vent_front »)."""
+    with the shortest id (« climate.poele » before « climate.poele_vent_front »). `fin` may also be a list of ends, the
+    preferred first (1.1.0b5): with `alive` (entity_id -> bool), the first end whose entity answers wins, so that a fan
+    the stove's integration stopped giving (on 26 November `_vent_front` stayed unavailable after a restart, while
+    `_vent_main` answered) does not leave the role on a dead entity."""
     found: dict[str, str] = {}
     for role, spec in profile.roles.items():
-        domain, end = spec.get("domaine"), spec.get("fin")
+        domain, ends = spec.get("domaine"), spec.get("fin")
         same = [e for e in entities if e["entity_id"].split(".", 1)[0] == domain]
-        if end:
-            hits = [e for e in same if e["entity_id"].endswith(end) or str(e.get("unique_id") or "").endswith(end)]
-            # « _power » must not take « _real_power » nor « _eco_stop_power »: the shortest id wins.
-            hits.sort(key=lambda e: len(e["entity_id"]))
+        if ends:
+            choices = []
+            for end in ([ends] if isinstance(ends, str) else list(ends)):
+                hits = [e for e in same if e["entity_id"].endswith(end) or str(e.get("unique_id") or "").endswith(end)]
+                # « _power » must not take « _real_power » nor « _eco_stop_power »: the shortest id wins.
+                hits.sort(key=lambda e: len(e["entity_id"]))
+                if hits:
+                    choices.append(hits[0]["entity_id"])
+            if choices:
+                found[role] = next((c for c in choices if alive(c)), choices[0]) if alive else choices[0]
         else:
             hits = sorted(same, key=lambda e: len(e["entity_id"]))
-        if hits:
-            found[role] = hits[0]["entity_id"]
+            if hits:
+                found[role] = hits[0]["entity_id"]
     return found
+
+
+def spares(profile: Profile, entities: list[dict]) -> dict[str, list[str]]:
+    """{role: [entity_id, …]} for the roles whose `fin` is a list and that more than one end finds, the preferred
+    first (1.1.0b5): the role then goes to the first of them that answers, at each reading (`reader.pick_alive`)."""
+    out: dict[str, list[str]] = {}
+    for role, spec in profile.roles.items():
+        ends = spec.get("fin")
+        if not isinstance(ends, list) or len(ends) < 2:
+            continue
+        found = [match(replace(profile, roles={role: {**spec, "fin": end}}), entities).get(role) for end in ends]
+        ids = [i for i in found if i]
+        if len(ids) > 1:
+            out[role] = list(dict.fromkeys(ids))
+    return out

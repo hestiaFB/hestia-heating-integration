@@ -63,6 +63,7 @@ class Found:
         out = {c["entity_id"] for c in self.climates}
         if self.stove:
             out |= set(self.stove["roles"].values())
+            out |= {i for ids in (self.stove.get("relais") or {}).values() for i in ids}
         out |= set(self.pellets.values()) | set(self.schedules)
         out |= {e for e in (self.plug, self.workday, self.house_sensor, self.low_switch, self.plug_switch) if e}
         return out | set(extra or [])
@@ -75,6 +76,19 @@ def _area(entities, devices, entry) -> str | None:
         return entry.area_id
     device = devices.async_get(entry.device_id) if entry.device_id else None
     return device.area_id if device else None
+
+
+def _alive(hass: HomeAssistant, entity_id: str) -> bool:
+    state = hass.states.get(entity_id)
+    return state is not None and state.state not in ("unavailable", "unknown")
+
+
+def pick_alive(hass: HomeAssistant, stove: dict) -> None:
+    """A role with spares (`relais`, 1.1.0b5) goes to the first of its entities that answers, the preferred one when
+    none does: on 26 November the stove's front fan stayed unavailable after a restart while its main fan answered,
+    and Hestia, reading an unknown fan, said and did nothing."""
+    for role, ids in (stove.get("relais") or {}).items():
+        stove["roles"][role] = next((i for i in ids if _alive(hass, i)), ids[0])
 
 
 def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Found:
@@ -93,13 +107,14 @@ def discover(hass: HomeAssistant, profiles: list[Profile], settings: dict) -> Fo
         for entry in entities.entities.values():
             if entry.platform == profile.integration and entry.device_id and not entry.disabled_by:
                 by_device.setdefault(entry.device_id, []).append({"entity_id": entry.entity_id, "unique_id": entry.unique_id})
-        from .engine.profiles import match
+        from .engine.profiles import match, spares
         for device_id, ents in by_device.items():
-            roles = match(profile, ents)
+            roles = match(profile, ents, lambda i: _alive(hass, i))
             if "etat" not in roles:
                 continue
             device = devices.async_get(device_id)
             found.stove = {"profile": profile, "roles": roles, "entities": [e["entity_id"] for e in ents],
+                           "relais": spares(profile, ents),
                            "device_id": device_id,
                            # The stove integration's own entry: its options say how many orders a day it lets through.
                            "entry_id": _entry_of(hass, device, profile.integration),
@@ -271,7 +286,8 @@ def _stove_by_ids(hass: HomeAssistant, profile: Profile) -> dict | None:
 
     def spec(role: str) -> tuple[str | None, str | None]:
         r = roles.get(role) or {}
-        return r.get("domaine"), r.get("fin")
+        end = r.get("fin")
+        return r.get("domaine"), end[0] if isinstance(end, list) and end else end
 
     status_domain, status_end = spec("etat")
     flame_domain, flame_end = spec("flamme")
@@ -289,13 +305,14 @@ def _stove_by_ids(hass: HomeAssistant, profile: Profile) -> dict | None:
         if not any(d and e and f"{d}.{stem}{e}" in known for d, e in (spec("fumees"), spec("alarme"))):
             continue
         mine = [{"entity_id": i} for i in ids if stem in i.split(".", 1)[1]]
-        from .engine.profiles import match
-        found_roles = match(profile, [e for e in mine if not e["entity_id"].startswith("climate.")
-                                      or e["entity_id"].split(".", 1)[1].startswith(stem)])
+        from .engine.profiles import match, spares
+        theirs = [e for e in mine if not e["entity_id"].startswith("climate.")
+                  or e["entity_id"].split(".", 1)[1].startswith(stem)]
+        found_roles = match(profile, theirs, lambda i: _alive(hass, i))
         climates = [i for i in ids if i.startswith("climate.") and i.split(".", 1)[1].startswith(stem)]
         principal = hass.states.get(found_roles["thermostat"]) if found_roles.get("thermostat") else None
         name = (principal.attributes.get("friendly_name") if principal else None) or "Poêle"
-        return {"profile": profile, "roles": found_roles, "device_id": None,
+        return {"profile": profile, "roles": found_roles, "relais": spares(profile, theirs), "device_id": None,
                 "entities": sorted(set(found_roles.values()) | set(climates)),
                 "device": {"name": name[:1].upper() + name[1:],
                            "maker": None, "model": None, "room": None}}
@@ -365,6 +382,7 @@ def snapshot(hass: HomeAssistant, found: Found, settings: dict, hourly: list[dic
             window_since[sensor] = dt_util.as_local(ws.last_changed)
     stove = None
     if found.stove:
+        pick_alive(hass, found.stove)
         roles = {role: s for role, e in found.stove["roles"].items() if (s := _state(hass, e)) is not None}
         stove = {**found.stove, "roles": roles, "ecritures_max": _writes_cap(hass, found.stove)}
     plug = None
